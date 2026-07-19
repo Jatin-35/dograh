@@ -47,6 +47,10 @@
 }
 
 :root {
+  /* Tells the browser to render native UI (scrollbars, form controls) in the
+     matching theme instead of guessing — without this, native scrollbar color
+     doesn't reliably follow our own .dark class. */
+  color-scheme: light;
   --radius: 0.625rem;
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
@@ -86,10 +90,11 @@
      from the brand logo PNG — the font is commercial, so the lettering ships
      as static artwork in /public; fill + 0.9% opacity are baked into the
      files). Theme-switched here; consumed by .app-surface and .auth-imprint. */
-  --brand-imprint: url("/brand-imprint-light.svg");
+  --brand-imprint: url("/botrix-imprint-light.svg");
 }
 
 .dark {
+  color-scheme: dark;
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
@@ -124,7 +129,7 @@
   /* Warm accent, slightly brighter against the near-black surfaces. */
   --cta: oklch(0.78 0.16 67);
   --cta-foreground: oklch(0.16 0.02 60);
-  --brand-imprint: url("/brand-imprint-dark.svg");
+  --brand-imprint: url("/botrix-imprint-dark.svg");
 }
 
 @layer base {

@@ -322,21 +322,25 @@ export function AppSidebar() {
       <SidebarHeader className="px-2 py-3 notranslate" translate="no">
         <div className="flex items-center justify-between">
           <div className={cn("flex items-center gap-2", isCollapsed && "hidden")}>
-            <Link
-              href="/"
+            <a
+              href="https://www.botrixai.com/"
+              target="_blank"
+              rel="noopener noreferrer"
               className="notranslate flex items-center gap-2 px-1"
               translate="no"
             >
-              <BrandLogo mark className="h-6" />
+              <BrandLogo mark className="h-12" />
               {versionInfo && (
-                <span
-                  className="notranslate text-xs font-normal text-muted-foreground"
-                  translate="no"
-                >
-                  v{versionInfo.ui}
-                </span>
+                <div className="flex flex-col leading-tight" translate="no">
+                  <span className="notranslate text-xs font-medium tracking-wide text-black dark:text-white">
+                    Powered by BotrixAI
+                  </span>
+                  <span className="notranslate text-[10px] font-normal text-muted-foreground">
+                    v{versionInfo.ui}
+                  </span>
+                </div>
               )}
-            </Link>
+            </a>
             {isBehind && latestRelease && (
               <Tooltip>
                 <TooltipTrigger asChild>
