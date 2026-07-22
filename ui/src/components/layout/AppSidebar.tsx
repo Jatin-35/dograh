@@ -17,6 +17,7 @@ import {
   Megaphone,
   Phone,
   Settings,
+  ShieldCheck,
   TrendingUp,
   UserRound,
   Workflow,
@@ -26,6 +27,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import React from "react";
 
+import { getAuthUserApiV1UserAuthUserGet } from "@/client/sdk.gen";
 import { BrandLogo } from "@/components/BrandLogo";
 import { SidebarTeamSwitcher } from "@/components/layout/SidebarTeamSwitcher";
 import ThemeToggle from "@/components/ThemeSwitcher";
@@ -157,7 +159,7 @@ export function AppSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { state, isMobile, setOpenMobile } = useSidebar();
-  const { provider, logout, user } = useAuth();
+  const { provider, logout, user, loading: authLoading, getAccessToken } = useAuth();
   const { config } = useAppConfig();
   const { openHireExpert } = useLeadForms();
   const {
@@ -168,6 +170,37 @@ export function AppSidebar() {
     telnyxMissingWebhookPublicKeyCount > 0 ||
     vonageMissingSignatureSecretCount > 0;
   const isCollapsed = !isMobile && state === "collapsed";
+
+  // Super Admin nav item is only shown to superusers — fetched once per
+  // session rather than trusting the auth cookie's user object, which
+  // doesn't carry is_superuser.
+  const [isSuperuser, setIsSuperuser] = React.useState(false);
+  const hasFetchedSuperuser = React.useRef(false);
+  React.useEffect(() => {
+    if (authLoading || !user || hasFetchedSuperuser.current) return;
+    hasFetchedSuperuser.current = true;
+    (async () => {
+      const accessToken = await getAccessToken();
+      const response = await getAuthUserApiV1UserAuthUserGet({
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (response.data?.is_superuser) {
+        setIsSuperuser(true);
+      }
+    })();
+  }, [authLoading, user, getAccessToken]);
+
+  const navSections = isSuperuser
+    ? [
+        ...NAV_SECTIONS,
+        {
+          label: "ADMIN",
+          items: [
+            { title: "Super Admin", url: "/superadmin", icon: ShieldCheck },
+          ],
+        },
+      ]
+    : NAV_SECTIONS;
 
   // Version info from app config context
   const versionInfo = config ? { ui: config.uiVersion, api: config.apiVersion } : null;
@@ -390,7 +423,7 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent className={cn("notranslate", isCollapsed && "px-0")} translate="no">
-        {NAV_SECTIONS.map((section, index) => (
+        {navSections.map((section, index) => (
           <SidebarGroup
             key={section.label ?? "overview"}
             className={index === 0 ? "mt-2" : "mt-6"}
