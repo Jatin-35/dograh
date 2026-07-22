@@ -150,6 +150,16 @@ services:
       # Set to "false" in .env to disable public signup (invite-only installs).
       ENABLE_SIGNUP: "${ENABLE_SIGNUP:-true}"
 
+      # Auth provider: "local" (default, built-in email/password) or "stack" to
+      # delegate to Stack Auth for social login + self-service teams. The 4
+      # STACK_* values are only required when AUTH_PROVIDER=stack; see
+      # docs/deployment/authentication.mdx for the full setup.
+      AUTH_PROVIDER: "${AUTH_PROVIDER:-local}"
+      STACK_AUTH_PROJECT_ID: "${STACK_AUTH_PROJECT_ID:-}"
+      STACK_PUBLISHABLE_CLIENT_KEY: "${STACK_PUBLISHABLE_CLIENT_KEY:-}"
+      STACK_SECRET_SERVER_KEY: "${STACK_SECRET_SERVER_KEY:-}"
+      STACK_AUTH_API_URL: "${STACK_AUTH_API_URL:-}"
+
       # Public origin for this deployment. The API derives BACKEND_API_ENDPOINT,
       # MINIO_PUBLIC_ENDPOINT and TURN_HOST from PUBLIC_BASE_URL / PUBLIC_HOST when
       # they are not set explicitly (see api/constants.py), so a standard remote
@@ -269,6 +279,11 @@ services:
       # Server-side URL (SSR, internal Docker network)
       BACKEND_URL: "${BACKEND_URL:-http://api:8000}"
       NODE_ENV: "oss"
+
+      # Only needed when the api service's AUTH_PROVIDER=stack. Project ID and
+      # publishable client key are fetched from the backend's /api/v1/health
+      # at runtime, so only the secret key needs to be set here too.
+      STACK_SECRET_SERVER_KEY: "${STACK_SECRET_SERVER_KEY:-}"
 
       # Flag to enable/ disable posthog
       ENABLE_TELEMETRY: "${ENABLE_TELEMETRY:-true}"
