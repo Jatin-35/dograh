@@ -51,10 +51,14 @@ if [[ $EUID -ne 0 ]]; then
     dograh_fail "This script must be run as root or with sudo"
 fi
 
-if [[ ! -d "dograh" ]]; then
-    echo -e "${RED}Error: 'dograh' directory not found.${NC}"
-    echo -e "${YELLOW}Run this from the directory containing your existing Dograh installation.${NC}"
-    exit 1
+# Unlike setup_custom_domain.sh (a standalone download that lives *next to*
+# the dograh/ checkout), this script ships inside the repo at
+# scripts/setup_admin_domain.sh — so the project root is one level up from
+# this script's own location, not a "dograh" subdirectory of the caller's cwd.
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+if [[ ! -f "$PROJECT_DIR/docker-compose.yaml" ]]; then
+    dograh_fail "Could not find docker-compose.yaml in $PROJECT_DIR — run this from inside your Dograh checkout (scripts/setup_admin_domain.sh)."
 fi
 
 echo -e "${YELLOW}Enter the admin hostname (e.g., admin-voice.yourcompany.com):${NC}"
@@ -99,12 +103,8 @@ dograh_install_certbot || dograh_fail "Could not install certbot. Please install
 echo -e "${GREEN}✓ Certbot installed${NC}"
 
 echo -e "${BLUE}[3/6] Adding $ADMIN_DOMAIN_NAME to .env and starting services...${NC}"
-cd dograh
+cd "$PROJECT_DIR"
 DOGRAH_DEPLOY_PROJECT_DIR="$(pwd)"
-
-if [[ ! -f remote_up.sh || ! -f scripts/lib/setup_common.sh ]]; then
-    dograh_download_remote_support_bundle "$(pwd)" "main"
-fi
 
 dograh_require_init_compose_layout "$(pwd)"
 
