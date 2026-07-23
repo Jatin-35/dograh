@@ -295,6 +295,14 @@ dograh_render_remote_nginx_conf() {
     local destination=${2:-"$project_dir/nginx.conf"}
     local template=""
     local tmp_upstream=""
+    # PUBLIC_HOST stays the sole canonical app identity (PUBLIC_BASE_URL,
+    # webhook/callback URLs, etc. all derive from it). ADMIN_HOST, when set,
+    # is an additional hostname served out of the *same* server block on a
+    # single SAN certificate — it must come after PUBLIC_HOST here since
+    # dograh_preflight_remote_init_render only checks the first server_name
+    # token against PUBLIC_HOST.
+    local server_names="$PUBLIC_HOST"
+    [[ -n "${ADMIN_HOST:-}" ]] && server_names="$PUBLIC_HOST $ADMIN_HOST"
 
     template="$(dograh_template_path "nginx.remote.conf.template")"
     tmp_upstream="$(mktemp)"
@@ -311,7 +319,7 @@ dograh_render_remote_nginx_conf() {
         echo "}"
     } > "$tmp_upstream"
 
-    awk -v public_host="$PUBLIC_HOST" -v upstream_file="$tmp_upstream" '
+    awk -v public_host="$server_names" -v upstream_file="$tmp_upstream" '
         BEGIN {
             while ((getline line < upstream_file) > 0) {
                 upstream = upstream line ORS
@@ -376,7 +384,7 @@ dograh_preflight_remote_init_render() {
     turn_conf="$tmp_root/coturn/turnserver.conf"
 
     (
-        export ENVIRONMENT SERVER_IP PUBLIC_HOST PUBLIC_BASE_URL BACKEND_API_ENDPOINT MINIO_PUBLIC_ENDPOINT TURN_HOST TURN_SECRET FASTAPI_WORKERS
+        export ENVIRONMENT SERVER_IP PUBLIC_HOST PUBLIC_BASE_URL ADMIN_HOST BACKEND_API_ENDPOINT MINIO_PUBLIC_ENDPOINT TURN_HOST TURN_SECRET FASTAPI_WORKERS
         export DOGRAH_INIT_WORKSPACE_DIR="$project_dir"
         export DOGRAH_INIT_OUTPUT_ROOT="$tmp_root"
         export DOGRAH_INIT_CERTS_DIR="$cert_dir"
@@ -505,6 +513,9 @@ dograh_install_certbot() {
 # challenge served by the running nginx container out of <project>/certs, then
 # copy the issued cert to certs/local.{crt,key} (the files nginx reads). This
 # needs nginx already running and serving /.well-known/acme-challenge/ on :80.
+# Any extra hostnames passed after $email are added to the same certificate
+# as SANs (certbot's live dir is named after the first -d, i.e. $host) — used
+# to cover an additional admin subdomain served off the same nginx/cert pair.
 # Returns non-zero on failure so callers can keep the self-signed cert.
 dograh_issue_letsencrypt_webroot() {
     local project_dir=$1
@@ -513,6 +524,12 @@ dograh_issue_letsencrypt_webroot() {
     local webroot="$project_dir/certs"
     local live_dir="/etc/letsencrypt/live/$host"
     local -a email_args
+    local -a domain_args=(-d "$host")
+
+    shift $(( $# >= 3 ? 3 : $# ))
+    for extra_host in "$@"; do
+        domain_args+=(-d "$extra_host")
+    done
 
     if [[ -n "$email" ]]; then
         email_args=(--email "$email")
@@ -525,7 +542,7 @@ dograh_issue_letsencrypt_webroot() {
     certbot certonly --webroot -w "$webroot" \
         --non-interactive --agree-tos --keep-until-expiring \
         "${email_args[@]}" \
-        -d "$host" || return 1
+        "${domain_args[@]}" || return 1
 
     [[ -f "$live_dir/fullchain.pem" && -f "$live_dir/privkey.pem" ]] || return 1
 

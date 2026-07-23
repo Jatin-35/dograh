@@ -42,6 +42,16 @@ ENV NEXT_PUBLIC_CHATWOOT_URL="https://chat.dograh.com"
 ENV NEXT_PUBLIC_CHATWOOT_TOKEN="3fkFx2mCEjNHjM9gaNc4A82X"
 ENV BACKEND_URL="http://api:8000"
 
+# Domain-separated deployments only: baked into the client bundle at build
+# time so browser-side redirects (impersonation, post-login routing) can
+# target a different domain than the one currently loaded. Passed through
+# as build args since NEXT_PUBLIC_* vars must be present at `next build`,
+# not just at container runtime. Empty by default (single-domain installs).
+ARG NEXT_PUBLIC_APP_URL=""
+ARG NEXT_PUBLIC_ADMIN_URL=""
+ENV NEXT_PUBLIC_APP_URL="${NEXT_PUBLIC_APP_URL}"
+ENV NEXT_PUBLIC_ADMIN_URL="${NEXT_PUBLIC_ADMIN_URL}"
+
 # Build the application with standalone mode
 # Increase Node.js heap size to prevent out-of-memory errors during build
 ENV NODE_OPTIONS="--max-old-space-size=4096"

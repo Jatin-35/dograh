@@ -19,6 +19,7 @@ Bash-only (deployment / CI / OSS-user setup — not intended for Windows contrib
 - `start_services_docker.sh` — Docker image CMD
 - `rolling_update.sh` — zero-downtime VM redeploy
 - `setup_remote.sh` — OSS remote Docker-compose setup
+- `setup_admin_domain.sh` — attaches a second, admin-only hostname (`ADMIN_HOST`) to an existing install, sharing PUBLIC_HOST's nginx server block and a SAN cert
 - `format.sh` / `lint.sh` / `pre_commit.sh`
 - `generate_sdk.sh` / `release_sdks.sh` / `dump_docs_openapi.py`
 
@@ -30,6 +31,7 @@ This directory now has a shared deployment model for OSS Docker installs. If you
 - `setup_common.sh` must stay safe to source. It should not set shell options like `set -u` for callers.
 - `.env` is the single operator-owned source of truth for remote deployment settings. Remote/runtime config should derive from it, not the other way around.
 - Canonical remote keys in `.env`: `ENVIRONMENT`, `SERVER_IP`, `PUBLIC_HOST`, `PUBLIC_BASE_URL`, `TURN_SECRET`, `FASTAPI_WORKERS`, `OSS_JWT_SECRET`. `PUBLIC_BASE_URL` (+ `PUBLIC_HOST`, and `SERVER_IP` for coturn's literal `external-ip`) is the single endpoint source of truth.
+- `ADMIN_HOST` (optional, `.env`) — a second hostname served out of the *same* nginx server block as `PUBLIC_HOST` on one SAN certificate; set by `setup_admin_domain.sh`, consumed by `dograh_render_remote_nginx_conf` (appends it to `server_name` when non-empty) and `dograh_issue_letsencrypt_webroot` (extra `-d` SAN args). It never becomes PUBLIC_HOST/PUBLIC_BASE_URL — those stay singular. The app-level role split (superusers → admin domain, everyone else → app domain) lives in the UI's `NEXT_PUBLIC_ADMIN_URL`/`NEXT_PUBLIC_APP_URL` (see `ui/src/lib/utils.ts:getRedirectUrl`), not in this infra layer.
 - `BACKEND_API_ENDPOINT`, `MINIO_PUBLIC_ENDPOINT`, `TURN_HOST` are **derived in-app** from `PUBLIC_BASE_URL` / `PUBLIC_HOST` (`api/constants.py`) and are no longer written to a remote `.env`. `dograh_sync_remote_env_file` neither writes nor deletes them — new installs omit them, and a value an operator sets by hand is left untouched as an explicit override for a split deployment (separate object store / TURN host). `dograh_validate_remote_runtime_env` therefore no longer requires them or asserts they equal `PUBLIC_BASE_URL`.
 - `remote_up.sh` is the supported remote startup entrypoint. It runs preflight via `dograh_prepare_remote_install`, runs `docker compose config -q`, then starts the stack.
 - `docker-compose.yaml` uses a one-shot `dograh-init` service for profiles `remote` and `local-turn`.

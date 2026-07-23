@@ -37,6 +37,17 @@ export function debounce<T extends (...args: unknown[]) => unknown>(func: T, wai
   };
 }
 
+// Optional domain-aware routing: when set, superusers are always sent to the
+// admin domain and everyone else to the app domain, regardless of which
+// domain the login happened on. Falls back to a same-origin relative path
+// when unset (local dev, or single-domain deployments).
+const ADMIN_BASE_URL = process.env.NEXT_PUBLIC_ADMIN_URL;
+const APP_BASE_URL = process.env.NEXT_PUBLIC_APP_URL;
+
+function toDestination(path: string, baseUrl?: string): string {
+  return baseUrl ? new URL(path, baseUrl).toString() : path;
+}
+
 export async function getRedirectUrl(token: string, permissions: { id: string }[] = []) {
   console.log('[getRedirectUrl] Called with:', {
     hasToken: !!token,
@@ -58,7 +69,7 @@ export async function getRedirectUrl(token: string, permissions: { id: string }[
     });
     if (authUser.data?.is_superuser) {
       console.log('[getRedirectUrl] User is superuser, redirecting to /superadmin');
-      return "/superadmin";
+      return toDestination("/superadmin", ADMIN_BASE_URL);
     }
 
     const hasAdminPermission = permissions.some(p => p.id === 'admin');
@@ -68,7 +79,7 @@ export async function getRedirectUrl(token: string, permissions: { id: string }[
   // usage page
   if (!hasAdminPermission) {
     console.log('[getRedirectUrl] No admin permission, redirecting to /usage');
-    return "/usage";
+    return toDestination("/usage", APP_BASE_URL);
   }
 
   // Check if user has any workflows
@@ -87,16 +98,16 @@ export async function getRedirectUrl(token: string, permissions: { id: string }[
 
     if (countResponse.data && countResponse.data.active > 0) {
       console.log('[getRedirectUrl] User has workflows, redirecting to /workflow');
-      return "/workflow";
+      return toDestination("/workflow", APP_BASE_URL);
     } else {
       console.log('[getRedirectUrl] No workflows found, redirecting to /workflow/create');
-      return "/workflow/create";
+      return toDestination("/workflow/create", APP_BASE_URL);
     }
   } catch (error) {
     console.error('[getRedirectUrl] Error checking workflows:', error);
     // If we can't check workflows, default to /workflow/create
     console.log('[getRedirectUrl] Defaulting to /workflow/create due to error');
-    return "/workflow/create";
+    return toDestination("/workflow/create", APP_BASE_URL);
   }
   } catch (error) {
     console.error("[getRedirectUrl] Failed to fetch auth user:", error);
