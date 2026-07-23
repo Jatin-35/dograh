@@ -105,19 +105,6 @@ export async function GET(request: NextRequest) {
         return new Response("Stack auth is not configured", { status: 400 });
     }
 
-    const fallbackRedirectUrl = new URL("/workflow/create", request.url);
-    let redirectUrl = fallbackRedirectUrl.toString();
-    try {
-        const requestedRedirectUrl = new URL(redirectPath, request.url);
-        if (requestedRedirectUrl.origin === request.nextUrl.origin) {
-            redirectUrl = requestedRedirectUrl.toString();
-        }
-    } catch {
-        // Malformed redirect_path (e.g. "https://") — keep the fallback.
-    }
-
-    const response = NextResponse.redirect(redirectUrl);
-
     const forwardedProto = request.headers
         .get("x-forwarded-proto")
         ?.split(",")[0]
@@ -126,6 +113,29 @@ export async function GET(request: NextRequest) {
     const isSecure =
         request.nextUrl.protocol === "https:" || forwardedProto === "https";
 
+    // Behind nginx, request.url / request.nextUrl reflect this container's own
+    // bind address (HOSTNAME:PORT from the standalone server config), not the
+    // public Host header — reconstruct the externally-visible origin explicitly
+    // so redirects target the real domain instead of e.g. http://0.0.0.0:3010.
+    const forwardedHost = request.headers
+        .get("x-forwarded-host")
+        ?.split(",")[0]
+        ?.trim() ?? request.headers.get("host") ?? request.nextUrl.host;
+    const externalOrigin = `${isSecure ? "https" : "http"}://${forwardedHost}`;
+
+    const fallbackRedirectUrl = new URL("/workflow/create", externalOrigin);
+    let redirectUrl = fallbackRedirectUrl.toString();
+    try {
+        const requestedRedirectUrl = new URL(redirectPath, externalOrigin);
+        if (requestedRedirectUrl.origin === externalOrigin) {
+            redirectUrl = requestedRedirectUrl.toString();
+        }
+    } catch {
+        // Malformed redirect_path (e.g. "https://") — keep the fallback.
+    }
+
+    const response = NextResponse.redirect(redirectUrl);
+
     // Every scope a stale SDK cookie may live in: host-only plus each parent
     // domain, each in the regular jar and (on https) its partitioned twin. The
     // request's Cookie header is the complete list of names to clear: the SDK
@@ -133,7 +143,7 @@ export async function GET(request: NextRequest) {
     // attaches to this top-level navigation.
     const domains: (string | undefined)[] = [
         undefined,
-        ...parentDomains(request.nextUrl.hostname),
+        ...parentDomains(new URL(externalOrigin).hostname),
     ];
     const jars = isSecure ? [false, true] : [false];
 
