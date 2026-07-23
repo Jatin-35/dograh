@@ -195,9 +195,15 @@ async def get_user(
         organization.status = OrganizationStatus.ACTIVE.value
 
     # Block access to a suspended organization. Placed outside the try/except
-    # above so the 403 is not re-wrapped as a 500. Applies to impersonation too:
-    # a suspended org cannot be entered by anyone, including a superadmin.
-    if organization.status == OrganizationStatus.SUSPENDED.value:
+    # above so the 403 is not re-wrapped as a 500. Exempts superusers: a
+    # superadmin is a member of every client org they've created (so they can
+    # build workflows before the client joins), so gating their own session
+    # here would let suspending any one of those orgs lock the superadmin out
+    # of the whole platform, including the Super Admin panel itself, with no
+    # self-service recovery. An impersonated session doesn't get this
+    # exemption — it authenticates as the client's own (non-superuser) user
+    # row, so impersonating into a suspended org is still correctly blocked.
+    if organization.status == OrganizationStatus.SUSPENDED.value and not user_model.is_superuser:
         raise HTTPException(
             status_code=403,
             detail="This organization has been suspended. Please contact your administrator.",
