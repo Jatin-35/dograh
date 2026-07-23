@@ -3,13 +3,17 @@ from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from loguru import logger
 from pydantic import BaseModel
 
+from api.constants import PUBLIC_BASE_URL, UI_APP_URL
 from api.db import db_client
 from api.db.models import UserModel
+from api.enums import OrganizationStatus
 from api.services.auth.depends import get_superuser
 from api.services.auth.stack_auth import (
     StackAuthSessionError,
+    StackAuthTeamError,
     StackAuthUserSearchError,
     stackauth,
 )
@@ -60,6 +64,35 @@ class SuperuserWorkflowRunsListResponse(BaseModel):
     page: int
     limit: int
     total_pages: int
+
+
+class SuperuserOrganizationResponse(BaseModel):
+    id: int
+    provider_id: str
+    name: Optional[str]
+    primary_contact_email: Optional[str]
+    status: str
+    created_at: datetime
+    user_count: int
+
+
+class SuperuserOrganizationsListResponse(BaseModel):
+    organizations: List[SuperuserOrganizationResponse]
+    total_count: int
+
+
+class UpdateOrganizationStatusRequest(BaseModel):
+    status: str
+
+
+class CreateOrganizationRequest(BaseModel):
+    name: str
+    email: str
+
+
+class CreateOrganizationResponse(BaseModel):
+    organization: SuperuserOrganizationResponse
+    invitation_sent: bool
 
 
 @router.post("/impersonate")
@@ -201,4 +234,139 @@ async def get_workflow_runs(
         page=page,
         limit=limit,
         total_pages=total_pages,
+    )
+
+
+@router.get("/organizations")
+async def list_organizations(
+    user: UserModel = Depends(get_superuser),
+) -> SuperuserOrganizationsListResponse:
+    """List all organizations with member counts. Requires superuser privileges."""
+    organizations = await db_client.list_organizations_for_superadmin()
+    return SuperuserOrganizationsListResponse(
+        organizations=[
+            SuperuserOrganizationResponse(**org) for org in organizations
+        ],
+        total_count=len(organizations),
+    )
+
+
+@router.post("/organizations")
+async def create_organization(
+    request: CreateOrganizationRequest,
+    user: UserModel = Depends(get_superuser),
+) -> CreateOrganizationResponse:
+    """Provision a new client organization and email the client an invite.
+
+    Flow (1B): create a Stack team (with the superadmin added as a member so
+    they can build workflows before the client joins) -> persist a local
+    organization row as pending_setup -> email the client a team invitation.
+    Requires superuser privileges.
+    """
+    name = request.name.strip()
+    email = request.email.strip().lower()
+    if not name:
+        raise HTTPException(status_code=400, detail="Organization name is required.")
+    if not email:
+        raise HTTPException(status_code=400, detail="Client email is required.")
+
+    # 1. Create the Stack team. Add the superadmin as a member via
+    #    creator_user_id so they can select the team and build flows immediately.
+    try:
+        team = await stackauth.create_team(
+            display_name=name,
+            creator_user_id=user.provider_id,
+        )
+    except StackAuthTeamError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to create the organization in the auth provider.",
+        ) from exc
+
+    team_id = team["id"]
+
+    # 2. Persist the local organization row (pending_setup) with the superadmin
+    #    as a member and a default API key.
+    try:
+        organization = await db_client.create_client_organization(
+            provider_id=team_id,
+            name=name,
+            primary_contact_email=email,
+            superadmin_user_id=user.id,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Auth team created but local organization insert failed: {exc}",
+        ) from exc
+
+    # 3. Email the client an invitation. A failure here is non-fatal — the org
+    #    exists and the client can be re-invited later; surface it to the UI.
+    callback_base = PUBLIC_BASE_URL or UI_APP_URL
+    invitation_sent = True
+    try:
+        await stackauth.send_team_invitation(
+            team_id=team_id,
+            email=email,
+            callback_url=f"{callback_base.rstrip('/')}/handler/team-invitation",
+        )
+    except StackAuthTeamError as exc:
+        invitation_sent = False
+        logger.warning(
+            "Organization {} created but invite to {} failed: {}",
+            team_id,
+            email,
+            exc,
+        )
+
+    return CreateOrganizationResponse(
+        organization=SuperuserOrganizationResponse(
+            id=organization.id,
+            provider_id=organization.provider_id,
+            name=organization.name,
+            primary_contact_email=organization.primary_contact_email,
+            status=organization.status,
+            created_at=organization.created_at,
+            user_count=1,
+        ),
+        invitation_sent=invitation_sent,
+    )
+
+
+@router.patch("/organizations/{organization_id}/status")
+async def update_organization_status(
+    organization_id: int,
+    request: UpdateOrganizationStatusRequest,
+    user: UserModel = Depends(get_superuser),
+) -> SuperuserOrganizationResponse:
+    """Set an organization's lifecycle status. Requires superuser privileges.
+
+    Suspending an org blocks its members at login (see get_user in
+    services/auth/depends.py).
+    """
+    valid_statuses = {status.value for status in OrganizationStatus}
+    if request.status not in valid_statuses:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid status. Must be one of: {', '.join(sorted(valid_statuses))}",
+        )
+
+    organization = await db_client.update_organization_status(
+        organization_id, request.status
+    )
+    if organization is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Organization with ID {organization_id} not found.",
+        )
+
+    user_count = len(await db_client.get_organization_users(organization_id))
+    return SuperuserOrganizationResponse(
+        id=organization.id,
+        provider_id=organization.provider_id,
+        name=organization.name,
+        primary_contact_email=organization.primary_contact_email,
+        status=organization.status,
+        created_at=organization.created_at,
+        user_count=user_count,
     )

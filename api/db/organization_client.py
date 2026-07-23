@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import exists
+from sqlalchemy import exists, func
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.future import select
 
@@ -16,6 +16,116 @@ from api.utils.api_key import generate_api_key
 
 
 class OrganizationClient(BaseDBClient):
+    async def list_organizations_for_superadmin(self) -> list[dict]:
+        """List every organization with its member count for the superadmin panel.
+
+        Returns newest-first. Not organization-scoped by design — this is only
+        reachable behind the superuser dependency.
+        """
+        # Left join the association table so orgs with zero members still appear.
+        user_count = func.count(organization_users_association.c.user_id)
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(OrganizationModel, user_count)
+                .outerjoin(
+                    organization_users_association,
+                    organization_users_association.c.organization_id
+                    == OrganizationModel.id,
+                )
+                .group_by(OrganizationModel.id)
+                .order_by(OrganizationModel.created_at.desc())
+            )
+            return [
+                {
+                    "id": org.id,
+                    "provider_id": org.provider_id,
+                    "name": org.name,
+                    "primary_contact_email": org.primary_contact_email,
+                    "status": org.status,
+                    "created_at": org.created_at,
+                    "user_count": int(count or 0),
+                }
+                for org, count in result.all()
+            ]
+
+    async def create_client_organization(
+        self,
+        *,
+        provider_id: str,
+        name: str,
+        primary_contact_email: str,
+        superadmin_user_id: int,
+    ) -> OrganizationModel:
+        """Create a superadmin-provisioned client organization.
+
+        Inserts the org as ``pending_setup``, adds the creating superadmin as a
+        member (so they can build the client's workflows before the client
+        accepts their invite) and mints the org's default API key. Mirrors the
+        side effects of get_or_create_organization_by_provider_id.
+        """
+        async with self.async_session() as session:
+            organization = OrganizationModel(
+                provider_id=provider_id,
+                name=name,
+                primary_contact_email=primary_contact_email,
+                status="pending_setup",
+                created_at=datetime.now(timezone.utc),
+            )
+            session.add(organization)
+            await session.commit()
+            await session.refresh(organization)
+
+            # Add the superadmin as a member (idempotent).
+            stmt = insert(organization_users_association).values(
+                user_id=superadmin_user_id, organization_id=organization.id
+            )
+            stmt = stmt.on_conflict_do_nothing()
+            await session.execute(stmt)
+
+            # Default API key, same as auto-provisioned orgs get.
+            _, key_hash, key_prefix = generate_api_key()
+            session.add(
+                APIKeyModel(
+                    organization_id=organization.id,
+                    name="Default API Key",
+                    key_hash=key_hash,
+                    key_prefix=key_prefix,
+                    is_active=True,
+                    created_by=superadmin_user_id,
+                )
+            )
+            await session.commit()
+            await session.refresh(organization)
+            return organization
+
+    async def get_organization_by_provider_id(
+        self, provider_id: str
+    ) -> Optional[OrganizationModel]:
+        """Get an organization by its Stack team provider_id."""
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(OrganizationModel).where(
+                    OrganizationModel.provider_id == provider_id
+                )
+            )
+            return result.scalars().first()
+
+    async def update_organization_status(
+        self, organization_id: int, status: str
+    ) -> Optional[OrganizationModel]:
+        """Set an organization's lifecycle status. Returns the updated row."""
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(OrganizationModel).where(OrganizationModel.id == organization_id)
+            )
+            organization = result.scalars().first()
+            if organization is None:
+                return None
+            organization.status = status
+            await session.commit()
+            await session.refresh(organization)
+            return organization
+
     async def get_organization_by_id(
         self, organization_id: int
     ) -> Optional[OrganizationModel]:

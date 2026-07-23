@@ -19,7 +19,7 @@ async def test_get_user_initializes_hosted_mps_billing_for_new_org(monkeypatch):
         provider_id="stack-user-1",
         selected_organization_id=None,
     )
-    organization = SimpleNamespace(id=42, provider_id="team-1")
+    organization = SimpleNamespace(id=42, provider_id="team-1", status="active")
     existing_config = SimpleNamespace(llm=object(), tts=None, stt=None)
 
     ensure_billing = AsyncMock(return_value={"billing_mode": "v2"})

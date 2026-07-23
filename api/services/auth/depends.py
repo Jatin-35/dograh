@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from api.constants import AUTH_PROVIDER, DOGRAH_MPS_SECRET_KEY, MPS_API_URL
 from api.db import db_client
 from api.db.models import UserModel
-from api.enums import PostHogEvent
+from api.enums import OrganizationStatus, PostHogEvent
 from api.schemas.ai_model_configuration import EffectiveAIModelConfiguration
 from api.services.auth.stack_auth import stackauth
 from api.services.configuration.registry import ServiceProviders
@@ -180,6 +180,27 @@ async def get_user(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to map user to organization: {exc}",
+        )
+
+    # A superadmin-provisioned org stays "pending_setup" until the actual client
+    # (a non-superuser member) first logs in / accepts their invite — flip it to
+    # active then. The superadmin poking at the org beforehand must not trip this.
+    if (
+        organization.status == OrganizationStatus.PENDING_SETUP.value
+        and not user_model.is_superuser
+    ):
+        await db_client.update_organization_status(
+            organization.id, OrganizationStatus.ACTIVE.value
+        )
+        organization.status = OrganizationStatus.ACTIVE.value
+
+    # Block access to a suspended organization. Placed outside the try/except
+    # above so the 403 is not re-wrapped as a 500. Applies to impersonation too:
+    # a suspended org cannot be entered by anyone, including a superadmin.
+    if organization.status == OrganizationStatus.SUSPENDED.value:
+        raise HTTPException(
+            status_code=403,
+            detail="This organization has been suspended. Please contact your administrator.",
         )
 
     return user_model

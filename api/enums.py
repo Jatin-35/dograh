@@ -139,6 +139,20 @@ class WorkflowStatus(Enum):
     # PAUSED = "paused"
 
 
+class OrganizationStatus(Enum):
+    """Lifecycle status for a client organization managed from the superadmin panel.
+
+    - PENDING_SETUP: created by a superadmin (1B flow) but no client member has
+      logged in yet.
+    - ACTIVE: a client member has logged in / accepted the invite.
+    - SUSPENDED: access administratively revoked; members are rejected at login.
+    """
+
+    PENDING_SETUP = "pending_setup"
+    ACTIVE = "active"
+    SUSPENDED = "suspended"
+
+
 class RedisChannel(Enum):
     """Redis pub/sub channel names"""
 

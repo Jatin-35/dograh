@@ -27,6 +27,7 @@ from api.constants import DEFAULT_CAMPAIGN_RETRY_CONFIG
 from ..enums import (
     CallType,
     IntegrationAction,
+    OrganizationStatus,
     ToolCategory,
     ToolStatus,
     TriggerState,
@@ -108,6 +109,21 @@ class OrganizationModel(Base):
     id = Column(Integer, primary_key=True, index=True)
     provider_id = Column(String, unique=True, index=True, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+    # Superadmin-managed client metadata. Nullable so existing/auto-provisioned
+    # orgs (which have no human-entered name) keep working; populated when a
+    # superadmin creates a client org via the /superadmin/organizations flow.
+    name = Column(String, nullable=True)
+    primary_contact_email = Column(String, nullable=True)
+    status = Column(
+        Enum(
+            *[status.value for status in OrganizationStatus],
+            name="organization_status",
+        ),
+        nullable=False,
+        default=OrganizationStatus.ACTIVE.value,
+        server_default=text("'active'"),
+    )
 
     # Deprecated: MPS owns quota and credit ledger state.
     quota_type = Column(

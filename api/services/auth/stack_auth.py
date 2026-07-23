@@ -2,6 +2,7 @@ import os
 from typing import Any
 
 import aiohttp
+from loguru import logger
 
 
 class StackAuthUserSearchError(Exception):
@@ -10,6 +11,10 @@ class StackAuthUserSearchError(Exception):
 
 class StackAuthSessionError(Exception):
     """Raised when Stack Auth cannot create an impersonation session."""
+
+
+class StackAuthTeamError(Exception):
+    """Raised when Stack Auth team creation or invitation fails."""
 
 
 class StackAuth:
@@ -120,58 +125,95 @@ class StackAuth:
     # Team & user management helpers
     # ------------------------------------------------------------------
 
-    # async def create_team(
-    #     self,
-    #     access_token: str,
-    #     display_name: str,
-    #     profile_image_url: str | None = None,
-    #     client_metadata: dict | None = None,
-    # ) -> dict:
-    #     """Create a new team for the authenticated user and return the API response."""
-    #     token = self._strip_bearer(access_token)
-    #     if token is None:
-    #         raise ValueError("Access token required to create team")
+    def _server_headers(self) -> dict[str, str]:
+        return {
+            "x-stack-access-type": "server",
+            "x-stack-project-id": self.project_id,
+            "x-stack-secret-server-key": self.secret_server_key,
+            "Content-Type": "application/json",
+        }
 
-    #     url = os.environ.get("STACK_AUTH_API_URL") + "/api/v1/teams"
-    #     headers = {
-    #         "x-stack-access-type": "server",
-    #         "x-stack-project-id": self.project_id,
-    #         "x-stack-secret-server-key": self.secret_server_key,
-    #         "x-stack-access-token": token,
-    #         "Content-Type": "application/json",
-    #     }
+    async def create_team(
+        self,
+        display_name: str,
+        creator_user_id: str | None = None,
+        client_metadata: dict | None = None,
+    ) -> dict:
+        """Create a team server-side and return the API response (includes ``id``).
 
-    #     payload: dict = {
-    #         "display_name": display_name,
-    #         "creator_user_id": "me",
-    #     }
-    #     if profile_image_url is not None:
-    #         payload["profile_image_url"] = profile_image_url
-    #     if client_metadata is not None:
-    #         payload["client_metadata"] = client_metadata
+        Uses server auth, so Stack skips the client-only
+        ``allowClientTeamCreation`` check and no user access token is required.
+        When ``creator_user_id`` (a Stack user UUID) is supplied that user is
+        added to the team as a member — used to add the superadmin so they can
+        build the client's workflows before the client accepts their invite.
+        """
+        url = os.environ.get("STACK_AUTH_API_URL") + "/api/v1/teams"
+        payload: dict = {"display_name": display_name}
+        if creator_user_id is not None:
+            payload["creator_user_id"] = creator_user_id
+        if client_metadata is not None:
+            payload["client_metadata"] = client_metadata
 
-    #     async with aiohttp.ClientSession() as session:
-    #         async with session.post(url, headers=headers, json=payload) as response:
-    #             return await response.json()
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    url, headers=self._server_headers(), json=payload
+                ) as response:
+                    if response.status >= 400:
+                        raise StackAuthTeamError(
+                            f"Stack Auth team creation failed ({response.status})"
+                        )
+                    data = await response.json()
+        except (aiohttp.ClientError, ValueError) as exc:
+            raise StackAuthTeamError("Stack Auth team creation failed") from exc
 
-    # async def update_user(self, access_token: str, data: dict) -> dict:
-    #     """Patch the current user with supplied data and return the API response."""
-    #     token = self._strip_bearer(access_token)
-    #     if token is None:
-    #         raise ValueError("Access token required to update user")
+        if not isinstance(data, dict) or not isinstance(data.get("id"), str):
+            raise StackAuthTeamError("Stack Auth team creation returned no team id")
+        return data
 
-    #     url = os.environ.get("STACK_AUTH_API_URL") + "/api/v1/users/me"
-    #     headers = {
-    #         "x-stack-access-type": "server",
-    #         "x-stack-project-id": self.project_id,
-    #         "x-stack-secret-server-key": self.secret_server_key,
-    #         "x-stack-access-token": token,
-    #         "Content-Type": "application/json",
-    #     }
+    async def send_team_invitation(
+        self,
+        team_id: str,
+        email: str,
+        callback_url: str,
+    ) -> dict:
+        """Email a team invitation link to ``email`` for the given team.
 
-    #     async with aiohttp.ClientSession() as session:
-    #         async with session.patch(url, headers=headers, json=data) as response:
-    #             return await response.json()
+        Server auth skips the ``$invite_members`` permission check (that check
+        only applies to client-auth callers), so this works without any inviting
+        user context.
+        """
+        url = (
+            os.environ.get("STACK_AUTH_API_URL")
+            + "/api/v1/team-invitations/send-code"
+        )
+        payload = {
+            "team_id": team_id,
+            "email": email,
+            "callback_url": callback_url,
+        }
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    url, headers=self._server_headers(), json=payload
+                ) as response:
+                    if response.status >= 400:
+                        # Capture the response body so the real reason (untrusted
+                        # callback domain, email not configured, etc.) is visible
+                        # in logs instead of a bare status code.
+                        body = await response.text()
+                        logger.warning(
+                            "Stack Auth team invitation failed ({}): {}",
+                            response.status,
+                            body,
+                        )
+                        raise StackAuthTeamError(
+                            f"Stack Auth team invitation failed ({response.status}): {body}"
+                        )
+                    return await response.json()
+        except (aiohttp.ClientError, ValueError) as exc:
+            raise StackAuthTeamError("Stack Auth team invitation failed") from exc
 
 
 stackauth = StackAuth()
