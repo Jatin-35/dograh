@@ -540,7 +540,7 @@ dograh_issue_letsencrypt_webroot() {
     mkdir -p "$webroot/.well-known/acme-challenge"
 
     certbot certonly --webroot -w "$webroot" \
-        --non-interactive --agree-tos --keep-until-expiring \
+        --non-interactive --agree-tos --keep-until-expiring --expand \
         "${email_args[@]}" \
         "${domain_args[@]}" || return 1
 
