@@ -148,7 +148,18 @@ done
 echo -e "${GREEN}✓ Services running and serving the ACME challenge${NC}"
 
 echo -e "${BLUE}[4/6] Obtaining Let's Encrypt certificate for $DOMAIN_NAME...${NC}"
-if ! dograh_issue_letsencrypt_webroot "$(pwd)" "$DOMAIN_NAME" "$EMAIL_ADDRESS"; then
+# Preserve the admin subdomain (if configured via setup_admin_domain.sh) as a
+# SAN on the reissued certificate — otherwise repointing PUBLIC_HOST here
+# would silently drop HTTPS for ADMIN_HOST.
+if [[ -n "${ADMIN_HOST:-}" ]]; then
+    echo -e "${BLUE}  (preserving existing admin domain $ADMIN_HOST as a SAN)${NC}"
+    cert_issue_result=0
+    dograh_issue_letsencrypt_webroot "$(pwd)" "$DOMAIN_NAME" "$EMAIL_ADDRESS" "$ADMIN_HOST" || cert_issue_result=1
+else
+    cert_issue_result=0
+    dograh_issue_letsencrypt_webroot "$(pwd)" "$DOMAIN_NAME" "$EMAIL_ADDRESS" || cert_issue_result=1
+fi
+if [[ "$cert_issue_result" != "0" ]]; then
     echo -e "${RED}✗ Certificate issuance failed${NC}"
     echo ""
     echo -e "${YELLOW}Common causes:${NC}"
