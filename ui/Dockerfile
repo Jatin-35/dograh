@@ -49,8 +49,10 @@ ENV BACKEND_URL="http://api:8000"
 # not just at container runtime. Empty by default (single-domain installs).
 ARG NEXT_PUBLIC_APP_URL=""
 ARG NEXT_PUBLIC_ADMIN_URL=""
+ARG NEXT_PUBLIC_CLIENT_URL=""
 ENV NEXT_PUBLIC_APP_URL="${NEXT_PUBLIC_APP_URL}"
 ENV NEXT_PUBLIC_ADMIN_URL="${NEXT_PUBLIC_ADMIN_URL}"
+ENV NEXT_PUBLIC_CLIENT_URL="${NEXT_PUBLIC_CLIENT_URL}"
 
 # Build the application with standalone mode
 # Increase Node.js heap size to prevent out-of-memory errors during build

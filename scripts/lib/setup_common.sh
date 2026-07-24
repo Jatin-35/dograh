@@ -296,13 +296,14 @@ dograh_render_remote_nginx_conf() {
     local template=""
     local tmp_upstream=""
     # PUBLIC_HOST stays the sole canonical app identity (PUBLIC_BASE_URL,
-    # webhook/callback URLs, etc. all derive from it). ADMIN_HOST, when set,
-    # is an additional hostname served out of the *same* server block on a
-    # single SAN certificate — it must come after PUBLIC_HOST here since
-    # dograh_preflight_remote_init_render only checks the first server_name
-    # token against PUBLIC_HOST.
+    # webhook/callback URLs, etc. all derive from it). ADMIN_HOST and
+    # CLIENT_HOST, when set, are additional hostnames served out of the *same*
+    # server block on a single SAN certificate — PUBLIC_HOST must come first
+    # here since dograh_preflight_remote_init_render only checks the first
+    # server_name token against PUBLIC_HOST.
     local server_names="$PUBLIC_HOST"
-    [[ -n "${ADMIN_HOST:-}" ]] && server_names="$PUBLIC_HOST $ADMIN_HOST"
+    [[ -n "${ADMIN_HOST:-}" ]] && server_names="$server_names $ADMIN_HOST"
+    [[ -n "${CLIENT_HOST:-}" ]] && server_names="$server_names $CLIENT_HOST"
 
     template="$(dograh_template_path "nginx.remote.conf.template")"
     tmp_upstream="$(mktemp)"
@@ -384,7 +385,7 @@ dograh_preflight_remote_init_render() {
     turn_conf="$tmp_root/coturn/turnserver.conf"
 
     (
-        export ENVIRONMENT SERVER_IP PUBLIC_HOST PUBLIC_BASE_URL ADMIN_HOST BACKEND_API_ENDPOINT MINIO_PUBLIC_ENDPOINT TURN_HOST TURN_SECRET FASTAPI_WORKERS
+        export ENVIRONMENT SERVER_IP PUBLIC_HOST PUBLIC_BASE_URL ADMIN_HOST CLIENT_HOST BACKEND_API_ENDPOINT MINIO_PUBLIC_ENDPOINT TURN_HOST TURN_SECRET FASTAPI_WORKERS
         export DOGRAH_INIT_WORKSPACE_DIR="$project_dir"
         export DOGRAH_INIT_OUTPUT_ROOT="$tmp_root"
         export DOGRAH_INIT_CERTS_DIR="$cert_dir"

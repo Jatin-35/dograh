@@ -401,6 +401,7 @@ services:
       args:
         NEXT_PUBLIC_APP_URL: "${NEXT_PUBLIC_APP_URL:-}"
         NEXT_PUBLIC_ADMIN_URL: "${NEXT_PUBLIC_ADMIN_URL:-}"
+        NEXT_PUBLIC_CLIENT_URL: "${NEXT_PUBLIC_CLIENT_URL:-}"
     image: dograh-local/dograh-ui:local
     pull_policy: never
 OVERRIDE_EOF

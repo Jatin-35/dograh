@@ -86,10 +86,13 @@ services:
       SERVER_IP: "${SERVER_IP:-}"
       PUBLIC_HOST: "${PUBLIC_HOST:-}"
       PUBLIC_BASE_URL: "${PUBLIC_BASE_URL:-}"
-      # Optional second hostname (e.g. a dedicated superadmin subdomain) added
-      # to the same nginx server block / SAN certificate as PUBLIC_HOST. Empty
-      # by default (single-domain installs); see scripts/setup_admin_domain.sh.
+      # Optional additional hostnames (e.g. a dedicated superadmin subdomain
+      # and/or a restricted client-dashboard subdomain) added to the same
+      # nginx server block / SAN certificate as PUBLIC_HOST. Empty by default
+      # (single-domain installs); see scripts/setup_admin_domain.sh and
+      # scripts/setup_client_domain.sh.
       ADMIN_HOST: "${ADMIN_HOST:-}"
+      CLIENT_HOST: "${CLIENT_HOST:-}"
       BACKEND_API_ENDPOINT: "${BACKEND_API_ENDPOINT:-http://localhost:8000}"
       MINIO_PUBLIC_ENDPOINT: "${MINIO_PUBLIC_ENDPOINT:-http://localhost:9000}"
       TURN_HOST: "${TURN_HOST:-}"
@@ -290,12 +293,16 @@ services:
       STACK_SECRET_SERVER_KEY: "${STACK_SECRET_SERVER_KEY:-}"
 
       # Domain-separated deployments only (Stack Auth + superadmin on a
-      # dedicated admin subdomain). When set, post-login redirects and
-      # impersonation send superusers to NEXT_PUBLIC_ADMIN_URL and everyone
-      # else to NEXT_PUBLIC_APP_URL, regardless of which domain the request
-      # came in on. Leave unset for single-domain installs.
+      # dedicated admin subdomain, restricted clients on their own dashboard
+      # subdomain). When set: post-login sends superusers to
+      # NEXT_PUBLIC_ADMIN_URL, impersonation (the superadmin building a
+      # client's workflow) always lands on NEXT_PUBLIC_APP_URL, and a genuine
+      # (non-impersonated) client login lands on NEXT_PUBLIC_CLIENT_URL —
+      # regardless of which domain the request came in on. Leave unset for
+      # single-domain installs.
       NEXT_PUBLIC_APP_URL: "${NEXT_PUBLIC_APP_URL:-}"
       NEXT_PUBLIC_ADMIN_URL: "${NEXT_PUBLIC_ADMIN_URL:-}"
+      NEXT_PUBLIC_CLIENT_URL: "${NEXT_PUBLIC_CLIENT_URL:-}"
 
       # Flag to enable/ disable posthog
       ENABLE_TELEMETRY: "${ENABLE_TELEMETRY:-true}"
