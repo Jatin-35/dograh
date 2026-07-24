@@ -57,17 +57,22 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAppConfig } from "@/context/AppConfigContext";
 import { useLeadForms } from "@/context/LeadFormsContext";
+import { useOrgConfig } from "@/context/OrgConfigContext";
 import { useTelephonyConfigWarnings } from "@/context/TelephonyConfigWarningsContext";
 import { useLatestReleaseVersion } from "@/hooks/useLatestReleaseVersion";
 import type { LocalUser } from "@/lib/auth";
 import { useAuth } from "@/lib/auth";
-import { cn } from "@/lib/utils";
+import { cn, hasAdminPermission } from "@/lib/utils";
 
 type SidebarNavItem = {
   title: string;
   url: string;
   icon: LucideIcon;
   showsTelephonyWarning?: boolean;
+  // Hidden from restricted client dashboards (no is_superuser, no Stack
+  // 'admin' team permission, and not on the impersonation domain). See
+  // hasFullAccess below.
+  restrictedHidden?: boolean;
 };
 
 type SidebarNavSection = {
@@ -104,12 +109,14 @@ const NAV_SECTIONS: SidebarNavSection[] = [
         title: "Models",
         url: "/model-configurations",
         icon: Brain,
+        restrictedHidden: true,
       },
       {
         title: "Telephony",
         url: "/telephony-configurations",
         icon: Phone,
         showsTelephonyWarning: true,
+        restrictedHidden: true,
       },
       {
         title: "Tools",
@@ -130,6 +137,7 @@ const NAV_SECTIONS: SidebarNavSection[] = [
         title: "Developers",
         url: "/api-keys",
         icon: Key,
+        restrictedHidden: true,
       },
     ],
   },
@@ -145,6 +153,7 @@ const NAV_SECTIONS: SidebarNavSection[] = [
         title: "Billing",
         url: "/billing",
         icon: CircleDollarSign,
+        restrictedHidden: true,
       },
       {
         title: "Reports",
@@ -161,6 +170,7 @@ export function AppSidebar() {
   const { state, isMobile, setOpenMobile } = useSidebar();
   const { provider, logout, user, loading: authLoading, getAccessToken } = useAuth();
   const { config } = useAppConfig();
+  const { permissions } = useOrgConfig();
   const { openHireExpert } = useLeadForms();
   const {
     telnyxMissingWebhookPublicKeyCount,
@@ -190,17 +200,47 @@ export function AppSidebar() {
     })();
   }, [authLoading, user, getAccessToken]);
 
-  const navSections = isSuperuser
-    ? [
-        ...NAV_SECTIONS,
-        {
-          label: "ADMIN",
-          items: [
-            { title: "Super Admin", url: "/superadmin", icon: ShieldCheck },
-          ],
-        },
-      ]
-    : NAV_SECTIONS;
+  // Full nav also applies while impersonating a client to build their
+  // workflow: an impersonated session authenticates as the client's own
+  // (non-superuser, non-admin-permission) user row, so is_superuser and
+  // hasAdminPermission alone can't distinguish "you, impersonating" from
+  // "the client, logging in themselves". The two land on different domains
+  // by design (NEXT_PUBLIC_APP_URL vs NEXT_PUBLIC_CLIENT_URL), so being on
+  // the impersonation domain is itself the signal. Read via effect (not
+  // during render) so server-rendered and first-paint client output match —
+  // same pattern as isSuperuser above.
+  const [isOnImpersonationDomain, setIsOnImpersonationDomain] = React.useState(false);
+  React.useEffect(() => {
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+    if (!appUrl) return;
+    try {
+      setIsOnImpersonationDomain(window.location.hostname === new URL(appUrl).hostname);
+    } catch {
+      // Malformed NEXT_PUBLIC_APP_URL — treat as not on the impersonation domain.
+    }
+  }, []);
+
+  const hasFullAccess = isSuperuser || hasAdminPermission(permissions) || isOnImpersonationDomain;
+
+  const navSections = (
+    hasFullAccess
+      ? NAV_SECTIONS
+      : NAV_SECTIONS.map(section => ({
+          ...section,
+          items: section.items.filter(item => !item.restrictedHidden),
+        }))
+  ).concat(
+    isSuperuser
+      ? [
+          {
+            label: "ADMIN",
+            items: [
+              { title: "Super Admin", url: "/superadmin", icon: ShieldCheck },
+            ],
+          },
+        ]
+      : []
+  );
 
   // Version info from app config context
   const versionInfo = config ? { ui: config.uiVersion, api: config.apiVersion } : null;

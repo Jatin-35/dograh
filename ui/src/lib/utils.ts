@@ -37,12 +37,23 @@ export function debounce<T extends (...args: unknown[]) => unknown>(func: T, wai
   };
 }
 
-// Optional domain-aware routing: when set, superusers are always sent to the
-// admin domain and everyone else to the app domain, regardless of which
-// domain the login happened on. Falls back to a same-origin relative path
-// when unset (local dev, or single-domain deployments).
+// Optional domain-aware routing for a genuine (non-impersonated) login:
+// superusers always land on the admin domain, everyone else lands on the
+// client-dashboard domain — regardless of which domain the login happened
+// on. NEXT_PUBLIC_APP_URL is deliberately NOT used here: that domain is
+// reserved for impersonation (see impersonateAsSuperadmin below), which is a
+// separate code path that never goes through getRedirectUrl. Falls back to a
+// same-origin relative path when unset (local dev, or single-domain
+// deployments).
 const ADMIN_BASE_URL = process.env.NEXT_PUBLIC_ADMIN_URL;
-const APP_BASE_URL = process.env.NEXT_PUBLIC_APP_URL;
+const CLIENT_BASE_URL = process.env.NEXT_PUBLIC_CLIENT_URL;
+
+// Shared check for Stack's per-team 'admin' permission — the single source
+// of truth for "does this org member have full access", used both for the
+// post-login redirect below and for nav gating in AppSidebar.
+export function hasAdminPermission(permissions: { id: string }[]): boolean {
+  return permissions.some(p => p.id === 'admin');
+}
 
 function toDestination(path: string, baseUrl?: string): string {
   return baseUrl ? new URL(path, baseUrl).toString() : path;
@@ -72,14 +83,14 @@ export async function getRedirectUrl(token: string, permissions: { id: string }[
       return toDestination("/superadmin", ADMIN_BASE_URL);
     }
 
-    const hasAdminPermission = permissions.some(p => p.id === 'admin');
-    console.log('[getRedirectUrl] Admin permission check:', { hasAdminPermission });
+    const isAdmin = hasAdminPermission(permissions);
+    console.log('[getRedirectUrl] Admin permission check:', { hasAdminPermission: isAdmin });
 
   // If the user doesn't have admin permissions, redirect them to
   // usage page
-  if (!hasAdminPermission) {
+  if (!isAdmin) {
     console.log('[getRedirectUrl] No admin permission, redirecting to /usage');
-    return toDestination("/usage", APP_BASE_URL);
+    return toDestination("/usage", CLIENT_BASE_URL);
   }
 
   // Check if user has any workflows
@@ -98,16 +109,16 @@ export async function getRedirectUrl(token: string, permissions: { id: string }[
 
     if (countResponse.data && countResponse.data.active > 0) {
       console.log('[getRedirectUrl] User has workflows, redirecting to /workflow');
-      return toDestination("/workflow", APP_BASE_URL);
+      return toDestination("/workflow", CLIENT_BASE_URL);
     } else {
       console.log('[getRedirectUrl] No workflows found, redirecting to /workflow/create');
-      return toDestination("/workflow/create", APP_BASE_URL);
+      return toDestination("/workflow/create", CLIENT_BASE_URL);
     }
   } catch (error) {
     console.error('[getRedirectUrl] Error checking workflows:', error);
     // If we can't check workflows, default to /workflow/create
     console.log('[getRedirectUrl] Defaulting to /workflow/create due to error');
-    return toDestination("/workflow/create", APP_BASE_URL);
+    return toDestination("/workflow/create", CLIENT_BASE_URL);
   }
   } catch (error) {
     console.error("[getRedirectUrl] Failed to fetch auth user:", error);
