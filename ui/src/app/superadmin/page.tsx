@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Building2, List, Loader2 } from 'lucide-react';
+import { ArrowRight, Building2, List, Loader2, Workflow } from 'lucide-react';
 import Link from "next/link";
 import { useState } from "react";
 
@@ -187,6 +187,25 @@ export default function SuperadminPage() {
                                     <Button className="w-full md:w-auto">
                                         <Building2 className="mr-2 h-4 w-4" />
                                         View Organizations
+                                        <ArrowRight className="ml-2 h-4 w-4" />
+                                    </Button>
+                                </Link>
+                            </CardContent>
+                        </Card>
+
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Agents</CardTitle>
+                                <CardDescription>
+                                    Browse every voice agent across all organizations and jump
+                                    straight into any one to edit it
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <Link href="/superadmin/agents">
+                                    <Button className="w-full md:w-auto">
+                                        <Workflow className="mr-2 h-4 w-4" />
+                                        Browse Agents
                                         <ArrowRight className="ml-2 h-4 w-4" />
                                     </Button>
                                 </Link>

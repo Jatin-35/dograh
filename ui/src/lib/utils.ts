@@ -142,6 +142,14 @@ export async function impersonateAsSuperadmin(params: {
   email?: string;
   redirectPath?: string;
   /**
+   * Forces the target account's Stack-selected team to this organization
+   * before impersonating, instead of inheriting whatever team that account's
+   * own session already had selected. Required whenever redirectPath deep-links
+   * into a *specific* organization's data (e.g. a workflow editor) rather than
+   * a generic destination like "/workflow" that works under any team.
+   */
+  targetOrganizationId?: number;
+  /**
    * If true the browser opens the impersonated session in a **new tab**
    * (via `window.open`). Defaults to `false` which navigates in the current tab.
    */
@@ -153,6 +161,7 @@ export async function impersonateAsSuperadmin(params: {
     providerUserId,
     email,
     redirectPath,
+    targetOrganizationId,
     openInNewTab = false,
   } = params;
   const targetWindow = openInNewTab ? window.open('', '_blank') : null;
@@ -164,6 +173,8 @@ export async function impersonateAsSuperadmin(params: {
   }
 
   // Build request body depending on which identifier we have.
+  const hasIdentity = userId !== undefined || providerUserId !== undefined || email !== undefined;
+
   const body: Record<string, unknown> = {};
   if (userId !== undefined) {
     body.user_id = userId;
@@ -174,8 +185,11 @@ export async function impersonateAsSuperadmin(params: {
   if (email !== undefined) {
     body.email = email;
   }
+  if (targetOrganizationId !== undefined) {
+    body.target_organization_id = targetOrganizationId;
+  }
 
-  if (Object.keys(body).length === 0) {
+  if (!hasIdentity) {
     targetWindow?.close();
     throw new Error('Either userId, providerUserId, or email must be provided');
   }
