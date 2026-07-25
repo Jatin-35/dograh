@@ -4,9 +4,10 @@ import { AlertTriangle, ArrowLeft, ChevronDown, ChevronRight, ExternalLink, Fold
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { CopyButton } from "@/components/CopyButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
     Table,
@@ -322,10 +323,26 @@ export default function SuperadminAgentsPage() {
                                                                 </span>
                                                             )}
                                                         </CardTitle>
-                                                        <CardDescription>
-                                                            {group.totalAgents}{" "}
-                                                            {group.totalAgents === 1 ? "agent" : "agents"}
-                                                        </CardDescription>
+                                                        {/* A styled div rather than CardDescription (a <p>)
+                                                            so the copy <button> is valid HTML nested here. */}
+                                                        <div className="flex items-center gap-1 flex-wrap text-sm text-muted-foreground">
+                                                            <span>
+                                                                {group.totalAgents}{" "}
+                                                                {group.totalAgents === 1 ? "agent" : "agents"}
+                                                            </span>
+                                                            {group.organization_primary_contact_email && (
+                                                                <>
+                                                                    <span aria-hidden>·</span>
+                                                                    <span className="break-all">
+                                                                        {group.organization_primary_contact_email}
+                                                                    </span>
+                                                                    <CopyButton
+                                                                        value={group.organization_primary_contact_email}
+                                                                        label="Email"
+                                                                    />
+                                                                </>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 </div>
                                                 <Badge variant={badge.variant}>{badge.label}</Badge>

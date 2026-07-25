@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { CopyButton } from "@/components/CopyButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -261,9 +262,15 @@ export default function OrganizationsPage() {
                                                         >
                                                             {org.name || "Unnamed"}
                                                         </span>
-                                                        <span className="font-mono text-xs text-muted-foreground break-all">
-                                                            {org.provider_id}
-                                                        </span>
+                                                        <div className="flex items-center gap-1">
+                                                            <span className="font-mono text-xs text-muted-foreground break-all">
+                                                                {org.provider_id}
+                                                            </span>
+                                                            <CopyButton
+                                                                value={org.provider_id}
+                                                                label="Organization ID"
+                                                            />
+                                                        </div>
                                                     </div>
                                                 </TableCell>
                                                 <TableCell>
@@ -276,7 +283,17 @@ export default function OrganizationsPage() {
                                                     {org.user_count}
                                                 </TableCell>
                                                 <TableCell className="text-muted-foreground">
-                                                    {org.primary_contact_email || (
+                                                    {org.primary_contact_email ? (
+                                                        <div className="flex items-center gap-1">
+                                                            <span className="break-all">
+                                                                {org.primary_contact_email}
+                                                            </span>
+                                                            <CopyButton
+                                                                value={org.primary_contact_email}
+                                                                label="Email"
+                                                            />
+                                                        </div>
+                                                    ) : (
                                                         <span className="italic">None</span>
                                                     )}
                                                 </TableCell>
