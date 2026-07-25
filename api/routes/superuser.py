@@ -27,11 +27,20 @@ class ImpersonateRequest(BaseModel):
     ``provider_user_id``, ``user_id``, or ``email`` may be supplied. If more
     than one is provided, ``provider_user_id`` takes precedence, followed by
     ``user_id`` and then ``email``.
+
+    ``target_organization_id``, when supplied, forces the target account's
+    Stack-selected team to that organization before impersonating — without
+    it, the impersonated session lands wherever that account's own selected
+    team already was, which is only guaranteed correct if the account belongs
+    to exactly one team. Needed whenever the caller relies on landing in a
+    *specific* organization (e.g. deep-linking straight to one of its
+    workflows) rather than just "however that user happens to be logged in".
     """
 
     provider_user_id: str | None = None
     user_id: int | None = None
     email: str | None = None
+    target_organization_id: int | None = None
 
 
 class ImpersonateResponse(BaseModel):
@@ -95,6 +104,25 @@ class CreateOrganizationResponse(BaseModel):
     invitation_sent: bool
 
 
+class SuperuserWorkflowResponse(BaseModel):
+    id: int
+    name: str
+    created_at: datetime
+    total_runs: int
+    folder_id: Optional[int]
+    folder_name: Optional[str]
+    organization_id: int
+    organization_name: Optional[str]
+    organization_provider_id: str
+    organization_status: str
+    organization_primary_contact_email: Optional[str]
+
+
+class SuperuserWorkflowsListResponse(BaseModel):
+    workflows: List[SuperuserWorkflowResponse]
+    total_count: int
+
+
 @router.post("/impersonate")
 async def impersonate(
     request: ImpersonateRequest, user: UserModel = Depends(get_superuser)
@@ -156,6 +184,33 @@ async def impersonate(
                     "One of 'provider_user_id', 'user_id', or 'email' must be provided."
                 ),
             )
+
+    # ------------------------------------------------------------------
+    # If a target organization was specified, force the account's selected
+    # team to it first — otherwise the impersonated session inherits
+    # whatever that account's own selected team already was, which isn't
+    # guaranteed to be the org we actually want. A hard failure here (rather
+    # than impersonating anyway) is deliberate: better to fail loudly than
+    # silently land in the wrong organization.
+    # ------------------------------------------------------------------
+    if request.target_organization_id is not None:
+        target_org = await db_client.get_organization_by_id(
+            request.target_organization_id
+        )
+        if target_org is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Organization with ID {request.target_organization_id} not found.",
+            )
+        try:
+            await stackauth.set_user_selected_team(
+                provider_user_id, target_org.provider_id
+            )
+        except StackAuthTeamError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Failed to set the target organization for impersonation.",
+            ) from exc
 
     # ------------------------------------------------------------------
     # Call Stack Auth to create the impersonation session
@@ -369,4 +424,18 @@ async def update_organization_status(
         status=organization.status,
         created_at=organization.created_at,
         user_count=user_count,
+    )
+
+
+@router.get("/workflows")
+async def list_workflows(
+    user: UserModel = Depends(get_superuser),
+) -> SuperuserWorkflowsListResponse:
+    """List every active workflow across every organization, for the
+    superadmin agent browser. Requires superuser privileges.
+    """
+    workflows = await db_client.list_workflows_for_superadmin()
+    return SuperuserWorkflowsListResponse(
+        workflows=[SuperuserWorkflowResponse(**wf) for wf in workflows],
+        total_count=len(workflows),
     )

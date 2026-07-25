@@ -7,7 +7,13 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import load_only, selectinload
 
 from api.db.base_client import BaseDBClient
-from api.db.models import WorkflowDefinitionModel, WorkflowModel, WorkflowRunModel
+from api.db.models import (
+    FolderModel,
+    OrganizationModel,
+    WorkflowDefinitionModel,
+    WorkflowModel,
+    WorkflowRunModel,
+)
 
 
 class WorkflowClient(BaseDBClient):
@@ -385,6 +391,50 @@ class WorkflowClient(BaseDBClient):
 
             result = await session.execute(query)
             return result.scalars().all()
+
+    async def list_workflows_for_superadmin(self) -> list[dict]:
+        """List every active workflow across every organization, for the
+        superadmin agent browser. Not organization-scoped by design — only
+        reachable behind the superuser dependency. Excludes archived
+        workflows; there's no superadmin use case for jumping into one.
+
+        Includes each workflow's folder (NULL folder_id = "Uncategorized",
+        mirroring the regular agents page) and its total run count, so the
+        page can render the same folder/table structure clients see.
+        """
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(WorkflowModel, OrganizationModel, FolderModel)
+                .join(
+                    OrganizationModel,
+                    WorkflowModel.organization_id == OrganizationModel.id,
+                )
+                .outerjoin(FolderModel, WorkflowModel.folder_id == FolderModel.id)
+                .where(WorkflowModel.status == "active")
+                .order_by(OrganizationModel.name, FolderModel.name, WorkflowModel.name)
+            )
+            rows = result.all()
+
+            run_counts = await self.get_workflow_run_counts(
+                [workflow.id for workflow, _, _ in rows]
+            )
+
+            return [
+                {
+                    "id": workflow.id,
+                    "name": workflow.name,
+                    "created_at": workflow.created_at,
+                    "total_runs": run_counts.get(workflow.id, 0),
+                    "folder_id": folder.id if folder else None,
+                    "folder_name": folder.name if folder else None,
+                    "organization_id": organization.id,
+                    "organization_name": organization.name,
+                    "organization_provider_id": organization.provider_id,
+                    "organization_status": organization.status,
+                    "organization_primary_contact_email": organization.primary_contact_email,
+                }
+                for workflow, organization, folder in rows
+            ]
 
     async def get_workflow_counts(self, organization_id: int = None) -> dict[str, int]:
         """Get workflow counts by status.

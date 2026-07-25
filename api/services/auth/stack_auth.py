@@ -171,6 +171,36 @@ class StackAuth:
             raise StackAuthTeamError("Stack Auth team creation returned no team id")
         return data
 
+    async def set_user_selected_team(self, user_id: str, team_id: str) -> dict:
+        """Force a user's currently-selected team to ``team_id`` (server auth).
+
+        Stack validates real membership before allowing this (a user can't be
+        pointed at a team they don't belong to). Used before impersonating so
+        the resulting session reliably lands in the intended organization
+        instead of inheriting whatever the target's account last had selected.
+        """
+        url = os.environ.get("STACK_AUTH_API_URL") + f"/api/v1/users/{user_id}"
+        payload = {"selected_team_id": team_id}
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.patch(
+                    url, headers=self._server_headers(), json=payload
+                ) as response:
+                    if response.status >= 400:
+                        body = await response.text()
+                        logger.warning(
+                            "Stack Auth set_user_selected_team failed ({}): {}",
+                            response.status,
+                            body,
+                        )
+                        raise StackAuthTeamError(
+                            f"Stack Auth set_user_selected_team failed ({response.status}): {body}"
+                        )
+                    return await response.json()
+        except (aiohttp.ClientError, ValueError) as exc:
+            raise StackAuthTeamError("Stack Auth set_user_selected_team failed") from exc
+
     async def send_team_invitation(
         self,
         team_id: str,
