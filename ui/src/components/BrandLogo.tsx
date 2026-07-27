@@ -8,10 +8,12 @@ import { cn } from "@/lib/utils";
 // "h-7"); width stays auto so each lockup keeps its aspect ratio.
 export function BrandLogo({
   className,
+  textClassName = "text-xl",
   inverse = false,
   mark = false,
 }: {
   className?: string;
+  textClassName?: string;
   inverse?: boolean;
   mark?: boolean;
 }) {
@@ -30,7 +32,7 @@ export function BrandLogo({
       <span className={cn("flex items-center gap-2", className)}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/BotrixAI-mark-dark.png" alt="BotrixAI" className="h-full w-auto select-none" />
-        <span className="text-xl font-semibold tracking-tight text-zinc-50">BotrixAI</span>
+        <span className={cn("font-semibold tracking-tight text-zinc-50", textClassName)}>BotrixAI</span>
       </span>
     );
   }
@@ -40,7 +42,7 @@ export function BrandLogo({
       <img src="/BotrixAI-mark.png" alt="BotrixAI" className="block h-full w-auto select-none dark:hidden" />
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src="/BotrixAI-mark-dark.png" alt="BotrixAI" className="hidden h-full w-auto select-none dark:block" />
-      <span className="text-xl font-semibold tracking-tight text-foreground">BotrixAI</span>
+      <span className={cn("font-semibold tracking-tight text-foreground", textClassName)}>BotrixAI</span>
     </span>
   );
 }
