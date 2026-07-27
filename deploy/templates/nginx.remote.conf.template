@@ -75,6 +75,13 @@ server {
         sub_filter 'http://localhost:9000/voice-audio/' 'https://$host/voice-audio/';
         sub_filter_once off;
         sub_filter_types application/json text/html;
+
+        # Next.js streams React Server Component output (Suspense fallbacks
+        # flush before the real content is ready). Buffering here holds the
+        # whole response until it's fully done, so the page just sits blank
+        # instead of showing the skeleton — disable it, same as the API and
+        # MinIO locations below.
+        proxy_buffering off;
     }
 
     location /voice-audio/ {

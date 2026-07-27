@@ -36,15 +36,30 @@ async function WorkflowList() {
     }
 
     try {
-        // Fetch both active and archived workflows in a single request
-        const response = await getWorkflowsApiV1WorkflowFetchGet({
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-            },
-            query: {
-                status: 'active,archived'
-            }
-        });
+        // Fetch workflows and folders concurrently — they're independent
+        // reads, and running them sequentially just adds their latencies
+        // together for no reason.
+        const [response, foldersResult] = await Promise.all([
+            getWorkflowsApiV1WorkflowFetchGet({
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+                query: {
+                    status: 'active,archived'
+                }
+            }),
+            // Fetch folders for grouping active agents. A failure here
+            // shouldn't break the page — fall back to an empty list (flat,
+            // ungrouped view).
+            listFoldersApiV1FolderGet({
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            }).catch((folderErr) => {
+                logger.error(`Error fetching folders: ${folderErr}`);
+                return null;
+            }),
+        ]);
 
         const allWorkflowData = response.data ? (Array.isArray(response.data) ? response.data : [response.data]) : [];
 
@@ -57,19 +72,7 @@ async function WorkflowList() {
             .filter((w: WorkflowListResponse) => w.status === 'archived')
             .sort((a: WorkflowListResponse, b: WorkflowListResponse) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-        // Fetch folders for grouping active agents. A failure here shouldn't
-        // break the page — fall back to an empty list (flat, ungrouped view).
-        let folders: FolderResponse[] = [];
-        try {
-            const foldersResponse = await listFoldersApiV1FolderGet({
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                },
-            });
-            folders = foldersResponse.data ?? [];
-        } catch (folderErr) {
-            logger.error(`Error fetching folders: ${folderErr}`);
-        }
+        const folders: FolderResponse[] = foldersResult?.data ?? [];
 
         return (
             <>
