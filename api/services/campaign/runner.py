@@ -99,6 +99,34 @@ class CampaignRunnerService:
 
         logger.info(f"Campaign {campaign_id} resumed")
 
+    async def stop_campaign(self, campaign_id: int) -> None:
+        """Permanently stops a campaign, from either 'running' or 'paused'.
+
+        Unlike pause (temporary, resumable), this is a deliberate, terminal
+        action — the campaign cannot be resumed afterward. Setting state to
+        'cancelled' is enough to stop new dispatch: campaign_call_dispatcher's
+        process_batch() already gates on `state != "running"`, so a cancelled
+        campaign is skipped exactly like a paused one, no dispatcher changes
+        needed. Any call already in flight is left to finish on its own.
+        """
+        campaign = await db_client.get_campaign_by_id(campaign_id)
+        if not campaign:
+            raise ValueError(f"Campaign {campaign_id} not found")
+
+        if campaign.state not in ["created", "syncing", "running", "paused"]:
+            raise ValueError(
+                f"Campaign must be in 'created', 'syncing', 'running', or 'paused' "
+                f"state to stop, current state: {campaign.state}"
+            )
+
+        await db_client.update_campaign(
+            campaign_id=campaign_id,
+            state="cancelled",
+            cancelled_at=datetime.now(UTC),
+        )
+
+        logger.info(f"Campaign {campaign_id} stopped")
+
     async def get_campaign_status(self, campaign_id: int) -> Dict[str, Any]:
         """Returns detailed campaign status"""
         campaign = await db_client.get_campaign_by_id(campaign_id)
@@ -127,6 +155,7 @@ class CampaignRunnerService:
             "rate_limit": campaign.rate_limit_per_second,
             "started_at": campaign.started_at,
             "completed_at": campaign.completed_at,
+            "cancelled_at": campaign.cancelled_at,
         }
 
     async def _count_failed_campaign_calls(self, campaign_id: int) -> int:

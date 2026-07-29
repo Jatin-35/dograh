@@ -904,6 +904,10 @@ export type CampaignProgressResponse = {
      * Completed At
      */
     completed_at: string | null;
+    /**
+     * Cancelled At
+     */
+    cancelled_at: string | null;
 };
 
 /**
@@ -962,6 +966,10 @@ export type CampaignResponse = {
      * Completed At
      */
     completed_at: string | null;
+    /**
+     * Cancelled At
+     */
+    cancelled_at: string | null;
     retry_config: RetryConfigResponse;
     /**
      * Max Concurrency
@@ -1429,6 +1437,31 @@ export type CreateFolderRequest = {
      * Name
      */
     name: string;
+};
+
+/**
+ * CreateOrganizationRequest
+ */
+export type CreateOrganizationRequest = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Email
+     */
+    email: string;
+};
+
+/**
+ * CreateOrganizationResponse
+ */
+export type CreateOrganizationResponse = {
+    organization: SuperuserOrganizationResponse;
+    /**
+     * Invitation Sent
+     */
+    invitation_sent: boolean;
 };
 
 /**
@@ -3166,6 +3199,14 @@ export type HuggingFaceSttConfiguration = {
  * ``provider_user_id``, ``user_id``, or ``email`` may be supplied. If more
  * than one is provided, ``provider_user_id`` takes precedence, followed by
  * ``user_id`` and then ``email``.
+ *
+ * ``target_organization_id``, when supplied, forces the target account's
+ * Stack-selected team to that organization before impersonating — without
+ * it, the impersonated session lands wherever that account's own selected
+ * team already was, which is only guaranteed correct if the account belongs
+ * to exactly one team. Needed whenever the caller relies on landing in a
+ * *specific* organization (e.g. deep-linking straight to one of its
+ * workflows) rather than just "however that user happens to be logged in".
  */
 export type ImpersonateRequest = {
     /**
@@ -3180,6 +3221,10 @@ export type ImpersonateRequest = {
      * Email
      */
     email?: string | null;
+    /**
+     * Target Organization Id
+     */
+    target_organization_id?: number | null;
 };
 
 /**
@@ -3993,6 +4038,12 @@ export type OpenAiRealtimeLlmConfiguration = {
      * Voice the model speaks in.
      */
     voice?: string;
+    /**
+     * Language
+     *
+     * ISO 639-1 language code for input audio transcription (e.g. 'pt', 'es'). Improves transcription accuracy and latency. Leave unset to auto-detect.
+     */
+    language?: string | null;
 };
 
 /**
@@ -5384,6 +5435,104 @@ export type SpeechmaticsSttConfiguration = {
 };
 
 /**
+ * SuperuserOrganizationResponse
+ */
+export type SuperuserOrganizationResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Provider Id
+     */
+    provider_id: string;
+    /**
+     * Name
+     */
+    name: string | null;
+    /**
+     * Primary Contact Email
+     */
+    primary_contact_email: string | null;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * User Count
+     */
+    user_count: number;
+};
+
+/**
+ * SuperuserOrganizationsListResponse
+ */
+export type SuperuserOrganizationsListResponse = {
+    /**
+     * Organizations
+     */
+    organizations: Array<SuperuserOrganizationResponse>;
+    /**
+     * Total Count
+     */
+    total_count: number;
+};
+
+/**
+ * SuperuserWorkflowResponse
+ */
+export type SuperuserWorkflowResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Total Runs
+     */
+    total_runs: number;
+    /**
+     * Folder Id
+     */
+    folder_id: number | null;
+    /**
+     * Folder Name
+     */
+    folder_name: string | null;
+    /**
+     * Organization Id
+     */
+    organization_id: number;
+    /**
+     * Organization Name
+     */
+    organization_name: string | null;
+    /**
+     * Organization Provider Id
+     */
+    organization_provider_id: string;
+    /**
+     * Organization Status
+     */
+    organization_status: string;
+    /**
+     * Organization Primary Contact Email
+     */
+    organization_primary_contact_email: string | null;
+};
+
+/**
  * SuperuserWorkflowRunResponse
  */
 export type SuperuserWorkflowRunResponse = {
@@ -5485,6 +5634,20 @@ export type SuperuserWorkflowRunsListResponse = {
      * Total Pages
      */
     total_pages: number;
+};
+
+/**
+ * SuperuserWorkflowsListResponse
+ */
+export type SuperuserWorkflowsListResponse = {
+    /**
+     * Workflows
+     */
+    workflows: Array<SuperuserWorkflowResponse>;
+    /**
+     * Total Count
+     */
+    total_count: number;
 };
 
 /**
@@ -6302,6 +6465,16 @@ export type UpdateFolderRequest = {
      * Name
      */
     name: string;
+};
+
+/**
+ * UpdateOrganizationStatusRequest
+ */
+export type UpdateOrganizationStatusRequest = {
+    /**
+     * Status
+     */
+    status: string;
 };
 
 /**
@@ -8070,6 +8243,167 @@ export type GetWorkflowRunsApiV1SuperuserWorkflowRunsGetResponses = {
 
 export type GetWorkflowRunsApiV1SuperuserWorkflowRunsGetResponse = GetWorkflowRunsApiV1SuperuserWorkflowRunsGetResponses[keyof GetWorkflowRunsApiV1SuperuserWorkflowRunsGetResponses];
 
+export type ListOrganizationsApiV1SuperuserOrganizationsGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/superuser/organizations';
+};
+
+export type ListOrganizationsApiV1SuperuserOrganizationsGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListOrganizationsApiV1SuperuserOrganizationsGetError = ListOrganizationsApiV1SuperuserOrganizationsGetErrors[keyof ListOrganizationsApiV1SuperuserOrganizationsGetErrors];
+
+export type ListOrganizationsApiV1SuperuserOrganizationsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SuperuserOrganizationsListResponse;
+};
+
+export type ListOrganizationsApiV1SuperuserOrganizationsGetResponse = ListOrganizationsApiV1SuperuserOrganizationsGetResponses[keyof ListOrganizationsApiV1SuperuserOrganizationsGetResponses];
+
+export type CreateOrganizationApiV1SuperuserOrganizationsPostData = {
+    body: CreateOrganizationRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/superuser/organizations';
+};
+
+export type CreateOrganizationApiV1SuperuserOrganizationsPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateOrganizationApiV1SuperuserOrganizationsPostError = CreateOrganizationApiV1SuperuserOrganizationsPostErrors[keyof CreateOrganizationApiV1SuperuserOrganizationsPostErrors];
+
+export type CreateOrganizationApiV1SuperuserOrganizationsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: CreateOrganizationResponse;
+};
+
+export type CreateOrganizationApiV1SuperuserOrganizationsPostResponse = CreateOrganizationApiV1SuperuserOrganizationsPostResponses[keyof CreateOrganizationApiV1SuperuserOrganizationsPostResponses];
+
+export type UpdateOrganizationStatusApiV1SuperuserOrganizationsOrganizationIdStatusPatchData = {
+    body: UpdateOrganizationStatusRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Organization Id
+         */
+        organization_id: number;
+    };
+    query?: never;
+    url: '/api/v1/superuser/organizations/{organization_id}/status';
+};
+
+export type UpdateOrganizationStatusApiV1SuperuserOrganizationsOrganizationIdStatusPatchErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateOrganizationStatusApiV1SuperuserOrganizationsOrganizationIdStatusPatchError = UpdateOrganizationStatusApiV1SuperuserOrganizationsOrganizationIdStatusPatchErrors[keyof UpdateOrganizationStatusApiV1SuperuserOrganizationsOrganizationIdStatusPatchErrors];
+
+export type UpdateOrganizationStatusApiV1SuperuserOrganizationsOrganizationIdStatusPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: SuperuserOrganizationResponse;
+};
+
+export type UpdateOrganizationStatusApiV1SuperuserOrganizationsOrganizationIdStatusPatchResponse = UpdateOrganizationStatusApiV1SuperuserOrganizationsOrganizationIdStatusPatchResponses[keyof UpdateOrganizationStatusApiV1SuperuserOrganizationsOrganizationIdStatusPatchResponses];
+
+export type ListWorkflowsApiV1SuperuserWorkflowsGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/superuser/workflows';
+};
+
+export type ListWorkflowsApiV1SuperuserWorkflowsGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListWorkflowsApiV1SuperuserWorkflowsGetError = ListWorkflowsApiV1SuperuserWorkflowsGetErrors[keyof ListWorkflowsApiV1SuperuserWorkflowsGetErrors];
+
+export type ListWorkflowsApiV1SuperuserWorkflowsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SuperuserWorkflowsListResponse;
+};
+
+export type ListWorkflowsApiV1SuperuserWorkflowsGetResponse = ListWorkflowsApiV1SuperuserWorkflowsGetResponses[keyof ListWorkflowsApiV1SuperuserWorkflowsGetResponses];
+
 export type ValidateWorkflowApiV1WorkflowWorkflowIdValidatePostData = {
     body?: never;
     headers?: {
@@ -8709,10 +9043,14 @@ export type GetWorkflowRunsApiV1WorkflowWorkflowIdRunsGetData = {
     query?: {
         /**
          * Page
+         *
+         * Page number (starts from 1)
          */
         page?: number;
         /**
          * Limit
+         *
+         * Number of items per page
          */
         limit?: number;
         /**
@@ -9959,6 +10297,50 @@ export type PauseCampaignApiV1CampaignCampaignIdPausePostResponses = {
 
 export type PauseCampaignApiV1CampaignCampaignIdPausePostResponse = PauseCampaignApiV1CampaignCampaignIdPausePostResponses[keyof PauseCampaignApiV1CampaignCampaignIdPausePostResponses];
 
+export type StopCampaignApiV1CampaignCampaignIdStopPostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Campaign Id
+         */
+        campaign_id: number;
+    };
+    query?: never;
+    url: '/api/v1/campaign/{campaign_id}/stop';
+};
+
+export type StopCampaignApiV1CampaignCampaignIdStopPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type StopCampaignApiV1CampaignCampaignIdStopPostError = StopCampaignApiV1CampaignCampaignIdStopPostErrors[keyof StopCampaignApiV1CampaignCampaignIdStopPostErrors];
+
+export type StopCampaignApiV1CampaignCampaignIdStopPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: CampaignResponse;
+};
+
+export type StopCampaignApiV1CampaignCampaignIdStopPostResponse = StopCampaignApiV1CampaignCampaignIdStopPostResponses[keyof StopCampaignApiV1CampaignCampaignIdStopPostResponses];
+
 export type GetCampaignRunsApiV1CampaignCampaignIdRunsGetData = {
     body?: never;
     headers?: {
@@ -9980,10 +10362,14 @@ export type GetCampaignRunsApiV1CampaignCampaignIdRunsGetData = {
     query?: {
         /**
          * Page
+         *
+         * Page number (starts from 1)
          */
         page?: number;
         /**
          * Limit
+         *
+         * Number of items per page
          */
         limit?: number;
         /**

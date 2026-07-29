@@ -88,9 +88,19 @@ export default function CampaignsPage() {
                 return 'secondary';
             case 'failed':
                 return 'destructive';
+            case 'cancelled':
+                return 'destructive';
             default:
                 return 'secondary';
         }
+    };
+
+    // "cancelled" is the internal state name (matches the DB enum and the
+    // stop_campaign backend action); "Stopped" is what the user actually
+    // clicked, so show that instead of echoing the raw state value.
+    const getStateLabel = (state: string) => {
+        if (state === 'cancelled') return 'stopped';
+        return state;
     };
 
     return (
@@ -146,7 +156,7 @@ export default function CampaignsPage() {
                                                 <TableCell>{campaign.workflow_name}</TableCell>
                                                 <TableCell>
                                                     <Badge variant={getStateBadgeVariant(campaign.state)}>
-                                                        {campaign.state}
+                                                        {getStateLabel(campaign.state)}
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell>

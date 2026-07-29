@@ -1,7 +1,7 @@
 "use client";
 
 import { format } from 'date-fns';
-import { AlertCircle, AlertTriangle, ArrowLeft, CalendarIcon, Check, Clock, Download, Info, Pause, Pencil, Phone, Play, RefreshCw, X } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ArrowLeft, CalendarIcon, Check, Clock, Download, Info, Pause, Pencil, Phone, Play, RefreshCw, Square, X } from 'lucide-react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -14,8 +14,19 @@ import {
     redialCampaignApiV1CampaignCampaignIdRedialPost,
     resumeCampaignApiV1CampaignCampaignIdResumePost,
     startCampaignApiV1CampaignCampaignIdStartPost,
+    stopCampaignApiV1CampaignCampaignIdStopPost,
 } from '@/client/sdk.gen';
 import type { CampaignResponse } from '@/client/types.gen';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -57,6 +68,10 @@ export default function CampaignDetailPage() {
     const [reportEndDate, setReportEndDate] = useState<Date | undefined>(undefined);
     const [reportEndTime, setReportEndTime] = useState('23:59');
     const [isReportPopoverOpen, setIsReportPopoverOpen] = useState(false);
+
+    // Stop confirmation dialog state — stopping is permanent (unlike pause),
+    // so it needs an explicit confirm step.
+    const [isStopDialogOpen, setIsStopDialogOpen] = useState(false);
 
     // Redial dialog state
     const [isRedialDialogOpen, setIsRedialDialogOpen] = useState(false);
@@ -352,6 +367,43 @@ export default function CampaignDetailPage() {
         }
     };
 
+    // Handle stop campaign — permanent, unlike pause. Confirmed via dialog
+    // before this fires.
+    const handleStop = async () => {
+        if (!user) return;
+        setIsExecutingAction(true);
+        try {
+            const accessToken = await getAccessToken();
+            const response = await stopCampaignApiV1CampaignCampaignIdStopPost({
+                path: {
+                    campaign_id: campaignId,
+                },
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                }
+            });
+
+            if (response.data) {
+                setCampaign(response.data);
+                toast.success('Campaign stopped');
+            } else if (response.error) {
+                let errorMsg = 'Failed to stop campaign';
+                if (typeof response.error === 'string') {
+                    errorMsg = response.error;
+                } else if (response.error && typeof response.error === 'object') {
+                    errorMsg = (response.error as unknown as { detail?: string }).detail || JSON.stringify(response.error);
+                }
+                toast.error(errorMsg);
+            }
+        } catch (error) {
+            console.error('Failed to stop campaign:', error);
+            toast.error('Failed to stop campaign');
+        } finally {
+            setIsExecutingAction(false);
+            setIsStopDialogOpen(false);
+        }
+    };
+
     // Format date for display
     const formatDate = (dateString: string) => {
         return new Date(dateString).toLocaleDateString();
@@ -374,9 +426,19 @@ export default function CampaignDetailPage() {
                 return 'secondary';
             case 'failed':
                 return 'destructive';
+            case 'cancelled':
+                return 'destructive';
             default:
                 return 'secondary';
         }
+    };
+
+    // "cancelled" is the internal state name (matches the DB enum and the
+    // stop_campaign backend action); "Stopped" is what the user actually
+    // clicked, so show that instead of echoing the raw state value.
+    const getStateLabel = (state: string) => {
+        if (state === 'cancelled') return 'stopped';
+        return state;
     };
 
     const canEdit = campaign && ['created', 'running', 'paused'].includes(campaign.state);
@@ -424,6 +486,32 @@ export default function CampaignDetailPage() {
             </Button>
         ) : null;
 
+        // Stop is permanent (unlike pause), so it always confirms first.
+        // Reachable from 'running' or 'paused' — abandoning a paused
+        // campaign is the main real use case for this button.
+        const stopButton = (
+            <AlertDialog open={isStopDialogOpen} onOpenChange={setIsStopDialogOpen}>
+                <Button variant="destructive" onClick={() => setIsStopDialogOpen(true)} disabled={isExecutingAction}>
+                    <Square className="h-4 w-4 mr-2" />
+                    Stop Campaign
+                </Button>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Stop this campaign?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This cannot be undone. Any call already in progress will finish, but no further leads will be dialed.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isExecutingAction}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleStop} disabled={isExecutingAction}>
+                            Stop Campaign
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        );
+
         switch (campaign.state) {
             case 'created':
                 return (
@@ -443,6 +531,7 @@ export default function CampaignDetailPage() {
                             <Pause className="h-4 w-4 mr-2" />
                             Pause Campaign
                         </Button>
+                        {stopButton}
                     </div>
                 );
             case 'paused':
@@ -453,6 +542,7 @@ export default function CampaignDetailPage() {
                             <RefreshCw className="h-4 w-4 mr-2" />
                             Resume Campaign
                         </Button>
+                        {stopButton}
                     </div>
                 );
             case 'completed':
@@ -505,7 +595,7 @@ export default function CampaignDetailPage() {
                         <h1 className="text-3xl font-bold mb-2">{campaign.name}</h1>
                             <div className="flex items-center gap-4">
                                 <Badge variant={getStateBadgeVariant(campaign.state)}>
-                                    {campaign.state}
+                                    {getStateLabel(campaign.state)}
                                 </Badge>
                                 <span className="text-muted-foreground">
                                     Created {formatDate(campaign.created_at)}
@@ -663,7 +753,7 @@ export default function CampaignDetailPage() {
                             </div>
                             <div>
                                 <dt className="text-sm font-medium">State</dt>
-                                <dd className="mt-1 capitalize">{campaign.state}</dd>
+                                <dd className="mt-1 capitalize">{getStateLabel(campaign.state)}</dd>
                             </div>
                             <div>
                                 <dt className="text-sm font-medium">Progress</dt>

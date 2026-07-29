@@ -709,7 +709,9 @@ class CampaignModel(Base):
     source_type = Column(String, nullable=False, default="csv")
     source_id = Column(String, nullable=False)  # CSV file key
 
-    # State management
+    # State management. "cancelled" is a deliberate, permanent stop distinct
+    # from "paused" (temporary, resumable) — a paused campaign can still be
+    # resumed, a cancelled one cannot.
     state = Column(
         Enum(
             "created",
@@ -718,6 +720,7 @@ class CampaignModel(Base):
             "paused",
             "completed",
             "failed",
+            "cancelled",
             name="campaign_state",
         ),
         nullable=False,
@@ -767,6 +770,7 @@ class CampaignModel(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
+    cancelled_at = Column(DateTime(timezone=True), nullable=True)
     updated_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),

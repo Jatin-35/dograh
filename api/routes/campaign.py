@@ -200,6 +200,7 @@ class CampaignResponse(BaseModel):
     created_at: datetime
     started_at: Optional[datetime]
     completed_at: Optional[datetime]
+    cancelled_at: Optional[datetime]
     retry_config: RetryConfigResponse
     max_concurrency: Optional[int] = None
     schedule_config: Optional[ScheduleConfigResponse] = None
@@ -246,6 +247,7 @@ class CampaignProgressResponse(BaseModel):
     rate_limit: int
     started_at: Optional[datetime]
     completed_at: Optional[datetime]
+    cancelled_at: Optional[datetime]
 
 
 # Default retry config for campaigns
@@ -303,6 +305,7 @@ def _build_campaign_response(
         created_at=campaign.created_at,
         started_at=campaign.started_at,
         completed_at=campaign.completed_at,
+        cancelled_at=campaign.cancelled_at,
         retry_config=RetryConfigResponse(**retry_config),
         max_concurrency=max_concurrency,
         schedule_config=schedule_config,
@@ -603,6 +606,39 @@ async def pause_campaign(
         raise HTTPException(status_code=400, detail=str(e))
 
     # Get updated campaign
+    campaign = await db_client.get_campaign(campaign_id, user.selected_organization_id)
+    workflow_name = await db_client.get_workflow_name(
+        campaign.workflow_id, organization_id=user.selected_organization_id
+    )
+
+    executed, total = await _get_campaign_stats(campaign.id)
+    cfg_name = await _get_telephony_configuration_name(
+        campaign.telephony_configuration_id, user.selected_organization_id
+    )
+    return _build_campaign_response(
+        campaign,
+        workflow_name or "Unknown",
+        executed,
+        total,
+        telephony_configuration_name=cfg_name,
+    )
+
+
+@router.post("/{campaign_id}/stop")
+async def stop_campaign(
+    campaign_id: int,
+    user: UserModel = Depends(get_user),
+) -> CampaignResponse:
+    """Permanently stop campaign execution. Unlike pause, this cannot be resumed."""
+    campaign = await db_client.get_campaign(campaign_id, user.selected_organization_id)
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    try:
+        await campaign_runner_service.stop_campaign(campaign_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     campaign = await db_client.get_campaign(campaign_id, user.selected_organization_id)
     workflow_name = await db_client.get_workflow_name(
         campaign.workflow_id, organization_id=user.selected_organization_id
