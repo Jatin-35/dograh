@@ -817,6 +817,234 @@ class TestProcessBatchEdgeCases:
                 await session.commit()
 
 
+class TestProcessBatchStopsMidBatch:
+    """A campaign cancelled/paused while a batch is already claimed must stop
+    dispatching the rest of that batch, not just future batches — the
+    top-of-method 'running' check only guards a fresh call to
+    process_batch(), it doesn't protect an already-in-progress loop."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("target_state", ["cancelled", "paused"])
+    async def test_campaign_stopped_mid_batch_halts_remaining_dispatch(
+        self, campaign_test_data, mock_rate_limiter, db_session_factory, target_state
+    ):
+        processed_runs = []
+
+        async def mock_dispatch(queued_run, campaign, slot_id):
+            processed_runs.append(queued_run.id)
+            if len(processed_runs) == 2:
+                # Simulate an admin hitting "Stop" (or "Pause") while this
+                # batch is already claimed and mid-dispatch.
+                async with db_session_factory() as session:
+                    await session.execute(
+                        text(
+                            "UPDATE campaigns SET state = :target_state WHERE id = :campaign_id"
+                        ),
+                        {
+                            "target_state": target_state,
+                            "campaign_id": campaign_test_data.campaign_id,
+                        },
+                    )
+                    await session.commit()
+            mock_run = MagicMock()
+            mock_run.id = len(processed_runs)
+            return mock_run
+
+        with patch(
+            "api.services.campaign.campaign_call_dispatcher.rate_limiter"
+        ) as mock_rl:
+            mock_rl.acquire_token = AsyncMock(
+                side_effect=mock_rate_limiter["acquire_token"]
+            )
+            mock_rl.try_acquire_concurrent_slot = AsyncMock(
+                side_effect=mock_rate_limiter["try_acquire_concurrent_slot"]
+            )
+            mock_rl.release_concurrent_slot = AsyncMock(
+                side_effect=mock_rate_limiter["release_concurrent_slot"]
+            )
+            mock_rl.store_workflow_slot_mapping = AsyncMock(
+                side_effect=mock_rate_limiter["store_workflow_slot_mapping"]
+            )
+            mock_rl.get_workflow_slot_mapping = AsyncMock(
+                side_effect=mock_rate_limiter["get_workflow_slot_mapping"]
+            )
+            mock_rl.delete_workflow_slot_mapping = AsyncMock(
+                side_effect=mock_rate_limiter["delete_workflow_slot_mapping"]
+            )
+            mock_rl.initialize_from_number_pool = AsyncMock(
+                side_effect=mock_rate_limiter["initialize_from_number_pool"]
+            )
+            mock_rl.acquire_from_number = AsyncMock(
+                side_effect=mock_rate_limiter["acquire_from_number"]
+            )
+            mock_rl.release_from_number = AsyncMock(
+                side_effect=mock_rate_limiter["release_from_number"]
+            )
+            mock_rl.store_workflow_from_number_mapping = AsyncMock(
+                side_effect=mock_rate_limiter["store_workflow_from_number_mapping"]
+            )
+            mock_rl.get_workflow_from_number_mapping = AsyncMock(
+                side_effect=mock_rate_limiter["get_workflow_from_number_mapping"]
+            )
+            mock_rl.delete_workflow_from_number_mapping = AsyncMock(
+                side_effect=mock_rate_limiter["delete_workflow_from_number_mapping"]
+            )
+
+            dispatcher = CampaignCallDispatcher()
+            with patch.object(dispatcher, "dispatch_call", side_effect=mock_dispatch):
+                processed_count = await dispatcher.process_batch(
+                    campaign_id=campaign_test_data.campaign_id, batch_size=10
+                )
+
+        # Only the 2 calls dispatched before the state flip should have gone out.
+        assert processed_count == 2
+        assert len(processed_runs) == 2
+
+        # The remaining 8 claimed-but-undispatched runs must be handed back
+        # to 'queued', not left stuck in 'processing' or (worse) dispatched.
+        async with db_session_factory() as session:
+            result = await session.execute(
+                text(
+                    "SELECT state, COUNT(*) as count FROM queued_runs "
+                    "WHERE campaign_id = :campaign_id GROUP BY state"
+                ),
+                {"campaign_id": campaign_test_data.campaign_id},
+            )
+            states = {row[0]: row[1] for row in result.fetchall()}
+
+        assert states.get("processed", 0) == 2
+        assert states.get("queued", 0) == 8
+        assert states.get("processing", 0) == 0
+
+
+class TestResumeAfterMidBatchPauseRedispatchesRemainingWork:
+    """End-to-end proof that a campaign paused mid-batch actually finishes
+    dialing everyone once resumed — not just that process_batch() halts
+    correctly (TestProcessBatchStopsMidBatch already proves that), but that
+    the orchestrator's stale-campaign sweep genuinely notices the resumed
+    campaign's leftover 'queued' rows (via a live DB query, not in-memory
+    bookkeeping) and reschedules a batch that finishes the job.
+
+    Every step uses the real service/orchestrator code — only dispatch_call
+    (network I/O) and enqueue_job (ARQ/Redis job submission) are stubbed.
+    """
+
+    @pytest.mark.asyncio
+    async def test_resume_after_mid_batch_pause_redispatches_remaining_runs(
+        self, campaign_test_data, mock_rate_limiter, db_session_factory
+    ):
+        from api.services.campaign.campaign_orchestrator import CampaignOrchestrator
+        from api.services.campaign.runner import CampaignRunnerService
+
+        processed_runs: list[int] = []
+
+        async def mock_dispatch(queued_run, campaign, slot_id):
+            processed_runs.append(queued_run.id)
+            if len(processed_runs) == 2:
+                # Simulate an admin hitting "Pause" mid-batch.
+                async with db_session_factory() as session:
+                    await session.execute(
+                        text(
+                            "UPDATE campaigns SET state = 'paused' WHERE id = :campaign_id"
+                        ),
+                        {"campaign_id": campaign_test_data.campaign_id},
+                    )
+                    await session.commit()
+            mock_run = MagicMock()
+            mock_run.id = len(processed_runs)
+            return mock_run
+
+        def _patch_rate_limiter():
+            return patch(
+                "api.services.campaign.campaign_call_dispatcher.rate_limiter"
+            )
+
+        dispatcher = CampaignCallDispatcher()
+
+        # --- Step 1: dispatch a batch that gets paused after 2 calls ---
+        with _patch_rate_limiter() as mock_rl:
+            for name, fn in mock_rate_limiter.items():
+                setattr(mock_rl, name, AsyncMock(side_effect=fn))
+
+            with patch.object(dispatcher, "dispatch_call", side_effect=mock_dispatch):
+                first_batch_count = await dispatcher.process_batch(
+                    campaign_id=campaign_test_data.campaign_id, batch_size=10
+                )
+
+        assert first_batch_count == 2
+        assert len(processed_runs) == 2
+
+        async with db_session_factory() as session:
+            result = await session.execute(
+                text(
+                    "SELECT state, COUNT(*) as count FROM queued_runs "
+                    "WHERE campaign_id = :campaign_id GROUP BY state"
+                ),
+                {"campaign_id": campaign_test_data.campaign_id},
+            )
+            states = {row[0]: row[1] for row in result.fetchall()}
+        assert states.get("queued", 0) == 8, "precondition: 8 runs must be back in queued"
+
+        # --- Step 2: resume via the real service call (not a raw UPDATE) ---
+        runner = CampaignRunnerService()
+        await runner.resume_campaign(campaign_test_data.campaign_id)
+
+        async with db_session_factory() as session:
+            result = await session.execute(
+                text("SELECT state FROM campaigns WHERE id = :campaign_id"),
+                {"campaign_id": campaign_test_data.campaign_id},
+            )
+            assert result.scalar_one() == "running"
+
+        # --- Step 3: drive the orchestrator's stale-campaign sweep directly
+        # (bypassing its 60s sleep loop) and prove it decides to reschedule
+        # this exact campaign, purely from live DB state. ---
+        orchestrator = CampaignOrchestrator(redis_client=MagicMock())
+        scheduled_campaign_ids: list[int] = []
+
+        async def fake_enqueue_job(function_name, campaign_id, batch_size):
+            scheduled_campaign_ids.append(campaign_id)
+
+        with patch(
+            "api.services.campaign.campaign_orchestrator.enqueue_job",
+            AsyncMock(side_effect=fake_enqueue_job),
+        ):
+            await orchestrator._check_stale_campaigns()
+
+        assert campaign_test_data.campaign_id in scheduled_campaign_ids, (
+            "orchestrator did not reschedule the resumed campaign despite "
+            "having 8 queued runs waiting"
+        )
+
+        # --- Step 4: simulate what the ARQ worker does when it picks up
+        # that enqueued job — call process_batch again — and prove the
+        # remaining 8 runs actually get dispatched to completion this time. ---
+        with _patch_rate_limiter() as mock_rl:
+            for name, fn in mock_rate_limiter.items():
+                setattr(mock_rl, name, AsyncMock(side_effect=fn))
+
+            with patch.object(dispatcher, "dispatch_call", side_effect=mock_dispatch):
+                second_batch_count = await dispatcher.process_batch(
+                    campaign_id=campaign_test_data.campaign_id, batch_size=10
+                )
+
+        assert second_batch_count == 8
+        assert len(processed_runs) == 10
+        assert len(set(processed_runs)) == 10, "no run was double-dispatched"
+
+        async with db_session_factory() as session:
+            result = await session.execute(
+                text(
+                    "SELECT state, COUNT(*) as count FROM queued_runs "
+                    "WHERE campaign_id = :campaign_id GROUP BY state"
+                ),
+                {"campaign_id": campaign_test_data.campaign_id},
+            )
+            states = {row[0]: row[1] for row in result.fetchall()}
+        assert states.get("processed", 0) == 10
+        assert states.get("queued", 0) == 0
+
+
 class TestAcquireConcurrentSlotScoping:
     """Campaign max_concurrency must scope to the campaign, not the org counter."""
 

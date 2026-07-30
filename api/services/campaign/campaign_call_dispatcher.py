@@ -101,6 +101,23 @@ class CampaignCallDispatcher:
         processed_count = 0
         processed_run_ids: set[int] = set()
         for i, queued_run in enumerate(queued_runs):
+            # The "running" check above only guards a *fresh* call to
+            # process_batch() — it does not protect the rest of an
+            # already-claimed batch. Re-check per call so a pause/stop that
+            # lands mid-batch stops dialing the remaining claimed runs
+            # instead of dispatching all of them regardless.
+            current_campaign = await db_client.get_campaign_by_id(campaign_id)
+            if current_campaign is None or current_campaign.state != "running":
+                logger.info(
+                    f"Campaign {campaign_id} no longer running "
+                    f"(state={current_campaign.state if current_campaign else 'deleted'}); "
+                    "stopping mid-batch dispatch"
+                )
+                await self._return_unprocessed_claims(
+                    queued_runs, processed_run_ids, reason="campaign_not_running_mid_batch"
+                )
+                break
+
             try:
                 # Apply rate limiting, i.e lets not initiate more than rate_limit_per_second
                 # calls per second. It is different than concurrency limit.
