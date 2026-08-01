@@ -22,6 +22,7 @@ from api.services.campaign.errors import (
 from api.services.campaign.rate_limiter import rate_limiter
 from api.services.quota_service import authorize_workflow_run_start
 from api.services.webhook_sync import calling as webhook_sync_calling
+from api.services.workflow.initial_context import merge_external_initial_context
 from api.utils.common import get_backend_endpoints
 
 if TYPE_CHECKING:
@@ -335,7 +336,7 @@ class CampaignCallDispatcher:
 
             # Merge context variables (queued_run context already includes retry info if applicable)
             initial_context = {
-                **queued_run.context_variables,
+                **merge_external_initial_context({}, queued_run.context_variables),
                 "campaign_id": campaign.id,
                 "provider": provider.PROVIDER_NAME,
                 "source_uuid": queued_run.source_uuid,

@@ -11,6 +11,7 @@ from api.db.models import UserModel, WorkflowRunTextSessionModel
 from api.enums import WorkflowRunMode
 from api.services.auth.depends import get_user_with_selected_organization
 from api.services.quota_service import authorize_workflow_run_start
+from api.services.workflow.initial_context import merge_external_initial_context
 from api.services.workflow.text_chat_session_service import (
     TextChatPendingTurnLostError,
     TextChatSessionExecutionError,
@@ -169,7 +170,7 @@ async def create_text_chat_session(
             workflow_id=workflow_id,
             mode=WorkflowRunMode.TEXTCHAT.value,
             user_id=user.id,
-            initial_context=request.initial_context,
+            initial_context=merge_external_initial_context({}, request.initial_context),
             use_draft=True,
             organization_id=user.selected_organization_id,
         )

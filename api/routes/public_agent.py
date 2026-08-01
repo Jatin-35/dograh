@@ -23,6 +23,7 @@ from api.services.telephony.factory import (
     get_default_telephony_provider,
     get_telephony_provider_by_id,
 )
+from api.services.workflow.initial_context import merge_external_initial_context
 from api.utils.common import get_backend_endpoints
 
 router = APIRouter(prefix="/public/agent")
@@ -245,7 +246,9 @@ async def _execute_resolved_target(
         initial_context["api_key_id"] = api_key_id
     if api_key_created_by is not None:
         initial_context["api_key_created_by"] = api_key_created_by
-    initial_context.update(request.initial_context or {})
+    initial_context = merge_external_initial_context(
+        initial_context, request.initial_context
+    )
 
     try:
         concurrency_slot = await call_concurrency.acquire_org_slot(
