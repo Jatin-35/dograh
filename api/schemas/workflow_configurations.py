@@ -2,6 +2,12 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from api.constants import (
+    MAX_TEXT_CHAT_INACTIVITY_TIMEOUT_SECONDS,
+    MIN_TEXT_CHAT_INACTIVITY_TIMEOUT_SECONDS,
+    TEXT_CHAT_INACTIVITY_TIMEOUT_SECONDS,
+)
+
 DEFAULT_MAX_CALL_DURATION_SECONDS = 300
 # Hard ceiling on configurable call duration. Must stay <= the concurrency
 # rate limiter's stale_call_timeout (20 min): a call running past that has
@@ -77,6 +83,12 @@ class WorkflowConfigurationDefaults(BaseModel):
     # STT / the realtime model hears the audio.
     noise_reduction: Literal["off", "rnnoise"] = DEFAULT_NOISE_REDUCTION
 
+    text_chat_inactivity_timeout_seconds: int = Field(
+        default=TEXT_CHAT_INACTIVITY_TIMEOUT_SECONDS,
+        ge=MIN_TEXT_CHAT_INACTIVITY_TIMEOUT_SECONDS,
+        le=MAX_TEXT_CHAT_INACTIVITY_TIMEOUT_SECONDS,
+    )
+
     @field_validator("turn_start_strategy", mode="before")
     @classmethod
     def _retire_provisional_vad(cls, value: object) -> object:
@@ -84,6 +96,14 @@ class WorkflowConfigurationDefaults(BaseModel):
         # STTs it could leave a turn open and the bot silent. Saved agents that
         # still carry it get the two-word default instead of failing to load.
         return DEFAULT_TURN_START_STRATEGY if value == "provisional_vad" else value
+
+
+class TextChatInactivityTimeoutConstraints(BaseModel):
+    """Backend-owned timeout metadata consumed by generated API clients."""
+
+    default_seconds: int = TEXT_CHAT_INACTIVITY_TIMEOUT_SECONDS
+    minimum_seconds: int = MIN_TEXT_CHAT_INACTIVITY_TIMEOUT_SECONDS
+    maximum_seconds: int = MAX_TEXT_CHAT_INACTIVITY_TIMEOUT_SECONDS
 
 
 def get_default_workflow_configurations() -> WorkflowConfigurationDefaults:

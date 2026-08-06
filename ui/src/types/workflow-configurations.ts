@@ -173,6 +173,7 @@ type WorkflowConfigurationBase = Omit<
     | "dictionary"
     | "context_compaction_enabled"
     | "noise_reduction"
+    | "text_chat_inactivity_timeout_seconds"
 >;
 
 export type WorkflowConfigurations = WorkflowConfigurationBase & {
@@ -188,6 +189,7 @@ export type WorkflowConfigurations = WorkflowConfigurationBase & {
     transcript_configuration: TranscriptConfiguration;
     context_compaction_enabled: boolean;  // Summarize context on node transitions to remove stale tool calls
     noise_reduction: NoiseReduction;  // Caller-side noise suppression before STT / the realtime model
+    text_chat_inactivity_timeout_seconds?: number;  // End inactive text chats after this many seconds
     model_overrides?: ModelOverrides;  // Per-workflow model configuration overrides
     model_configuration_v2_override?: OrganizationAiModelConfigurationV2;  // Full v2 model configuration override
     [key: string]: unknown;  // Allow additional properties for future configurations
@@ -262,6 +264,9 @@ export function resolveWorkflowConfigurations(
             configurations?.noise_reduction
             ?? defaults?.noise_reduction
             ?? FALLBACK_WORKFLOW_CONFIGURATIONS.noise_reduction,
+        text_chat_inactivity_timeout_seconds:
+            configurations?.text_chat_inactivity_timeout_seconds
+            ?? defaults?.text_chat_inactivity_timeout_seconds,
         transcript_configuration: {
             ...DEFAULT_TRANSCRIPT_CONFIGURATION,
             ...(defaults?.transcript_configuration as Partial<TranscriptConfiguration> | undefined),
