@@ -42,6 +42,17 @@ RUN --mount=type=bind,source=pipecat,target=/tmp/pipecat,rw \
  && uv pip install opencv-python-headless \
  && python -c "import nltk; nltk.download('punkt_tab', download_dir='/opt/venv/nltk_data', quiet=True)"
 
+# Layer 3: Rumik TTS plugin, installed AFTER pipecat and with --no-deps.
+# The vendored pipecat submodule can't have its git tags read by
+# setuptools_scm inside this build context, so it may self-report as a dev
+# version. pipecat-rumik declares pipecat-ai>=1.0.0,<2 — a normal
+# (dependency-resolved) install risks pip "satisfying" that by pulling
+# vanilla upstream pipecat from PyPI straight over our patched fork.
+# --no-deps avoids that entirely; its other three deps (aiohttp, certifi,
+# websockets) are already satisfied by pipecat's own requirements.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --no-deps pipecat-rumik==0.1.4
+
 # Strip cache files, test/example dirs, and type stubs from the venv
 RUN find /opt/venv -type f -name '*.pyc' -delete && \
     find /opt/venv -type d -name '__pycache__' -prune -exec rm -rf {} + && \

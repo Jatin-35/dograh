@@ -85,6 +85,7 @@ class ServiceProviders(str, Enum):
     ASSEMBLYAI = "assemblyai"
     GLADIA = "gladia"
     RIME = "rime"
+    RUMIK = "rumik"
     MINIMAX = "minimax"
     GOOGLE_VERTEX = "google_vertex"
     OPENAI_REALTIME = "openai_realtime"
@@ -115,6 +116,7 @@ class BaseServiceConfiguration(BaseModel):
         ServiceProviders.ASSEMBLYAI,
         ServiceProviders.GLADIA,
         ServiceProviders.RIME,
+        ServiceProviders.RUMIK,
         ServiceProviders.MINIMAX,
         ServiceProviders.GOOGLE_VERTEX,
         ServiceProviders.OPENAI_REALTIME,
@@ -272,6 +274,11 @@ INWORLD_PROVIDER_MODEL_CONFIG = provider_model_config(
 SARVAM_PROVIDER_MODEL_CONFIG = provider_model_config("Sarvam")
 CAMB_PROVIDER_MODEL_CONFIG = provider_model_config("Camb.ai")
 RIME_PROVIDER_MODEL_CONFIG = provider_model_config("Rime")
+RUMIK_PROVIDER_MODEL_CONFIG = provider_model_config(
+    "Rumik",
+    description="Rumik AI's Silk text-to-speech models (mulberry, muga).",
+    provider_docs_url="https://docs.rumik.ai/",
+)
 GOOGLE_CLOUD_PROVIDER_MODEL_CONFIG = provider_model_config("Google Cloud")
 SPEECHMATICS_PROVIDER_MODEL_CONFIG = provider_model_config("Speechmatics")
 ASSEMBLYAI_PROVIDER_MODEL_CONFIG = provider_model_config("AssemblyAI")
@@ -1157,6 +1164,76 @@ class RimeTTSConfiguration(BaseTTSConfiguration):
     )
 
 
+RUMIK_TTS_MODELS = ["mulberry", "muga"]
+# Preset speakers, mulberry model only — muga has no presets, it's steered by
+# inline tone tags like [happy] in the text instead.
+RUMIK_MULBERRY_VOICES = [
+    "emma", "mia", "sophia", "ava", "ira", "siya", "aisha", "zoya",
+    "lucas", "noah", "theo", "adam",
+]
+
+
+@register_tts
+class RumikTTSConfiguration(BaseTTSConfiguration):
+    model_config = RUMIK_PROVIDER_MODEL_CONFIG
+    provider: Literal[ServiceProviders.RUMIK] = ServiceProviders.RUMIK
+    model: str = Field(
+        default="mulberry",
+        description=(
+            "Rumik Silk model. 'mulberry' is fast and the right default for "
+            "phone calls; 'muga' is more expressive, roughly 2x the cost."
+        ),
+        json_schema_extra={"examples": RUMIK_TTS_MODELS, "allow_custom_input": True},
+    )
+    gateway_url: str = Field(
+        default="https://silk-api.rumik.ai",
+        description="Rumik AI gateway base URL. Override only for a dedicated deployment.",
+    )
+    voice: str | None = Field(
+        default="ira",
+        description="Preset speaker voice. Only used by the 'mulberry' model.",
+        json_schema_extra={
+            "examples": RUMIK_MULBERRY_VOICES,
+            "allow_custom_input": True,
+        },
+    )
+    description: str | None = Field(
+        default=(
+            "a warm, natural conversational voice with clear diction and "
+            "friendly, professional pacing"
+        ),
+        description=(
+            "Natural-language voice/style description. Required by Rumik for "
+            "the 'mulberry' model — customize this to match your agent's "
+            "persona. Not used by 'muga'."
+        ),
+    )
+    f0_up_key: int | None = Field(
+        default=0,
+        description="Pitch shift in semitones for preset speaker voices.",
+        json_schema_extra={"examples": [-6, -3, 0, 3, 6], "allow_custom_input": True},
+    )
+    temperature: float | None = Field(
+        default=0.6,
+        description="Sampling temperature. This is Rumik's own API default.",
+    )
+    top_p: float | None = Field(
+        default=0.95,
+        ge=0.0,
+        le=1.0,
+        description="Nucleus sampling value. This is Rumik's own API default.",
+    )
+    top_k: int | None = Field(
+        default=50,
+        ge=1,
+        description="Top-k sampling value. This is Rumik's own API default.",
+    )
+    full_response_aggregation: bool = Field(
+        default=True,
+        description="Buffer the complete LLM response before sending it to Rumik.",
+    )
+
+
 SPEACHES_TTS_MODELS = ["hexgrad/Kokoro-82M"]
 
 
@@ -1353,6 +1430,7 @@ TTSConfig = Annotated[
         SarvamTTSConfiguration,
         CambTTSConfiguration,
         RimeTTSConfiguration,
+        RumikTTSConfiguration,
         SpeachesTTSConfiguration,
         MiniMaxTTSConfiguration,
         AzureSpeechTTSConfiguration,

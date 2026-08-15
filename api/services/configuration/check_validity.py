@@ -62,6 +62,7 @@ class UserConfigurationValidator:
             ServiceProviders.ASSEMBLYAI.value: self._check_assemblyai_api_key,
             ServiceProviders.GLADIA.value: self._check_gladia_api_key,
             ServiceProviders.RIME.value: self._check_rime_api_key,
+            ServiceProviders.RUMIK.value: self._check_rumik_api_key,
             ServiceProviders.MINIMAX.value: self._check_minimax_api_key,
             ServiceProviders.SMALLEST.value: self._check_smallest_api_key,
             ServiceProviders.XAI.value: self._check_xai_api_key,
@@ -115,7 +116,7 @@ class UserConfigurationValidator:
 
         provider = service_config.provider
 
-        for url_field in ("base_url", "endpoint"):
+        for url_field in ("base_url", "endpoint", "gateway_url"):
             url = getattr(service_config, url_field, None)
             if url:
                 try:
@@ -451,6 +452,9 @@ class UserConfigurationValidator:
         return True
 
     def _check_rime_api_key(self, model: str, api_key: str) -> bool:
+        return True
+
+    def _check_rumik_api_key(self, model: str, api_key: str) -> bool:
         return True
 
     def _check_minimax_api_key(self, model: str, api_key: str) -> bool:

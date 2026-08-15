@@ -89,6 +89,7 @@ from pipecat.services.speechmatics.stt import (
 from pipecat.services.xai.tts import XAIHttpTTSService, XAITTSSettings
 from pipecat.transcriptions.language import Language
 from pipecat.utils.text.xml_function_tag_filter import XMLFunctionTagFilter
+from pipecat_rumik import RumikTTSService, RumikTTSSettings
 
 if TYPE_CHECKING:
     from api.services.pipecat.audio_config import AudioConfig
@@ -689,6 +690,27 @@ def create_tts_service(
         return RimeTTSService(
             api_key=user_config.tts.api_key,
             settings=RimeTTSSettings(**settings_kwargs),
+            text_filters=[xml_function_tag_filter],
+            skip_aggregator_types=["recording_router", "recording"],
+            silence_time_s=1.0,
+        )
+    elif user_config.tts.provider == ServiceProviders.RUMIK.value:
+        gateway_url = user_config.tts.gateway_url
+        _validate_runtime_service_url(gateway_url, "gateway_url")
+
+        settings_kwargs = {"model": user_config.tts.model}
+        for field in ("voice", "description", "f0_up_key", "temperature", "top_p", "top_k"):
+            value = getattr(user_config.tts, field, None)
+            if value is not None:
+                settings_kwargs[field] = value
+
+        return RumikTTSService(
+            api_key=user_config.tts.api_key,
+            gateway_url=gateway_url,
+            full_response_aggregation=getattr(
+                user_config.tts, "full_response_aggregation", True
+            ),
+            settings=RumikTTSSettings(**settings_kwargs),
             text_filters=[xml_function_tag_filter],
             skip_aggregator_types=["recording_router", "recording"],
             silence_time_s=1.0,

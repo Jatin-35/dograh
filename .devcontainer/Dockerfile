@@ -55,6 +55,12 @@ RUN --mount=type=bind,source=pipecat,target=/tmp/pipecat,rw \
  && uv pip install opencv-python-headless \
  && python -c "import nltk; nltk.download('punkt_tab', download_dir='/workspaces/dograh/venv/nltk_data', quiet=True)"
 
+# Layer 3: Rumik TTS plugin, installed AFTER pipecat and with --no-deps
+# (mirrored from api/Dockerfile — see its comment for why --no-deps matters:
+# a normal install risks pulling vanilla upstream pipecat over our fork).
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --no-deps pipecat-rumik==0.1.4
+
 
 # =============================================================================
 # Stage 2: runtime devcontainer image
