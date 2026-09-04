@@ -49,6 +49,7 @@ class WorkflowRunMode(Enum):
     TWILIO = "twilio"
     VONAGE = "vonage"
     VOBIZ = "vobiz"
+    VOICELINK = "voicelink"
     CLOUDONIX = "cloudonix"
     TELNYX = "telnyx"
     WEBRTC = "webrtc"
