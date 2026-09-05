@@ -63,6 +63,7 @@ class UserConfigurationValidator:
             ServiceProviders.GLADIA.value: self._check_gladia_api_key,
             ServiceProviders.RIME.value: self._check_rime_api_key,
             ServiceProviders.RUMIK.value: self._check_rumik_api_key,
+            ServiceProviders.VAKYAM.value: self._check_vakyam_api_key,
             ServiceProviders.MINIMAX.value: self._check_minimax_api_key,
             ServiceProviders.SMALLEST.value: self._check_smallest_api_key,
             ServiceProviders.XAI.value: self._check_xai_api_key,
@@ -455,6 +456,9 @@ class UserConfigurationValidator:
         return True
 
     def _check_rumik_api_key(self, model: str, api_key: str) -> bool:
+        return True
+
+    def _check_vakyam_api_key(self, model: str, api_key: str) -> bool:
         return True
 
     def _check_minimax_api_key(self, model: str, api_key: str) -> bool:

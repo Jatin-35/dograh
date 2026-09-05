@@ -61,6 +61,12 @@ RUN --mount=type=bind,source=pipecat,target=/tmp/pipecat,rw \
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --no-deps pipecat-rumik==0.1.4
 
+# Layer 4: Vakyam TTS plugin, installed AFTER pipecat and with --no-deps
+# (mirrored from api/Dockerfile — see its comment for why --no-deps matters,
+# and for why vakyamai itself is a normal requirements.txt dependency).
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --no-deps pipecat-vakyam==0.1.0
+
 
 # =============================================================================
 # Stage 2: runtime devcontainer image

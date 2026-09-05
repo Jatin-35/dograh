@@ -10,7 +10,10 @@ from api.services.configuration.options import (
     DEEPGRAM_FLUX_MODELS,
     DEEPGRAM_FLUX_MULTILINGUAL_LANGUAGE_OPTIONS,
 )
-from api.services.configuration.registry import ServiceProviders
+from api.services.configuration.registry import (
+    ServiceProviders,
+    strip_vakyam_voice_gender_suffix,
+)
 from api.services.pipecat.gemini_json_schema_adapter import (
     DograhGeminiJSONSchemaAdapter,
 )
@@ -90,6 +93,7 @@ from pipecat.services.xai.tts import XAIHttpTTSService, XAITTSSettings
 from pipecat.transcriptions.language import Language
 from pipecat.utils.text.xml_function_tag_filter import XMLFunctionTagFilter
 from pipecat_rumik import RumikTTSService, RumikTTSSettings
+from pipecat_vakyam import VakyamTTSService, VakyamTTSSettings
 
 if TYPE_CHECKING:
     from api.services.pipecat.audio_config import AudioConfig
@@ -711,6 +715,23 @@ def create_tts_service(
                 user_config.tts, "full_response_aggregation", True
             ),
             settings=RumikTTSSettings(**settings_kwargs),
+            text_filters=[xml_function_tag_filter],
+            skip_aggregator_types=["recording_router", "recording"],
+            silence_time_s=1.0,
+        )
+    elif user_config.tts.provider == ServiceProviders.VAKYAM.value:
+        base_url = user_config.tts.base_url
+        _validate_runtime_service_url(base_url, "base_url")
+
+        return VakyamTTSService(
+            api_key=user_config.tts.api_key,
+            base_url=base_url,
+            settings=VakyamTTSSettings(
+                model=user_config.tts.model,
+                voice=strip_vakyam_voice_gender_suffix(user_config.tts.voice),
+                language=user_config.tts.language,
+                speed=user_config.tts.speed,
+            ),
             text_filters=[xml_function_tag_filter],
             skip_aggregator_types=["recording_router", "recording"],
             silence_time_s=1.0,

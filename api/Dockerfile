@@ -53,6 +53,15 @@ RUN --mount=type=bind,source=pipecat,target=/tmp/pipecat,rw \
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --no-deps pipecat-rumik==0.1.4
 
+# Layer 4: Vakyam TTS plugin, installed AFTER pipecat and with --no-deps, for
+# the same reason as pipecat-rumik above. pipecat-vakyam declares
+# pipecat-ai>=1.5,<2 and vakyamai>=0.1.7 — vakyamai has no pipecat dependency
+# of its own, so it's a normal resolved install in Layer 1 (requirements.txt);
+# its other two deps (loguru, websockets) are already satisfied by pipecat's
+# own requirements.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --no-deps pipecat-vakyam==0.1.0
+
 # Strip cache files, test/example dirs, and type stubs from the venv
 RUN find /opt/venv -type f -name '*.pyc' -delete && \
     find /opt/venv -type d -name '__pycache__' -prune -exec rm -rf {} + && \

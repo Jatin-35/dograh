@@ -86,6 +86,7 @@ class ServiceProviders(str, Enum):
     GLADIA = "gladia"
     RIME = "rime"
     RUMIK = "rumik"
+    VAKYAM = "vakyam"
     MINIMAX = "minimax"
     GOOGLE_VERTEX = "google_vertex"
     OPENAI_REALTIME = "openai_realtime"
@@ -117,6 +118,7 @@ class BaseServiceConfiguration(BaseModel):
         ServiceProviders.GLADIA,
         ServiceProviders.RIME,
         ServiceProviders.RUMIK,
+        ServiceProviders.VAKYAM,
         ServiceProviders.MINIMAX,
         ServiceProviders.GOOGLE_VERTEX,
         ServiceProviders.OPENAI_REALTIME,
@@ -278,6 +280,11 @@ RUMIK_PROVIDER_MODEL_CONFIG = provider_model_config(
     "Rumik",
     description="Rumik AI's Silk text-to-speech models (mulberry, muga).",
     provider_docs_url="https://docs.rumik.ai/",
+)
+VAKYAM_PROVIDER_MODEL_CONFIG = provider_model_config(
+    "Vakyam",
+    description="Vakyam AI's Raaga text-to-speech models, native to Indian languages.",
+    provider_docs_url="https://docs.pipecat.ai/api-reference/server/services/tts/vakyam",
 )
 GOOGLE_CLOUD_PROVIDER_MODEL_CONFIG = provider_model_config("Google Cloud")
 SPEECHMATICS_PROVIDER_MODEL_CONFIG = provider_model_config("Speechmatics")
@@ -1234,6 +1241,71 @@ class RumikTTSConfiguration(BaseTTSConfiguration):
     )
 
 
+VAKYAM_TTS_MODELS = ["raaga-v1"]
+# All eight languages Vakyam supports; every voice below speaks all of them.
+VAKYAM_TTS_LANGUAGES = [
+    "en-IN", "hi-IN", "ta-IN", "te-IN", "kn-IN", "mr-IN", "gu-IN", "bn-IN",
+]
+VAKYAM_MALE_VOICES = [
+    "Aakash", "Amit", "Anand", "Jay", "Kiran", "Mohan", "Vikram", "Yash",
+]
+VAKYAM_FEMALE_VOICES = [
+    "Archana", "Bhamini", "Kavya", "Meena", "Neha", "Nisha", "Priya", "Vidya",
+]
+# Dropdown shows "Name (Gender)"; the "(Gender)" suffix is display-only and is
+# stripped back off in service_factory.py before it's sent to Vakyam's API,
+# which only knows the bare name.
+VAKYAM_TTS_VOICES = [f"{name} (Male)" for name in VAKYAM_MALE_VOICES] + [
+    f"{name} (Female)" for name in VAKYAM_FEMALE_VOICES
+]
+
+
+def strip_vakyam_voice_gender_suffix(voice: str) -> str:
+    """Strip the display-only " (Male)"/" (Female)" suffix from a Vakyam voice.
+
+    The config stores "Archana (Female)" so the dropdown can show gender; the
+    Vakyam API only knows the bare name "Archana". Custom vc_ voice ids never
+    carry the suffix, so they pass through unchanged.
+    """
+    for suffix in (" (Male)", " (Female)"):
+        if voice.endswith(suffix):
+            return voice[: -len(suffix)]
+    return voice
+
+
+@register_tts
+class VakyamTTSConfiguration(BaseTTSConfiguration):
+    model_config = VAKYAM_PROVIDER_MODEL_CONFIG
+    provider: Literal[ServiceProviders.VAKYAM] = ServiceProviders.VAKYAM
+    model: str = Field(
+        default="raaga-v1",
+        description="Vakyam TTS model identifier.",
+        json_schema_extra={"examples": VAKYAM_TTS_MODELS, "allow_custom_input": True},
+    )
+    voice: str = Field(
+        default="Archana (Female)",
+        description=(
+            "Preset speaker voice - every voice speaks all eight supported "
+            "languages, so any voice can be paired with any language below. "
+            "Also accepts a custom cloned voice id beginning with 'vc_' "
+            "(voice cloning is a Growth-plan feature)."
+        ),
+        json_schema_extra={"examples": VAKYAM_TTS_VOICES, "allow_custom_input": True},
+    )
+    language: str = Field(
+        default="ta-IN",
+        description="BCP 47 language code understood by Vakyam.",
+        json_schema_extra={"examples": VAKYAM_TTS_LANGUAGES, "allow_custom_input": True},
+    )
+    speed: float = Field(
+        default=1.0, ge=0.5, le=2.0, description="Speech rate multiplier."
+    )
+    base_url: str = Field(
+        default="https://api.vakyam.ai",
+        description="Vakyam API base URL. Override only for a dedicated deployment.",
+    )
+
+
 SPEACHES_TTS_MODELS = ["hexgrad/Kokoro-82M"]
 
 
@@ -1431,6 +1503,7 @@ TTSConfig = Annotated[
         CambTTSConfiguration,
         RimeTTSConfiguration,
         RumikTTSConfiguration,
+        VakyamTTSConfiguration,
         SpeachesTTSConfiguration,
         MiniMaxTTSConfiguration,
         AzureSpeechTTSConfiguration,

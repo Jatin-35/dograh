@@ -21,3 +21,4 @@ fastmcp==3.2.4
 tuner-pipecat-sdk==0.2.4
 PyNaCl==1.6.2
 tzdata==2026.3
+vakyamai==0.1.8
