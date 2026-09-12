@@ -250,6 +250,17 @@ services:
 
       OSS_JWT_SECRET: "${OSS_JWT_SECRET:?OSS_JWT_SECRET must be set to a strong secret}"
 
+      # In-product AI assistant (the chat panel in the workflow editor).
+      # Deployment-wide, bring-your-own credentials — separate from the
+      # per-organization LLM settings used for calls. The feature reports
+      # itself unconfigured, and its button stays hidden, unless all five are
+      # set; leaving them empty is a safe way to deploy with it switched off.
+      WF_GEN_LLM_PROVIDER: "${WF_GEN_LLM_PROVIDER:-}"
+      WF_GEN_AZURE_OPENAI_API_KEY: "${WF_GEN_AZURE_OPENAI_API_KEY:-}"
+      WF_GEN_AZURE_OPENAI_ENDPOINT: "${WF_GEN_AZURE_OPENAI_ENDPOINT:-}"
+      WF_GEN_AZURE_OPENAI_DEPLOYMENT: "${WF_GEN_AZURE_OPENAI_DEPLOYMENT:-}"
+      WF_GEN_AZURE_OPENAI_API_VERSION: "${WF_GEN_AZURE_OPENAI_API_VERSION:-}"
+
       # Telemetry
       ENABLE_TELEMETRY: "${ENABLE_TELEMETRY:-true}"
       POSTHOG_API_KEY: "phc_ItizB1dP6yv7ZYobbcqrpxTdbomDA8hJFSEmAMdYvIr"
