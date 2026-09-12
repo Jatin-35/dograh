@@ -258,6 +258,20 @@ export type AppendTextChatMessageRequest = {
 };
 
 /**
+ * AppendWorkflowGenMessageRequest
+ */
+export type AppendWorkflowGenMessageRequest = {
+    /**
+     * Text
+     */
+    text: string;
+    /**
+     * Expected Revision
+     */
+    expected_revision?: number | null;
+};
+
+/**
  * AssemblyAI
  */
 export type AssemblyAisttConfiguration = {
@@ -554,6 +568,10 @@ export type ByokPipelineAiModelConfiguration = {
     } & CambTtsConfiguration) | ({
         provider: 'rime';
     } & RimeTtsConfiguration) | ({
+        provider: 'rumik';
+    } & RumikTtsConfiguration) | ({
+        provider: 'vakyam';
+    } & VakyamTtsConfiguration) | ({
         provider: 'speaches';
     } & SpeachesTtsConfiguration) | ({
         provider: 'minimax';
@@ -1335,6 +1353,20 @@ export type CloudonixConfigurationResponse = {
      * From Numbers
      */
     from_numbers: Array<string>;
+};
+
+/**
+ * ConfirmWorkflowGenActionRequest
+ */
+export type ConfirmWorkflowGenActionRequest = {
+    /**
+     * Action Id
+     */
+    action_id: string;
+    /**
+     * Approve
+     */
+    approve: boolean;
 };
 
 /**
@@ -2963,6 +2995,10 @@ export type HealthResponse = {
      * Stack Publishable Client Key
      */
     stack_publishable_client_key?: string | null;
+    /**
+     * Workflow Gen Enabled
+     */
+    workflow_gen_enabled: boolean;
 };
 
 /**
@@ -5033,6 +5069,76 @@ export type RimeTtsConfiguration = {
 };
 
 /**
+ * Rumik
+ *
+ * Rumik AI's Silk text-to-speech models (mulberry, muga).
+ */
+export type RumikTtsConfiguration = {
+    /**
+     * Provider
+     */
+    provider?: 'rumik';
+    /**
+     * Api Key
+     */
+    api_key: string | Array<string>;
+    /**
+     * Model
+     *
+     * Rumik Silk model. 'mulberry' is fast and the right default for phone calls; 'muga' is more expressive, roughly 2x the cost.
+     */
+    model?: string;
+    /**
+     * Gateway Url
+     *
+     * Rumik AI gateway base URL. Override only for a dedicated deployment.
+     */
+    gateway_url?: string;
+    /**
+     * Voice
+     *
+     * Preset speaker voice. Only used by the 'mulberry' model.
+     */
+    voice?: string | null;
+    /**
+     * Description
+     *
+     * Natural-language voice/style description. Required by Rumik for the 'mulberry' model — customize this to match your agent's persona. Not used by 'muga'.
+     */
+    description?: string | null;
+    /**
+     * F0 Up Key
+     *
+     * Pitch shift in semitones for preset speaker voices.
+     */
+    f0_up_key?: number | null;
+    /**
+     * Temperature
+     *
+     * Sampling temperature. This is Rumik's own API default.
+     */
+    temperature?: number | null;
+    /**
+     * Top P
+     *
+     * Nucleus sampling value. This is Rumik's own API default.
+     */
+    top_p?: number | null;
+    /**
+     * Top K
+     *
+     * Top-k sampling value. This is Rumik's own API default.
+     */
+    top_k?: number | null;
+    /**
+     * Full Response Aggregation
+     *
+     * Buffer the complete LLM response before sending it to Rumik.
+     */
+    full_response_aggregation?: boolean;
+};
+
+/**
  * S3SignedUrlResponse
  */
 export type S3SignedUrlResponse = {
@@ -5705,6 +5811,8 @@ export type TelephonyConfigurationCreateRequest = {
     } & TwilioConfigurationRequest) | ({
         provider: 'vobiz';
     } & VobizConfigurationRequest) | ({
+        provider: 'voicelink';
+    } & VoiceLinkConfigurationRequest) | ({
         provider: 'vonage';
     } & VonageConfigurationRequest);
 };
@@ -5807,6 +5915,7 @@ export type TelephonyConfigurationResponse = {
     plivo?: PlivoConfigurationResponse | null;
     vonage?: VonageConfigurationResponse | null;
     vobiz?: VobizConfigurationResponse | null;
+    voicelink?: VoiceLinkConfigurationResponse | null;
     cloudonix?: CloudonixConfigurationResponse | null;
     ari?: AriConfigurationResponse | null;
     telnyx?: TelnyxConfigurationResponse | null;
@@ -5838,6 +5947,8 @@ export type TelephonyConfigurationUpdateRequest = {
     } & TwilioConfigurationRequest) | ({
         provider: 'vobiz';
     } & VobizConfigurationRequest) | ({
+        provider: 'voicelink';
+    } & VoiceLinkConfigurationRequest) | ({
         provider: 'vonage';
     } & VonageConfigurationRequest) | null;
 };
@@ -6667,6 +6778,52 @@ export type UserResponse = {
 };
 
 /**
+ * Vakyam
+ *
+ * Vakyam AI's Raaga text-to-speech models, native to Indian languages.
+ */
+export type VakyamTtsConfiguration = {
+    /**
+     * Provider
+     */
+    provider?: 'vakyam';
+    /**
+     * Api Key
+     */
+    api_key: string | Array<string>;
+    /**
+     * Model
+     *
+     * Vakyam TTS model identifier.
+     */
+    model?: string;
+    /**
+     * Voice
+     *
+     * Preset speaker voice - every voice speaks all eight supported languages, so any voice can be paired with any language below. Also accepts a custom cloned voice id beginning with 'vc_' (voice cloning is a Growth-plan feature).
+     */
+    voice?: string;
+    /**
+     * Language
+     *
+     * BCP 47 language code understood by Vakyam.
+     */
+    language?: string;
+    /**
+     * Speed
+     *
+     * Speech rate multiplier.
+     */
+    speed?: number;
+    /**
+     * Base Url
+     *
+     * Vakyam API base URL. Override only for a dedicated deployment.
+     */
+    base_url?: string;
+};
+
+/**
  * ValidateWorkflowResponse
  */
 export type ValidateWorkflowResponse = {
@@ -6824,6 +6981,100 @@ export type VoiceInfo = {
      * Preview Url
      */
     preview_url?: string | null;
+};
+
+/**
+ * VoiceLinkConfigurationRequest
+ *
+ * Request schema for VoiceLink configuration.
+ */
+export type VoiceLinkConfigurationRequest = {
+    /**
+     * Provider
+     */
+    provider?: 'voicelink';
+    /**
+     * Api Base
+     *
+     * VoiceLink API base URL
+     */
+    api_base?: string;
+    /**
+     * Username
+     *
+     * VoiceLink account username. Used together with password to obtain (and refresh) bearer tokens via /v1/auth/login.
+     */
+    username?: string | null;
+    /**
+     * Password
+     *
+     * VoiceLink account password
+     */
+    password?: string | null;
+    /**
+     * Bearer Token
+     *
+     * Static VoiceLink bearer token. Optional when username/password are provided — those allow automatic re-login on token expiry.
+     */
+    bearer_token?: string | null;
+    /**
+     * Did Number
+     *
+     * DID registered with VoiceLink, in its registered form (e.g. 919484959244). Used as the caller id for outbound dials.
+     */
+    did_number: string;
+    /**
+     * From Numbers
+     *
+     * List of VoiceLink DID numbers in registered form
+     */
+    from_numbers?: Array<string>;
+    /**
+     * Client Id
+     *
+     * VoiceLink client id this configuration belongs to. Optional — used by the KYC section to scope reseller KYC calls to this client. When unset, KYC calls act on the reseller's own KYC.
+     */
+    client_id?: string | null;
+};
+
+/**
+ * VoiceLinkConfigurationResponse
+ *
+ * Response schema for VoiceLink configuration with masked sensitive fields.
+ */
+export type VoiceLinkConfigurationResponse = {
+    /**
+     * Provider
+     */
+    provider?: 'voicelink';
+    /**
+     * Api Base
+     */
+    api_base?: string;
+    /**
+     * Username
+     */
+    username?: string | null;
+    /**
+     * Password
+     */
+    password?: string | null;
+    /**
+     * Bearer Token
+     */
+    bearer_token?: string | null;
+    /**
+     * Did Number
+     */
+    did_number: string;
+    /**
+     * From Numbers
+     */
+    from_numbers: Array<string>;
+    /**
+     * Client Id
+     */
+    client_id?: string | null;
 };
 
 /**
@@ -7013,6 +7264,62 @@ export type WorkflowError = {
      * Message
      */
     message: string;
+};
+
+/**
+ * WorkflowGenChatSessionResponse
+ */
+export type WorkflowGenChatSessionResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Session Uuid
+     */
+    session_uuid: string;
+    /**
+     * Revision
+     */
+    revision: number;
+    /**
+     * Messages
+     */
+    messages: Array<{
+        [key: string]: unknown;
+    }>;
+    /**
+     * Pending Action
+     */
+    pending_action?: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Workflow Id
+     */
+    workflow_id?: number | null;
+};
+
+/**
+ * WorkflowGenChatSessionSummary
+ */
+export type WorkflowGenChatSessionSummary = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
 };
 
 /**
@@ -8075,6 +8382,38 @@ export type HandleVobizHangupCallbackByWorkflowApiV1TelephonyVobizHangupCallback
 export type HandleVobizHangupCallbackByWorkflowApiV1TelephonyVobizHangupCallbackWorkflowWorkflowIdPostError = HandleVobizHangupCallbackByWorkflowApiV1TelephonyVobizHangupCallbackWorkflowWorkflowIdPostErrors[keyof HandleVobizHangupCallbackByWorkflowApiV1TelephonyVobizHangupCallbackWorkflowWorkflowIdPostErrors];
 
 export type HandleVobizHangupCallbackByWorkflowApiV1TelephonyVobizHangupCallbackWorkflowWorkflowIdPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type HandleVoicelinkEventsApiV1TelephonyVoicelinkEventsWorkflowRunIdPostData = {
+    body?: never;
+    path: {
+        /**
+         * Workflow Run Id
+         */
+        workflow_run_id: number;
+    };
+    query?: never;
+    url: '/api/v1/telephony/voicelink/events/{workflow_run_id}';
+};
+
+export type HandleVoicelinkEventsApiV1TelephonyVoicelinkEventsWorkflowRunIdPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type HandleVoicelinkEventsApiV1TelephonyVoicelinkEventsWorkflowRunIdPostError = HandleVoicelinkEventsApiV1TelephonyVoicelinkEventsWorkflowRunIdPostErrors[keyof HandleVoicelinkEventsApiV1TelephonyVoicelinkEventsWorkflowRunIdPostErrors];
+
+export type HandleVoicelinkEventsApiV1TelephonyVoicelinkEventsWorkflowRunIdPostResponses = {
     /**
      * Successful Response
      */
@@ -9534,6 +9873,258 @@ export type RewindTextChatSessionApiV1WorkflowWorkflowIdTextChatSessionsRunIdRew
 };
 
 export type RewindTextChatSessionApiV1WorkflowWorkflowIdTextChatSessionsRunIdRewindPostResponse = RewindTextChatSessionApiV1WorkflowWorkflowIdTextChatSessionsRunIdRewindPostResponses[keyof RewindTextChatSessionApiV1WorkflowWorkflowIdTextChatSessionsRunIdRewindPostResponses];
+
+export type ListWorkflowGenSessionsApiV1WorkflowGenSessionsGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/workflow-gen/sessions';
+};
+
+export type ListWorkflowGenSessionsApiV1WorkflowGenSessionsGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListWorkflowGenSessionsApiV1WorkflowGenSessionsGetError = ListWorkflowGenSessionsApiV1WorkflowGenSessionsGetErrors[keyof ListWorkflowGenSessionsApiV1WorkflowGenSessionsGetErrors];
+
+export type ListWorkflowGenSessionsApiV1WorkflowGenSessionsGetResponses = {
+    /**
+     * Response List Workflow Gen Sessions Api V1 Workflow Gen Sessions Get
+     *
+     * Successful Response
+     */
+    200: Array<WorkflowGenChatSessionSummary>;
+};
+
+export type ListWorkflowGenSessionsApiV1WorkflowGenSessionsGetResponse = ListWorkflowGenSessionsApiV1WorkflowGenSessionsGetResponses[keyof ListWorkflowGenSessionsApiV1WorkflowGenSessionsGetResponses];
+
+export type CreateWorkflowGenSessionApiV1WorkflowGenSessionsPostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/workflow-gen/sessions';
+};
+
+export type CreateWorkflowGenSessionApiV1WorkflowGenSessionsPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateWorkflowGenSessionApiV1WorkflowGenSessionsPostError = CreateWorkflowGenSessionApiV1WorkflowGenSessionsPostErrors[keyof CreateWorkflowGenSessionApiV1WorkflowGenSessionsPostErrors];
+
+export type CreateWorkflowGenSessionApiV1WorkflowGenSessionsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: WorkflowGenChatSessionResponse;
+};
+
+export type CreateWorkflowGenSessionApiV1WorkflowGenSessionsPostResponse = CreateWorkflowGenSessionApiV1WorkflowGenSessionsPostResponses[keyof CreateWorkflowGenSessionApiV1WorkflowGenSessionsPostResponses];
+
+export type EnsureWorkflowGenSessionForWorkflowApiV1WorkflowGenWorkflowsWorkflowIdSessionPostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Workflow Id
+         */
+        workflow_id: number;
+    };
+    query?: never;
+    url: '/api/v1/workflow-gen/workflows/{workflow_id}/session';
+};
+
+export type EnsureWorkflowGenSessionForWorkflowApiV1WorkflowGenWorkflowsWorkflowIdSessionPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EnsureWorkflowGenSessionForWorkflowApiV1WorkflowGenWorkflowsWorkflowIdSessionPostError = EnsureWorkflowGenSessionForWorkflowApiV1WorkflowGenWorkflowsWorkflowIdSessionPostErrors[keyof EnsureWorkflowGenSessionForWorkflowApiV1WorkflowGenWorkflowsWorkflowIdSessionPostErrors];
+
+export type EnsureWorkflowGenSessionForWorkflowApiV1WorkflowGenWorkflowsWorkflowIdSessionPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: WorkflowGenChatSessionResponse;
+};
+
+export type EnsureWorkflowGenSessionForWorkflowApiV1WorkflowGenWorkflowsWorkflowIdSessionPostResponse = EnsureWorkflowGenSessionForWorkflowApiV1WorkflowGenWorkflowsWorkflowIdSessionPostResponses[keyof EnsureWorkflowGenSessionForWorkflowApiV1WorkflowGenWorkflowsWorkflowIdSessionPostResponses];
+
+export type GetWorkflowGenSessionApiV1WorkflowGenSessionsSessionIdGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Session Id
+         */
+        session_id: number;
+    };
+    query?: never;
+    url: '/api/v1/workflow-gen/sessions/{session_id}';
+};
+
+export type GetWorkflowGenSessionApiV1WorkflowGenSessionsSessionIdGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetWorkflowGenSessionApiV1WorkflowGenSessionsSessionIdGetError = GetWorkflowGenSessionApiV1WorkflowGenSessionsSessionIdGetErrors[keyof GetWorkflowGenSessionApiV1WorkflowGenSessionsSessionIdGetErrors];
+
+export type GetWorkflowGenSessionApiV1WorkflowGenSessionsSessionIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: WorkflowGenChatSessionResponse;
+};
+
+export type GetWorkflowGenSessionApiV1WorkflowGenSessionsSessionIdGetResponse = GetWorkflowGenSessionApiV1WorkflowGenSessionsSessionIdGetResponses[keyof GetWorkflowGenSessionApiV1WorkflowGenSessionsSessionIdGetResponses];
+
+export type AppendWorkflowGenMessageApiV1WorkflowGenSessionsSessionIdMessagesPostData = {
+    body: AppendWorkflowGenMessageRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Session Id
+         */
+        session_id: number;
+    };
+    query?: never;
+    url: '/api/v1/workflow-gen/sessions/{session_id}/messages';
+};
+
+export type AppendWorkflowGenMessageApiV1WorkflowGenSessionsSessionIdMessagesPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AppendWorkflowGenMessageApiV1WorkflowGenSessionsSessionIdMessagesPostError = AppendWorkflowGenMessageApiV1WorkflowGenSessionsSessionIdMessagesPostErrors[keyof AppendWorkflowGenMessageApiV1WorkflowGenSessionsSessionIdMessagesPostErrors];
+
+export type AppendWorkflowGenMessageApiV1WorkflowGenSessionsSessionIdMessagesPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type ConfirmWorkflowGenActionApiV1WorkflowGenSessionsSessionIdConfirmPostData = {
+    body: ConfirmWorkflowGenActionRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Session Id
+         */
+        session_id: number;
+    };
+    query?: never;
+    url: '/api/v1/workflow-gen/sessions/{session_id}/confirm';
+};
+
+export type ConfirmWorkflowGenActionApiV1WorkflowGenSessionsSessionIdConfirmPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ConfirmWorkflowGenActionApiV1WorkflowGenSessionsSessionIdConfirmPostError = ConfirmWorkflowGenActionApiV1WorkflowGenSessionsSessionIdConfirmPostErrors[keyof ConfirmWorkflowGenActionApiV1WorkflowGenSessionsSessionIdConfirmPostErrors];
+
+export type ConfirmWorkflowGenActionApiV1WorkflowGenSessionsSessionIdConfirmPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
 
 export type GetDefaultConfigurationsApiV1UserConfigurationsDefaultsGetData = {
     body?: never;
@@ -12236,6 +12827,8 @@ export type SaveTelephonyConfigurationApiV1OrganizationsTelephonyConfigPostData 
     } & TwilioConfigurationRequest) | ({
         provider: 'vobiz';
     } & VobizConfigurationRequest) | ({
+        provider: 'voicelink';
+    } & VoiceLinkConfigurationRequest) | ({
         provider: 'vonage';
     } & VonageConfigurationRequest);
     headers?: {
