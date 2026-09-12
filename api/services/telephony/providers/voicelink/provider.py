@@ -17,6 +17,7 @@ from fastapi import HTTPException, WebSocketDisconnect
 from loguru import logger
 from pipecat.frames.frames import OutputTransportMessageUrgentFrame
 
+from api.db import db_client
 from api.enums import WorkflowRunMode
 from api.services.telephony.base import (
     CallInitiationResult,
@@ -445,6 +446,24 @@ class VoiceLinkProvider(TelephonyProvider):
             )
 
             call_key = call_sid or stream_sid
+
+            # Outbound calls only get provider_metadata (outbound_queue_id,
+            # bot_id, ...) written into gathered_context at initiate_call()
+            # time — VoiceLink's add_lead response has no real call id yet
+            # (see initiate_call's docstring). The real call/stream id is
+            # only known once VoiceLink connects back here, so stamp it in
+            # now. This is what transfer_call() later reads via
+            # gathered_context['call_id'] (through pipecat_engine_custom_tools.py)
+            # to find this call's live-connection registry entry — without
+            # this, outbound transfer always fails with "conference_name
+            # 'transfer-None'". update_workflow_run merges gathered_context,
+            # so this can't clobber the fields set at initiate_call() time.
+            if call_key:
+                await db_client.update_workflow_run(
+                    run_id=workflow_run_id,
+                    gathered_context={"call_id": call_key},
+                )
+
             try:
                 await run_pipeline_telephony(
                     websocket,

@@ -450,6 +450,50 @@ async def test_transfer_call_raises_when_original_call_sid_missing():
         )
 
 
+@pytest.mark.asyncio
+async def test_handle_websocket_stamps_call_id_into_gathered_context_for_outbound():
+    """Outbound calls only get provider_metadata (outbound_queue_id, bot_id,
+    ...) into gathered_context at initiate_call() time — VoiceLink's
+    add_lead response has no real call id yet. Without handle_websocket
+    also stamping gathered_context['call_id'] once the real call_sid is
+    known, transfer_call() always fails with conference_name
+    'transfer-None' for outbound VoiceLink calls specifically."""
+    provider = _provider()
+
+    websocket = AsyncMock()
+    websocket.receive_text.side_effect = [
+        json.dumps({"event": "connected"}),
+        json.dumps(
+            {
+                "event": "start",
+                "start": {
+                    "stream_sid": "MZ-stream-out-1",
+                    "call_sid": "outbound-call-sid-1",
+                },
+            }
+        ),
+    ]
+
+    with (
+        patch(
+            "api.services.telephony.providers.voicelink.provider.db_client.update_workflow_run",
+            new=AsyncMock(),
+        ) as mock_update_run,
+        patch(
+            "api.services.pipecat.run_pipeline.run_pipeline_telephony",
+            new=AsyncMock(),
+        ),
+    ):
+        await provider.handle_websocket(
+            websocket, workflow_id=1, organization_id=1, workflow_run_id=42
+        )
+
+    mock_update_run.assert_awaited_once_with(
+        run_id=42,
+        gathered_context={"call_id": "outbound-call-sid-1"},
+    )
+
+
 def test_register_active_call_transport_lifecycle():
     output_transport = object()
     voicelink_transport.register_active_call(
