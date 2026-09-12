@@ -14,6 +14,7 @@
     "lint:lead-flow": "bash ../../user_onboarding/scripts/check_lead_flow.sh"
   },
   "dependencies": {
+    "@assistant-ui/react": "^0.15.18",
     "@calcom/embed-react": "^1.5.3",
     "@dagrejs/dagre": "^1.1.4",
     "@floating-ui/react-dom": "^2.1.9",
@@ -50,8 +51,10 @@
     "react-dom": "^19.1.0",
     "react-hook-form": "^7.56.4",
     "react-international-phone": "^4.5.0",
+    "react-markdown": "^10.1.0",
     "react-timezone-select": "^3.2.8",
     "recharts": "^3.1.2",
+    "remark-gfm": "^4.0.1",
     "shadcn-ui": "^0.9.5",
     "sonner": "^2.0.5",
     "tailwind-merge": "^3.2.0",
