@@ -7,6 +7,7 @@ scoping, MCP discovery, and analytics stay consistent.
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import Any, Optional
 
 from loguru import logger
@@ -19,9 +20,14 @@ from api.schemas.tool import (
     CreateToolRequest,
     McpRefreshResponse,
     ToolResponse,
+    ToolTestResponse,
 )
 from api.services.posthog_client import capture_event
 from api.services.workflow.mcp_tool_session import discover_mcp_tools
+from api.services.workflow.tools.custom_tool import (
+    execute_http_tool,
+    serialize_query_params,
+)
 from api.services.workflow.tools.mcp_tool import (
     McpDefinitionError,
     validate_mcp_definition,
@@ -198,6 +204,207 @@ async def create_tool_for_user(
         },
     )
 
+    return build_tool_response(tool)
+
+
+def hint_for_status_code(
+    status_code: Optional[int], configured_method: str
+) -> Optional[str]:
+    """Human-readable explanation for a status code a misconfigured tool
+    is likely to hit. Returns None for 2xx and any code not covered."""
+    if status_code == 400:
+        return (
+            "HTTP 400 Bad Request — the server rejected the request payload. "
+            "Verify the arguments/body match what this endpoint expects."
+        )
+    if status_code == 401:
+        return (
+            "HTTP 401 Unauthorized — the request wasn't authenticated. Check "
+            "the credential configured on the Authentication tab is present "
+            "and valid."
+        )
+    if status_code == 403:
+        return (
+            "HTTP 403 Forbidden — authenticated, but the configured "
+            "credential doesn't have permission for this endpoint/action."
+        )
+    if status_code == 404:
+        return (
+            f"HTTP 404 Not Found — verify the endpoint URL is correct and "
+            f"that {configured_method} is a valid method for it."
+        )
+    if status_code == 405:
+        return (
+            f"HTTP 405 Method Not Allowed — the endpoint rejected the "
+            f"configured method ({configured_method}). Verify the API expects "
+            f"{configured_method} for this URL."
+        )
+    if status_code == 408:
+        return (
+            "HTTP 408 Request Timeout — the endpoint didn't respond in time. "
+            "Check the endpoint is reachable, or increase Timeout (ms) if it's "
+            "just slow."
+        )
+    if status_code == 409:
+        return (
+            "HTTP 409 Conflict — the endpoint rejected the request due to a "
+            "conflicting resource state (e.g. duplicate create). Not "
+            "necessarily a configuration problem."
+        )
+    if status_code == 415:
+        return (
+            "HTTP 415 Unsupported Media Type — check the Content-Type header "
+            "matches the format this endpoint expects for the body."
+        )
+    if status_code == 422:
+        return (
+            "HTTP 422 Unprocessable Entity — the request was well-formed but "
+            "the payload's structure or field types don't match what this "
+            "endpoint expects. Compare your arguments against the API's "
+            "documented schema."
+        )
+    if status_code == 429:
+        return (
+            "HTTP 429 Too Many Requests — the endpoint is rate-limiting. Wait "
+            "and retry; not a configuration problem."
+        )
+    if status_code is not None and 500 <= status_code < 600:
+        return (
+            f"HTTP {status_code} — the endpoint itself errored. This is "
+            "likely an issue on the API's side, not your tool configuration."
+        )
+    return None
+
+
+async def test_http_tool_for_user(
+    tool_uuid: str,
+    user: UserModel,
+    *,
+    llm_params: dict[str, Any],
+    preset_params: dict[str, Any],
+) -> ToolTestResponse:
+    """Fire a real request through an HTTP API tool and describe the result.
+
+    Shared by the REST test endpoint and the in-product assistant, so both
+    report identical status hints and request previews. This performs a live
+    call to the configured endpoint — callers must treat it as a side effect,
+    not a read.
+    """
+    if not user.selected_organization_id:
+        raise ToolManagementError(
+            "organization_required",
+            "No organization selected for the user",
+            status_code=400,
+        )
+
+    tool = await db_client.get_tool_by_uuid(
+        tool_uuid, user.selected_organization_id, include_archived=True
+    )
+    if not tool:
+        raise ToolManagementError(
+            "tool_not_found", f"Tool {tool_uuid} not found", status_code=404
+        )
+    if tool.category != ToolCategory.HTTP_API.value:
+        raise ToolManagementError(
+            "not_testable", "Only HTTP API tools can be tested", status_code=400
+        )
+
+    tool_config = tool.definition.get("config", {}) if isinstance(tool.definition, dict) else {}
+    configured_method = tool_config.get("method", "?")
+    configured_url = tool_config.get("url", "?")
+
+    started_at = time.perf_counter()
+    result = await execute_http_tool(
+        tool,
+        llm_params,
+        preset_params=preset_params,
+        organization_id=user.selected_organization_id,
+        include_request_headers=True,
+    )
+    duration_ms = max(0, round((time.perf_counter() - started_at) * 1000))
+
+    status = result.get("status", "error")
+    status_code = result.get("status_code")
+    if status_code is not None and status_code >= 400:
+        status = "error"
+
+    # Preset values take precedence over model-supplied values, matching live
+    # execution after configured preset templates have been resolved.
+    resolved_arguments = {**llm_params, **preset_params}
+
+    # Mirror execute_http_tool's own branch: POST/PUT/PATCH send the resolved
+    # arguments as a JSON body; GET/DELETE send them as query params. Never both.
+    request_body = None
+    request_params = None
+    if configured_method in ("POST", "PUT", "PATCH"):
+        request_body = resolved_arguments  # keep {} so preview matches wire request
+    elif resolved_arguments:
+        request_params = serialize_query_params(resolved_arguments)
+
+    return ToolTestResponse(
+        status=status,
+        status_code=status_code,
+        data=result.get("data"),
+        error=result.get("error"),
+        duration_ms=duration_ms,
+        hint=hint_for_status_code(status_code, configured_method),
+        request_method=configured_method,
+        request_url=configured_url,
+        request_headers=result.get("request_headers", {}),
+        request_body=request_body,
+        request_params=request_params,
+    )
+
+
+async def update_tool_for_user(
+    tool_uuid: str,
+    user: UserModel,
+    *,
+    name: Optional[str] = None,
+    description: Optional[str] = None,
+    definition: Optional[dict[str, Any]] = None,
+    icon: Optional[str] = None,
+    icon_color: Optional[str] = None,
+    status: Optional[str] = None,
+) -> ToolResponse:
+    """Update an existing tool in the user's selected org.
+
+    Only the fields passed are changed; everything else is left as-is. A
+    supplied `definition` replaces the old one wholesale, so callers must
+    send the complete definition rather than a partial patch.
+    """
+    if not user.selected_organization_id:
+        raise ToolManagementError(
+            "organization_required",
+            "No organization selected for the user",
+            status_code=400,
+        )
+
+    if definition is not None:
+        await validate_tool_credential_references(
+            definition, organization_id=user.selected_organization_id
+        )
+        definition = await populate_discovered_tools(
+            definition,
+            organization_id=user.selected_organization_id,
+        )
+
+    tool = await db_client.update_tool(
+        tool_uuid=tool_uuid,
+        organization_id=user.selected_organization_id,
+        name=name,
+        description=description,
+        definition=definition,
+        icon=icon,
+        icon_color=icon_color,
+        status=status,
+    )
+    if not tool:
+        raise ToolManagementError(
+            "tool_not_found",
+            f"Tool {tool_uuid} not found in this organization",
+            status_code=404,
+        )
     return build_tool_response(tool)
 
 

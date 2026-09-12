@@ -205,3 +205,19 @@ OSS_JWT_SECRET = os.getenv("OSS_JWT_SECRET", "change-me-in-production")
 OSS_JWT_EXPIRY_HOURS = int(os.getenv("OSS_JWT_EXPIRY_HOURS", "720"))  # 30 days
 
 TUNER_BASE_URL = os.getenv("TUNER_BASE_URL", "https://api.usetuner.ai")
+
+# In-product AI assistant (chat-driven workflow authoring over Dograh's own
+# MCP tools). Deployment-wide, BYO credentials — separate from any per-org
+# LLM configuration. All five must be set for the feature to be enabled; see
+# api/services/workflow_gen/config.py.
+WF_GEN_LLM_PROVIDER = os.getenv("WF_GEN_LLM_PROVIDER")
+WF_GEN_AZURE_OPENAI_API_KEY = os.getenv("WF_GEN_AZURE_OPENAI_API_KEY")
+WF_GEN_AZURE_OPENAI_ENDPOINT = os.getenv("WF_GEN_AZURE_OPENAI_ENDPOINT")
+WF_GEN_AZURE_OPENAI_DEPLOYMENT = os.getenv("WF_GEN_AZURE_OPENAI_DEPLOYMENT")
+WF_GEN_AZURE_OPENAI_API_VERSION = os.getenv("WF_GEN_AZURE_OPENAI_API_VERSION")
+# Loopback base URL the assistant uses to reach this same server's own MCP
+# endpoint. A real HTTP connection, not an in-process shortcut — an
+# httpx.ASGITransport connection to a Streamable HTTP FastMCP app breaks the
+# session handshake (McpError: Session terminated), so this goes over the
+# wire like any other MCP client does, just to localhost.
+WF_GEN_MCP_BASE_URL = os.getenv("WF_GEN_MCP_BASE_URL", "http://127.0.0.1:8000")

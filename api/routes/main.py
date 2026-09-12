@@ -28,6 +28,7 @@ from api.routes.user import router as user_router
 from api.routes.webrtc_signaling import router as webrtc_signaling_router
 from api.routes.workflow import router as workflow_router
 from api.routes.workflow_embed import router as workflow_embed_router
+from api.routes.workflow_gen_chat import router as workflow_gen_chat_router
 from api.routes.workflow_recording import router as workflow_recording_router
 from api.routes.workflow_text_chat import router as workflow_text_chat_router
 from api.services.integrations import all_routers
@@ -41,6 +42,7 @@ router.include_router(telephony_router)
 router.include_router(superuser_router)
 router.include_router(workflow_router)
 router.include_router(workflow_text_chat_router)
+router.include_router(workflow_gen_chat_router)
 router.include_router(user_router)
 router.include_router(campaign_router)
 router.include_router(credentials_router)
@@ -85,6 +87,7 @@ class HealthResponse(BaseModel):
     # be baked into the browser bundle at build time. Both are public values.
     stack_project_id: str | None = None
     stack_publishable_client_key: str | None = None
+    workflow_gen_enabled: bool
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -100,6 +103,7 @@ async def health() -> HealthResponse:
         STACK_PUBLISHABLE_CLIENT_KEY,
         TURN_SECRET,
     )
+    from api.services.workflow_gen.config import is_workflow_gen_configured
     from api.utils.common import get_backend_endpoints, is_local_or_private_url
 
     logger.debug("Health endpoint called")
@@ -130,6 +134,7 @@ async def health() -> HealthResponse:
         stack_publishable_client_key=(
             STACK_PUBLISHABLE_CLIENT_KEY if is_stack else None
         ),
+        workflow_gen_enabled=is_workflow_gen_configured(),
     )
 
 

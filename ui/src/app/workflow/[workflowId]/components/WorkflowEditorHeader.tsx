@@ -1,7 +1,7 @@
 "use client";
 
 import { ReactFlowInstance } from "@xyflow/react";
-import { AlertCircle, ArrowLeft, Bot, Clipboard, Copy, Download, Eye, History, LoaderCircle, Menu, MoreVertical, Pencil, Phone, Rocket } from "lucide-react";
+import { AlertCircle, ArrowLeft, Bot, Clipboard, Copy, Download, Eye, History, LoaderCircle, Menu, MoreVertical, Pencil, Phone, Rocket, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
@@ -27,6 +27,7 @@ import {
     PopoverTrigger,
 } from "@/components/ui/popover";
 import { useSidebar } from "@/components/ui/sidebar";
+import { useAppConfig } from "@/context/AppConfigContext";
 
 interface WorkflowEditorHeaderProps {
     workflowName: string;
@@ -39,6 +40,7 @@ interface WorkflowEditorHeaderProps {
     user: { id: string; email?: string };
     onPhoneCallClick: () => void;
     onTestAgentClick: () => void;
+    onAiAssistantClick: () => void;
     onHistoryClick: () => void;
     activeVersionLabel?: string;
     isViewingHistoricalVersion: boolean;
@@ -56,6 +58,7 @@ export const WorkflowEditorHeader = ({
     saveWorkflow,
     onPhoneCallClick,
     onTestAgentClick,
+    onAiAssistantClick,
     onHistoryClick,
     activeVersionLabel,
     isViewingHistoricalVersion,
@@ -68,6 +71,7 @@ export const WorkflowEditorHeader = ({
 }: WorkflowEditorHeaderProps) => {
     const router = useRouter();
     const { toggleSidebar } = useSidebar();
+    const { config } = useAppConfig();
     const [savingWorkflow, setSavingWorkflow] = useState(false);
     const [duplicating, setDuplicating] = useState(false);
     const [publishing, setPublishing] = useState(false);
@@ -427,6 +431,17 @@ export const WorkflowEditorHeader = ({
                     <Bot className="w-4 h-4" />
                     Test Agent
                 </Button>
+
+                {config?.workflowGenEnabled ? (
+                    <Button
+                        variant="outline"
+                        className="flex items-center gap-2 bg-transparent border-[#3a3a3a] hover:bg-[#2a2a2a] text-white"
+                        onClick={onAiAssistantClick}
+                    >
+                        <Sparkles className="w-4 h-4" />
+                        AI Assistant
+                    </Button>
+                ) : null}
 
                 {/* Save button (only shown when editing the draft) */}
                 {!isViewingHistoricalVersion && (

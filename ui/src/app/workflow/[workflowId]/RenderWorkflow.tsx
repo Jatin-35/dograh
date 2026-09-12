@@ -18,6 +18,7 @@ import { HireExpertNudge } from "@/components/lead-forms/HireExpertNudge";
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { WorkflowGenChatPanel } from '@/components/workflow-gen-chat/WorkflowGenChatPanel';
 import { useOnboarding } from '@/context/OnboardingContext';
 import { WorkflowConfigurations } from '@/types/workflow-configurations';
 
@@ -81,6 +82,8 @@ function RenderWorkflow({
     const [isVersionPanelOpen, setIsVersionPanelOpen] = useState(false);
     const [isTesterRailOpen, setIsTesterRailOpen] = useState(true);
     const [isTesterSheetOpen, setIsTesterSheetOpen] = useState(false);
+    const [isAssistantRailOpen, setIsAssistantRailOpen] = useState(false);
+    const [isAssistantSheetOpen, setIsAssistantSheetOpen] = useState(false);
     const [isDesktopViewport, setIsDesktopViewport] = useState(false);
     const [versions, setVersions] = useState<WorkflowVersion[]>([]);
     const [versionsLoading, setVersionsLoading] = useState(false);
@@ -312,6 +315,14 @@ function RenderWorkflow({
         setIsTesterSheetOpen(true);
     }, []);
 
+    const handleOpenAssistant = useCallback(() => {
+        if (window.innerWidth >= 1280) {
+            setIsAssistantRailOpen(true);
+            return;
+        }
+        setIsAssistantSheetOpen(true);
+    }, []);
+
     const shouldShowWebCallOnboarding = useMemo(() => {
         return (initialTotalRuns ?? 0) === 0 && !hasCompletedAction('web_call_started');
     }, [hasCompletedAction, initialTotalRuns]);
@@ -496,6 +507,7 @@ function RenderWorkflow({
                     user={user}
                     onPhoneCallClick={() => setIsPhoneCallDialogOpen(true)}
                     onTestAgentClick={handleOpenTester}
+                    onAiAssistantClick={handleOpenAssistant}
                     onHistoryClick={handleOpenVersionPanel}
                     activeVersionLabel={activeVersionLabel}
                     isViewingHistoricalVersion={isViewingHistoricalVersion}
@@ -673,6 +685,15 @@ function RenderWorkflow({
                                 />
                             </aside>
                         )}
+
+                        {isAssistantRailOpen && (
+                            <aside className="hidden h-full w-[400px] shrink-0 border-l border-border xl:block">
+                                <WorkflowGenChatPanel
+                                    workflowId={workflowId}
+                                    onClose={() => setIsAssistantRailOpen(false)}
+                                />
+                            </aside>
+                        )}
                     </div>
 
                     <Sheet open={isTesterSheetOpen} onOpenChange={setIsTesterSheetOpen}>
@@ -686,6 +707,12 @@ function RenderWorkflow({
                                 isVisible={isTesterSheetOpen}
                                 onRuntimeNodeTransition={handleRuntimeNodeTransition}
                             />
+                        </SheetContent>
+                    </Sheet>
+
+                    <Sheet open={isAssistantSheetOpen} onOpenChange={setIsAssistantSheetOpen}>
+                        <SheetContent side="right" className="w-full max-w-none p-0 sm:max-w-xl xl:hidden">
+                            <WorkflowGenChatPanel workflowId={workflowId} />
                         </SheetContent>
                     </Sheet>
                 </div>

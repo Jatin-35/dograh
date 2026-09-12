@@ -27,6 +27,7 @@ from loguru import logger
 from pydantic import ValidationError as PydanticValidationError
 
 from api.db import db_client
+from api.db.models import UserModel
 from api.mcp_server.auth import authenticate_mcp_request
 from api.mcp_server.tools._workflow_projection import (
     select_workflow_projection_source,
@@ -94,7 +95,20 @@ async def save_workflow(workflow_id: int, code: str) -> dict[str, Any]:
     - `bridge_error` — internal/transient; retry once, then surface it.
     """
     user = await authenticate_mcp_request()
+    return await save_workflow_for_user(workflow_id, code, user)
 
+
+async def save_workflow_for_user(
+    workflow_id: int, code: str, user: UserModel
+) -> dict[str, Any]:
+    """Shared implementation behind both the MCP tool above and the
+    in-product assistant (`api/services/workflow_gen/`).
+
+    See `create_workflow_for_user` for why this is split out. Raises
+    `HTTPException(404)` when the workflow isn't in the caller's
+    organization — first-party callers should translate that into their own
+    error type rather than letting it reach a non-HTTP surface.
+    """
     workflow = await db_client.get_workflow(
         workflow_id, organization_id=user.selected_organization_id
     )

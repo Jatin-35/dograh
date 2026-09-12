@@ -1,6 +1,5 @@
 """API routes for managing tools."""
 
-import time
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -36,14 +35,12 @@ from api.services.tool_management import (
     build_tool_response,
     create_tool_for_user,
     refresh_mcp_tool_for_user,
+    test_http_tool_for_user,
+    update_tool_for_user,
     validate_tool_credential_references,
 )
 from api.services.tool_management import (
     populate_discovered_tools as _populate_discovered_tools,
-)
-from api.services.workflow.tools.custom_tool import (
-    execute_http_tool,
-    serialize_query_params,
 )
 
 router = APIRouter(prefix="/tools")
@@ -211,140 +208,15 @@ async def test_tool(
     user: UserModel = Depends(get_user),
 ) -> ToolTestResponse:
     """Execute an HTTP API tool with sample LLM and preset parameters."""
-    if not user.selected_organization_id:
-        raise HTTPException(
-            status_code=400, detail="No organization selected for the user"
+    try:
+        return await test_http_tool_for_user(
+            tool_uuid,
+            user,
+            llm_params=request.llm_params,
+            preset_params=request.preset_params,
         )
-
-    tool = await db_client.get_tool_by_uuid(
-        tool_uuid, user.selected_organization_id, include_archived=True
-    )
-
-    if not tool:
-        raise HTTPException(status_code=404, detail="Tool not found")
-
-    if tool.category != ToolCategory.HTTP_API.value:
-        raise HTTPException(status_code=400, detail="Only HTTP API tools can be tested")
-
-    tool_config = (
-        tool.definition.get("config", {}) if isinstance(tool.definition, dict) else {}
-    )
-    configured_method = tool_config.get("method", "?")
-    configured_url = tool_config.get("url", "?")
-
-    started_at = time.perf_counter()
-    result = await execute_http_tool(
-        tool,
-        request.llm_params,
-        preset_params=request.preset_params,
-        organization_id=user.selected_organization_id,
-        include_request_headers=True,
-    )
-    duration_ms = max(0, round((time.perf_counter() - started_at) * 1000))
-
-    status = result.get("status", "error")
-    status_code = result.get("status_code")
-    if status_code is not None and status_code >= 400:
-        status = "error"
-
-    hint = _hint_for_status_code(status_code, configured_method)
-
-    # Preset values take precedence over model-supplied values, matching live
-    # execution after configured preset templates have been resolved.
-    resolved_arguments = {**request.llm_params, **request.preset_params}
-
-    # Mirror execute_http_tool's own branch: POST/PUT/PATCH send the
-    # resolved arguments as a JSON body; GET/DELETE send them as query
-    # params. Never both.
-    request_body = None
-    request_params = None
-    if configured_method in ("POST", "PUT", "PATCH"):
-        request_body = resolved_arguments  # keep {} so preview matches wire request
-    elif resolved_arguments:
-        request_params = serialize_query_params(resolved_arguments)
-
-    return ToolTestResponse(
-        status=status,
-        status_code=status_code,
-        data=result.get("data"),
-        error=result.get("error"),
-        duration_ms=duration_ms,
-        hint=hint,
-        request_method=configured_method,
-        request_url=configured_url,
-        request_headers=result.get("request_headers", {}),
-        request_body=request_body,
-        request_params=request_params,
-    )
-
-
-def _hint_for_status_code(
-    status_code: Optional[int], configured_method: str
-) -> Optional[str]:
-    """Human-readable explanation for a status code a misconfigured tool
-    is likely to hit. Returns None for 2xx and any code not covered."""
-    if status_code == 400:
-        return (
-            "HTTP 400 Bad Request — the server rejected the request payload. "
-            "Verify the arguments/body match what this endpoint expects."
-        )
-    if status_code == 401:
-        return (
-            "HTTP 401 Unauthorized — the request wasn't authenticated. Check "
-            "the credential configured on the Authentication tab is present "
-            "and valid."
-        )
-    if status_code == 403:
-        return (
-            "HTTP 403 Forbidden — authenticated, but the configured "
-            "credential doesn't have permission for this endpoint/action."
-        )
-    if status_code == 404:
-        return (
-            f"HTTP 404 Not Found — verify the endpoint URL is correct and "
-            f"that {configured_method} is a valid method for it."
-        )
-    if status_code == 405:
-        return (
-            f"HTTP 405 Method Not Allowed — the endpoint rejected the "
-            f"configured method ({configured_method}). Verify the API expects "
-            f"{configured_method} for this URL."
-        )
-    if status_code == 408:
-        return (
-            "HTTP 408 Request Timeout — the endpoint didn't respond in time. "
-            "Check the endpoint is reachable, or increase Timeout (ms) if it's "
-            "just slow."
-        )
-    if status_code == 409:
-        return (
-            "HTTP 409 Conflict — the endpoint rejected the request due to a "
-            "conflicting resource state (e.g. duplicate create). Not "
-            "necessarily a configuration problem."
-        )
-    if status_code == 415:
-        return (
-            "HTTP 415 Unsupported Media Type — check the Content-Type header "
-            "matches the format this endpoint expects for the body."
-        )
-    if status_code == 422:
-        return (
-            "HTTP 422 Unprocessable Entity — the request was well-formed but "
-            "the payload's structure or field types don't match what this "
-            "endpoint expects. Compare your arguments against the API's "
-            "documented schema."
-        )
-    if status_code == 429:
-        return (
-            "HTTP 429 Too Many Requests — the endpoint is rate-limiting. Wait "
-            "and retry; not a configuration problem."
-        )
-    if status_code is not None and 500 <= status_code < 600:
-        return (
-            f"HTTP {status_code} — the endpoint itself errored. This is "
-            "likely an issue on the API's side, not your tool configuration."
-        )
-    return None
+    except ToolManagementError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message) from e
 
 
 @router.put("/{tool_uuid}")
@@ -371,36 +243,19 @@ async def update_tool(
     if request.status:
         validate_status(request.status)
 
-    definition = None
-    if request.definition:
-        definition = request.definition.model_dump()
-        try:
-            await validate_tool_credential_references(
-                definition,
-                organization_id=user.selected_organization_id,
-            )
-            definition = await _populate_discovered_tools(
-                definition,
-                organization_id=user.selected_organization_id,
-            )
-        except ToolManagementError as e:
-            raise HTTPException(status_code=e.status_code, detail=e.message) from e
-
-    tool = await db_client.update_tool(
-        tool_uuid=tool_uuid,
-        organization_id=user.selected_organization_id,
-        name=request.name,
-        description=request.description,
-        definition=definition,
-        icon=request.icon,
-        icon_color=request.icon_color,
-        status=request.status,
-    )
-
-    if not tool:
-        raise HTTPException(status_code=404, detail="Tool not found")
-
-    return build_tool_response(tool, include_created_by=True)
+    try:
+        return await update_tool_for_user(
+            tool_uuid,
+            user,
+            name=request.name,
+            description=request.description,
+            definition=request.definition.model_dump() if request.definition else None,
+            icon=request.icon,
+            icon_color=request.icon_color,
+            status=request.status,
+        )
+    except ToolManagementError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message) from e
 
 
 @router.delete("/{tool_uuid}")

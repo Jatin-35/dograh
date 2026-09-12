@@ -11,6 +11,10 @@ from api.db.models import UserModel
 from api.enums import WebhookCredentialType
 from api.sdk_expose import sdk_expose
 from api.services.auth.depends import get_user
+from api.services.credential_management import CredentialManagementError
+from api.services.credential_management import (
+    validate_credential_data as _validate_credential_data,
+)
 
 router = APIRouter(prefix="/credentials")
 
@@ -51,49 +55,18 @@ class CredentialResponse(BaseModel):
 def validate_credential_data(
     credential_type: WebhookCredentialType, credential_data: dict
 ) -> None:
-    """Validate that credential_data matches the expected structure for the credential type.
+    """Validate `credential_data` against the expected shape for its type.
 
-    Args:
-        credential_type: The type of credential
-        credential_data: The credential data to validate
+    Thin HTTP wrapper over the shared service rule, so this route and the
+    in-product AI assistant can't drift apart on what's valid.
 
     Raises:
         HTTPException: If validation fails
     """
-    if credential_type == WebhookCredentialType.NONE:
-        # No data required
-        return
-
-    if credential_type == WebhookCredentialType.API_KEY:
-        if "header_name" not in credential_data or "api_key" not in credential_data:
-            raise HTTPException(
-                status_code=400,
-                detail="API Key credential requires 'header_name' and 'api_key' fields",
-            )
-
-    elif credential_type == WebhookCredentialType.BEARER_TOKEN:
-        if "token" not in credential_data:
-            raise HTTPException(
-                status_code=400,
-                detail="Bearer Token credential requires 'token' field",
-            )
-
-    elif credential_type == WebhookCredentialType.BASIC_AUTH:
-        if "username" not in credential_data or "password" not in credential_data:
-            raise HTTPException(
-                status_code=400,
-                detail="Basic Auth credential requires 'username' and 'password' fields",
-            )
-
-    elif credential_type == WebhookCredentialType.CUSTOM_HEADER:
-        if (
-            "header_name" not in credential_data
-            or "header_value" not in credential_data
-        ):
-            raise HTTPException(
-                status_code=400,
-                detail="Custom Header credential requires 'header_name' and 'header_value' fields",
-            )
+    try:
+        _validate_credential_data(credential_type, credential_data)
+    except CredentialManagementError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message) from e
 
 
 def build_credential_response(credential) -> CredentialResponse:

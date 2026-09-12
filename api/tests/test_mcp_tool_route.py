@@ -441,7 +441,7 @@ def _http_tool_model(method="GET"):
 
 @pytest.mark.asyncio
 async def test_tool_executes_http_api_tool_with_llm_and_preset_params(monkeypatch):
-    import api.routes.tool as tool_route
+    import api.services.tool_management as tool_route
 
     tool = _http_tool_model()
     monkeypatch.setattr(
@@ -496,7 +496,7 @@ async def test_tool_executes_http_api_tool_with_llm_and_preset_params(monkeypatc
 
 @pytest.mark.asyncio
 async def test_tool_test_sets_request_body_for_post_method(monkeypatch):
-    import api.routes.tool as tool_route
+    import api.services.tool_management as tool_route
 
     tool = _http_tool_model(method="POST")
     monkeypatch.setattr(
@@ -523,7 +523,7 @@ async def test_tool_test_sets_request_body_for_post_method(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_tool_test_returns_masked_effective_request_headers(monkeypatch):
-    import api.routes.tool as tool_route
+    import api.services.tool_management as tool_route
 
     tool = _http_tool_model(method="POST")
     monkeypatch.setattr(
@@ -560,7 +560,7 @@ async def test_tool_test_request_body_includes_resolved_preset_parameters(
     monkeypatch,
 ):
     """The Request preview includes direct preset values alongside LLM values."""
-    import api.routes.tool as tool_route
+    import api.services.tool_management as tool_route
 
     tool = _http_tool_model(method="POST")
     tool.definition["config"]["preset_parameters"] = [
@@ -596,7 +596,7 @@ async def test_tool_test_request_body_includes_resolved_preset_parameters(
 
 @pytest.mark.asyncio
 async def test_tool_test_no_arguments_post_shows_empty_body(monkeypatch):
-    import api.routes.tool as tool_route
+    import api.services.tool_management as tool_route
 
     tool = _http_tool_model(method="POST")
     monkeypatch.setattr(
@@ -639,7 +639,7 @@ async def test_tool_test_no_arguments_post_shows_empty_body(monkeypatch):
 async def test_tool_test_hint_for_status_code(
     monkeypatch, status_code, expected_snippet
 ):
-    import api.routes.tool as tool_route
+    import api.services.tool_management as tool_route
 
     tool = _http_tool_model(method="POST")
     monkeypatch.setattr(
@@ -667,7 +667,7 @@ async def test_tool_test_hint_for_status_code(
 
 @pytest.mark.asyncio
 async def test_tool_test_no_hint_on_success(monkeypatch):
-    import api.routes.tool as tool_route
+    import api.services.tool_management as tool_route
 
     tool = _http_tool_model(method="GET")
     monkeypatch.setattr(
@@ -688,7 +688,7 @@ async def test_tool_test_no_hint_on_success(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_tool_test_no_hint_for_uncovered_status_code(monkeypatch):
-    import api.routes.tool as tool_route
+    import api.services.tool_management as tool_route
 
     tool = _http_tool_model(method="GET")
     monkeypatch.setattr(
@@ -718,7 +718,7 @@ def test_tool_test_route_is_registered():
 
 @pytest.mark.asyncio
 async def test_tool_rejects_non_http_api_tool(monkeypatch):
-    import api.routes.tool as tool_route
+    import api.services.tool_management as tool_route
 
     monkeypatch.setattr(
         tool_route.db_client,

@@ -98,6 +98,10 @@ export function CreateWorkflowButton() {
                         <div className="text-xs text-muted-foreground">AI generates a workflow from your description</div>
                     </div>
                 </DropdownMenuItem>
+                {/* "Build via Chat" (the standalone /workflow/gen-chat page) is
+                    intentionally not offered yet — the assistant is shipping first as
+                    the in-editor panel only. The page still exists and works; this is
+                    just the entry point being held back. */}
                 <DropdownMenuItem onClick={handleBlankCanvas} disabled={isCreating} className="cursor-pointer">
                     <LayoutTemplate className="w-4 h-4 mr-2" />
                     <div>

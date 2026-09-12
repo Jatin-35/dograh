@@ -27,6 +27,7 @@ from pydantic import ValidationError as PydanticValidationError
 
 from api.db import db_client
 from api.db.agent_trigger_client import TriggerPathConflictError
+from api.db.models import UserModel
 from api.enums import PostHogEvent
 from api.mcp_server.auth import authenticate_mcp_request
 from api.mcp_server.tracing import traced_tool
@@ -94,7 +95,21 @@ async def create_workflow(code: str) -> dict[str, Any]:
     - `bridge_error` — internal/transient; retry once, then surface it.
     """
     user = await authenticate_mcp_request()
+    return await create_workflow_for_user(code, user, source="mcp")
 
+
+async def create_workflow_for_user(
+    code: str, user: UserModel, *, source: str = "mcp"
+) -> dict[str, Any]:
+    """Shared implementation behind both the MCP tool above and the
+    in-product assistant (`api/services/workflow_gen/`).
+
+    Split out so both surfaces run the identical parse → validate → persist
+    pipeline with one error vocabulary, rather than drifting apart as two
+    parallel implementations. The MCP entry point's only extra job is
+    resolving `user` from the request's API key; a first-party caller
+    already has an authenticated user in hand. `source` tags analytics only.
+    """
     # 1. Parse + spec-validate via the Node TS validator.
     try:
         parsed = await parse_code(code)
@@ -165,7 +180,7 @@ async def create_workflow(code: str) -> dict[str, Any]:
         properties={
             "workflow_id": workflow.id,
             "workflow_name": workflow.name,
-            "source": "mcp",
+            "source": source,
             "organization_id": user.selected_organization_id,
         },
     )

@@ -641,6 +641,90 @@ class WorkflowRunTextSessionModel(Base):
     __table_args__ = (Index("ix_workflow_run_text_sessions_updated_at", "updated_at"),)
 
 
+
+class WorkflowGenChatSessionModel(Base):
+    """A conversation with the in-product AI assistant (chat-driven authoring
+    over Dograh's own MCP tools). Distinct from WorkflowRunTextSessionModel,
+    which is keyed on a workflow_run that already exists — a session here can
+    start before any workflow does.
+    """
+
+    __tablename__ = "workflow_gen_chat_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_uuid = Column(
+        String,
+        nullable=False,
+        unique=True,
+        index=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    organization_id = Column(
+        Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    workflow_id = Column(
+        Integer, ForeignKey("workflows.id", ondelete="SET NULL"), nullable=True
+    )
+    # Set once at creation, never changed afterward. True only for sessions
+    # created via the per-workflow entry point (ensure_workflow_gen_chat_session,
+    # which sets workflow_id from the start). A standalone session's
+    # `workflow_id` starts null but gets attached once it successfully builds
+    # a workflow — so `workflow_id IS NULL` is NOT a stable way to tell
+    # "standalone" sessions apart for the thread-history sidebar; this flag is.
+    is_workflow_scoped = Column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    # Short human-readable label for the thread-history sidebar (standalone
+    # sessions only) — derived from the first user message the first time
+    # one is sent, never overwritten afterwards. Null for per-workflow
+    # sessions (they aren't listed in that sidebar) and for standalone
+    # sessions that haven't had a first message yet.
+    title = Column(String, nullable=True)
+    revision = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    # Full OpenAI-format transcript (system/user/assistant/tool messages,
+    # including tool_calls and their results) — a single JSON blob is the
+    # right amount of structure for v1; split into normalized entities only
+    # once streaming/cancellation/retrying/history-browsing are real needs.
+    messages = Column(
+        JSON,
+        nullable=False,
+        default=list,
+        server_default=text("'[]'::json"),
+    )
+    # {action_id, tool_call_id, action_type, arguments, sibling_call_ids} for
+    # a mutating tool call (create_workflow, save_workflow, create_tool) the
+    # agent has proposed but not yet executed — null once resolved. Persisted
+    # the instant it's proposed (before the SSE approval frame reaches the
+    # client) so it survives a worker restart or dropped connection; `/confirm`
+    # is idempotent against `action_id` (see agent_loop.py, session_service.py).
+    pending_action = Column(JSON, nullable=True)
+    status = Column(
+        String, nullable=False, default="idle", server_default=text("'idle'")
+    )  # idle | running | awaiting_confirmation | error
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+    organization = relationship("OrganizationModel")
+    created_by_user = relationship("UserModel")
+    workflow = relationship("WorkflowModel")
+
+    __table_args__ = (
+        Index("ix_workflow_gen_chat_sessions_organization_id", "organization_id"),
+        # One canonical persisted session per workflow — DB-enforced, not
+        # just an application convention (ensure_workflow_gen_chat_session).
+        Index(
+            "ux_workflow_gen_chat_sessions_workflow_id",
+            "workflow_id",
+            unique=True,
+            postgresql_where=text("workflow_id IS NOT NULL"),
+        ),
+    )
+
 class OrganizationUsageCycleModel(Base):
     """
     This model is used to track reporting aggregates for an organization for a given

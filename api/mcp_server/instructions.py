@@ -119,3 +119,13 @@ A failed `save_workflow` / `create_workflow` returns a result with `saved`/`crea
 - Omit `position`; the server reconciles positions against the previous saved workflow and lays out new nodes automatically.
 - Add nodes in call-flow order (start → intermediate → end) so the generated code reads top-to-bottom, with all edges after all nodes.
 """
+
+_GRAMMAR_HEADING = "## Allowed source shape"
+
+# The authoring-grammar half of the guide above (everything from the grammar
+# heading down), sliced out rather than copied so the in-product assistant
+# (`api/services/workflow_gen/system_prompt.py`) teaches the model exactly
+# the grammar this server's parser accepts. Editing the guide updates both.
+# The preamble is deliberately excluded: it describes an external client's
+# orchestration, which the in-product assistant handles differently.
+WORKFLOW_SOURCE_GRAMMAR = _GRAMMAR_HEADING + DOGRAH_MCP_INSTRUCTIONS.split(_GRAMMAR_HEADING, 1)[1]

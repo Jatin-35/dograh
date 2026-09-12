@@ -32,7 +32,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
 from api.constants import REDIS_URL
-from api.mcp_server import mcp
+from api.mcp_server.asgi import mcp_app
 from api.routes.main import router as main_router
 from api.services.pipecat.tracing_config import (
     handle_langfuse_sync,
@@ -46,8 +46,6 @@ from api.services.worker_sync.protocol import WorkerSyncEventType
 from api.tasks.arq import get_arq_redis
 
 API_PREFIX = "/api/v1"
-
-mcp_app = mcp.http_app(path="/", stateless_http=True)
 
 
 @asynccontextmanager

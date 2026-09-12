@@ -35,6 +35,7 @@ export async function GET() {
   let authProvider = "local";
   let turnEnabled = false;
   let forceTurnRelay = false;
+  let workflowGenEnabled = false;
   let tunnelUrl: string | null = null;
   let backendApiEndpoint: string | null = null;
   let backendStatus: "reachable" | "unreachable" = "unreachable";
@@ -55,6 +56,7 @@ export async function GET() {
       authProvider = data.auth_provider;
       turnEnabled = Boolean(data.turn_enabled);
       forceTurnRelay = Boolean(data.force_turn_relay);
+      workflowGenEnabled = Boolean(data.workflow_gen_enabled);
       tunnelUrl = data.tunnel_url ?? null;
       backendApiEndpoint =
         typeof data.backend_api_endpoint === "string" &&
@@ -76,6 +78,7 @@ export async function GET() {
     authProvider,
     turnEnabled,
     forceTurnRelay,
+    workflowGenEnabled,
     tunnelUrl,
     backendApiEndpoint,
     backend: {
