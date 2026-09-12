@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 import aiohttp
 from fastapi import HTTPException, WebSocketDisconnect
 from loguru import logger
+from pipecat.frames.frames import OutputTransportMessageUrgentFrame
 
 from api.enums import WorkflowRunMode
 from api.services.telephony.base import (
@@ -24,6 +25,8 @@ from api.services.telephony.base import (
 )
 from api.utils.common import get_backend_endpoints
 from api.utils.telephony_address import normalize_telephony_address
+
+from .transport import get_active_call, unregister_active_call
 
 if TYPE_CHECKING:
     from fastapi import WebSocket
@@ -441,15 +444,22 @@ class VoiceLinkProvider(TelephonyProvider):
                 f"stream_sid={stream_sid}, call_sid={call_sid}"
             )
 
-            await run_pipeline_telephony(
-                websocket,
-                provider_name=self.PROVIDER_NAME,
-                workflow_id=workflow_id,
-                workflow_run_id=workflow_run_id,
-                organization_id=organization_id,
-                call_id=call_sid or stream_sid,
-                transport_kwargs={"stream_id": stream_sid, "call_id": call_sid},
-            )
+            call_key = call_sid or stream_sid
+            try:
+                await run_pipeline_telephony(
+                    websocket,
+                    provider_name=self.PROVIDER_NAME,
+                    workflow_id=workflow_id,
+                    workflow_run_id=workflow_run_id,
+                    organization_id=organization_id,
+                    call_id=call_key,
+                    transport_kwargs={"stream_id": stream_sid, "call_id": call_sid},
+                )
+            finally:
+                # create_transport() (transport.py) registered the live output
+                # transport under this same key so transfer_call() could reach
+                # it; drop it now that the call is over.
+                unregister_active_call(call_key)
 
             logger.info(f"[run {workflow_run_id}] VoiceLink pipeline completed")
 
@@ -616,23 +626,130 @@ class VoiceLinkProvider(TelephonyProvider):
         **kwargs: Any,
     ) -> Dict[str, Any]:
         """
-        VoiceLink call transfers are not implemented yet.
+        Best-effort VoiceLink call transfer over the call's live media socket.
 
-        VoiceLink supports a native ``transfer`` WebSocket event
-        (``{"event": "transfer", "target": <number>}``) which can back a
-        future implementation.
+        UNVERIFIED AGAINST A REAL CALL. VoiceLink's documented protocol (what
+        little of it exists) never describes a provider-facing "transfer"
+        request; the only lead is that VoiceLink's own inbound events include
+        a ``transfer`` event (see ``serializers.py``'s ``deserialize()``),
+        which this codebase currently only logs. This method sends the
+        mirror-image message —
+        ``{"event": "transfer", "stream_sid": ..., "call_sid": ...,
+        "target": <destination>}`` — over the same live WebSocket, on the
+        unconfirmed assumption VoiceLink accepts it as a blind-transfer
+        request. There is no confirmation anywhere that VoiceLink actually
+        acts on this; it must be checked against one real transfer attempt
+        before being trusted.
+
+        Unlike Twilio (new outbound leg + conference) or ARI (new native
+        bridge channel), VoiceLink has no REST call-control API for transfers
+        at all. The only lead this codebase has is a WebSocket event on the
+        call's *existing* live connection, which this method reaches through
+        an in-process registry populated by ``transport.py`` (see
+        ``register_active_call``/``get_active_call``) since the provider
+        instance ``transfer_call`` runs on is a fresh, disconnected one built
+        purely from stored credentials.
+
+        ``conference_name`` is not used to build a conference (VoiceLink has
+        none) — the caller (``pipecat_engine_custom_tools.py``) builds it as
+        ``f"transfer-{original_call_sid}"``, so it doubles as the only way to
+        recover this call's identifier without changing that shared caller.
+
+        Because this is a blind transfer/redirect (not a new leg we can
+        monitor), there is no way to observe whether the destination actually
+        answered. The returned status is "initiated" only — never a
+        fabricated "completed"/"answered" confirmation. The caller
+        (``call_transfer_manager``) will simply time out waiting for a
+        completion event that VoiceLink has no channel to send, and the LLM
+        will report "taking longer than expected" to the caller. This is the
+        honest behavior given what we can actually confirm.
+
+        Args:
+            destination: The destination phone number.
+            transfer_id: Unique identifier for tracking this transfer
+                (not sent to VoiceLink — there is no callback channel for it
+                to correlate against).
+            conference_name: Not a real conference for VoiceLink; used only
+                to recover the original call's identifier (see above).
+            timeout: Unused — VoiceLink gives us no way to time out a
+                request it may or may not have acted on.
+            **kwargs: Unused.
+
+        Returns:
+            Dict containing:
+                - call_sid: The original call's identifier (there is no new
+                  leg to identify)
+                - status: "initiated" — best-effort only, never confirmed
+                - provider: "voicelink"
+                - raw_response: The exact message sent over the WebSocket
 
         Raises:
-            NotImplementedError: VoiceLink call transfers are yet to be
-                implemented.
+            ValueError: If provider configuration is invalid, or
+                ``conference_name`` doesn't carry a recoverable call id.
+            Exception: If no live connection is registered for this call
+                (e.g. it already ended, or the registry lookup key doesn't
+                match what VoiceLink actually used for this call).
         """
-        raise NotImplementedError("VoiceLink provider does not support call transfers")
+        if not self.validate_config():
+            raise ValueError("VoiceLink provider not properly configured")
+
+        prefix = "transfer-"
+        if not conference_name.startswith(prefix):
+            raise ValueError(
+                f"Unexpected conference_name shape for VoiceLink transfer: "
+                f"{conference_name!r} (expected {prefix!r} prefix)"
+            )
+        call_key = conference_name[len(prefix) :]
+        if not call_key or call_key == "None":
+            raise ValueError(
+                "Could not recover the original call id from conference_name "
+                f"{conference_name!r} — workflow_run.gathered_context['call_id'] "
+                "was likely unset when the transfer was requested"
+            )
+
+        active_call = get_active_call(call_key)
+        if active_call is None:
+            raise Exception(
+                f"No live VoiceLink connection registered for call {call_key!r} — "
+                "the call may have already ended, or its media socket wasn't "
+                "registered under this identifier"
+            )
+
+        message = {
+            "event": "transfer",
+            "stream_sid": active_call.stream_sid,
+            "call_sid": active_call.call_sid,
+            "target": normalize_customer_number(destination) or destination,
+        }
+
+        logger.info(
+            f"[VoiceLink Transfer] Sending best-effort transfer event for "
+            f"transfer_id={transfer_id} call={call_key} "
+            f"(NOT confirmed to be acted on by VoiceLink): {message}"
+        )
+
+        await active_call.output_transport.queue_frame(
+            OutputTransportMessageUrgentFrame(message=message)
+        )
+
+        return {
+            "call_sid": call_key,
+            "status": "initiated",
+            "provider": self.PROVIDER_NAME,
+            "raw_response": message,
+        }
 
     def supports_transfers(self) -> bool:
         """
-        VoiceLink does not support call transfers yet.
+        VoiceLink supports a best-effort transfer over the live call socket.
+
+        The plumbing to reach the live connection is real and complete (see
+        ``transfer_call``): the message genuinely reaches VoiceLink over the
+        call's WebSocket. What is NOT confirmed is whether VoiceLink acts on
+        it — that requires verification against a real live transfer.
 
         Returns:
-            False - VoiceLink provider does not support call transfers
+            True - VoiceLink provider can attempt call transfers, on a
+                best-effort, unconfirmed basis.
         """
-        return False
+        return True

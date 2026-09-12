@@ -3,7 +3,9 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import HTTPException
+from pipecat.frames.frames import OutputTransportMessageUrgentFrame
 
+from api.services.telephony.providers.voicelink import transport as voicelink_transport
 from api.services.telephony.providers.voicelink.provider import (
     VoiceLinkProvider,
     normalize_customer_number,
@@ -351,3 +353,120 @@ def test_validate_config_rejects_missing_auth():
 
 def test_validate_config_rejects_missing_did():
     assert _provider(did_number=None).validate_config() is False
+
+
+# ======== CALL TRANSFER ========
+
+
+@pytest.fixture(autouse=True)
+def _clear_active_call_registry():
+    """Prevent state from leaking between tests via the module-level registry."""
+    voicelink_transport._active_calls.clear()
+    yield
+    voicelink_transport._active_calls.clear()
+
+
+def test_supports_transfers_is_true():
+    # Plumbing to reach the live socket is real and complete; whether
+    # VoiceLink acts on the message is unconfirmed (see transfer_call docstring).
+    assert _provider().supports_transfers() is True
+
+
+@pytest.mark.asyncio
+async def test_transfer_call_sends_transfer_event_over_registered_live_transport():
+    provider = _provider()
+
+    output_transport = AsyncMock()
+    voicelink_transport.register_active_call(
+        "5b2f9c1e-call-sid",
+        output_transport,
+        stream_sid="MZ-stream-1",
+        call_sid="5b2f9c1e-call-sid",
+    )
+
+    result = await provider.transfer_call(
+        destination="+91 73404 00524",
+        transfer_id="transfer-uuid-1",
+        conference_name="transfer-5b2f9c1e-call-sid",
+        timeout=30,
+    )
+
+    output_transport.queue_frame.assert_awaited_once()
+    (sent_frame,), _ = output_transport.queue_frame.await_args
+    assert isinstance(sent_frame, OutputTransportMessageUrgentFrame)
+    assert sent_frame.message == {
+        "event": "transfer",
+        "stream_sid": "MZ-stream-1",
+        "call_sid": "5b2f9c1e-call-sid",
+        # target is normalized to the bare local number, matching add_lead's
+        # customer_number convention.
+        "target": "7340400524",
+    }
+
+    assert result["status"] == "initiated"
+    assert result["provider"] == "voicelink"
+    assert result["call_sid"] == "5b2f9c1e-call-sid"
+
+
+@pytest.mark.asyncio
+async def test_transfer_call_raises_when_no_live_connection_registered():
+    provider = _provider()
+
+    with pytest.raises(Exception, match="No live VoiceLink connection registered"):
+        await provider.transfer_call(
+            destination="7340400524",
+            transfer_id="transfer-uuid-2",
+            conference_name="transfer-unregistered-call-sid",
+            timeout=30,
+        )
+
+
+@pytest.mark.asyncio
+async def test_transfer_call_raises_on_unexpected_conference_name_shape():
+    provider = _provider()
+
+    with pytest.raises(ValueError, match="Unexpected conference_name shape"):
+        await provider.transfer_call(
+            destination="7340400524",
+            transfer_id="transfer-uuid-3",
+            conference_name="not-a-transfer-name",
+            timeout=30,
+        )
+
+
+@pytest.mark.asyncio
+async def test_transfer_call_raises_when_original_call_sid_missing():
+    provider = _provider()
+
+    # Mirrors pipecat_engine_custom_tools.py building
+    # conference_name = f"transfer-{original_call_sid}" when
+    # gathered_context["call_id"] was never populated.
+    with pytest.raises(ValueError, match="Could not recover the original call id"):
+        await provider.transfer_call(
+            destination="7340400524",
+            transfer_id="transfer-uuid-4",
+            conference_name="transfer-None",
+            timeout=30,
+        )
+
+
+def test_register_active_call_transport_lifecycle():
+    output_transport = object()
+    voicelink_transport.register_active_call(
+        "call-key-1", output_transport, stream_sid="stream-1", call_sid="call-key-1"
+    )
+
+    active = voicelink_transport.get_active_call("call-key-1")
+    assert active is not None
+    assert active.output_transport is output_transport
+    assert active.stream_sid == "stream-1"
+
+    voicelink_transport.unregister_active_call("call-key-1")
+    assert voicelink_transport.get_active_call("call-key-1") is None
+
+
+def test_register_active_call_ignores_empty_key():
+    voicelink_transport.register_active_call(
+        "", object(), stream_sid="stream-1", call_sid=""
+    )
+    assert voicelink_transport.get_active_call("") is None
