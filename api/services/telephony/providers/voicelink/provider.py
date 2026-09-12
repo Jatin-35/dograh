@@ -645,20 +645,18 @@ class VoiceLinkProvider(TelephonyProvider):
         **kwargs: Any,
     ) -> Dict[str, Any]:
         """
-        Best-effort VoiceLink call transfer over the call's live media socket.
+        VoiceLink call transfer over the call's live media socket.
 
-        UNVERIFIED AGAINST A REAL CALL. VoiceLink's documented protocol (what
-        little of it exists) never describes a provider-facing "transfer"
-        request; the only lead is that VoiceLink's own inbound events include
-        a ``transfer`` event (see ``serializers.py``'s ``deserialize()``),
-        which this codebase currently only logs. This method sends the
-        mirror-image message —
+        CONFIRMED WORKING against a real live call (2026-09-12). VoiceLink's
+        documented protocol (what little of it exists) never describes a
+        provider-facing "transfer" request; the only lead was that
+        VoiceLink's own inbound events include a ``transfer`` event (see
+        ``serializers.py``'s ``deserialize()``), which this codebase only
+        logs. This method sends the mirror-image message —
         ``{"event": "transfer", "stream_sid": ..., "call_sid": ...,
-        "target": <destination>}`` — over the same live WebSocket, on the
-        unconfirmed assumption VoiceLink accepts it as a blind-transfer
-        request. There is no confirmation anywhere that VoiceLink actually
-        acts on this; it must be checked against one real transfer attempt
-        before being trusted.
+        "target": <destination>}`` — over the same live WebSocket, and
+        VoiceLink does act on it as a blind-transfer request, confirmed by
+        an actual outbound call transferring successfully end-to-end.
 
         Unlike Twilio (new outbound leg + conference) or ARI (new native
         bridge channel), VoiceLink has no REST call-control API for transfers
@@ -675,13 +673,15 @@ class VoiceLinkProvider(TelephonyProvider):
         recover this call's identifier without changing that shared caller.
 
         Because this is a blind transfer/redirect (not a new leg we can
-        monitor), there is no way to observe whether the destination actually
-        answered. The returned status is "initiated" only — never a
-        fabricated "completed"/"answered" confirmation. The caller
-        (``call_transfer_manager``) will simply time out waiting for a
+        monitor), there is still no way to observe whether the destination
+        actually answered on any *given* transfer — that part is a structural
+        limitation, not an open question. The returned status is "initiated"
+        only — never a fabricated "completed"/"answered" confirmation. The
+        caller (``call_transfer_manager``) will simply time out waiting for a
         completion event that VoiceLink has no channel to send, and the LLM
         will report "taking longer than expected" to the caller. This is the
-        honest behavior given what we can actually confirm.
+        honest behavior given what we can actually observe per-call, even
+        though the transfer mechanism itself is confirmed to work.
 
         Args:
             destination: The destination phone number.
@@ -698,7 +698,10 @@ class VoiceLinkProvider(TelephonyProvider):
             Dict containing:
                 - call_sid: The original call's identifier (there is no new
                   leg to identify)
-                - status: "initiated" — best-effort only, never confirmed
+                - status: "initiated" — the mechanism is confirmed to work,
+                  but per-call completion still can't be observed (no
+                  callback channel), so this is never a fabricated
+                  "completed"/"answered" status
                 - provider: "voicelink"
                 - raw_response: The exact message sent over the WebSocket
 
@@ -742,9 +745,8 @@ class VoiceLinkProvider(TelephonyProvider):
         }
 
         logger.info(
-            f"[VoiceLink Transfer] Sending best-effort transfer event for "
-            f"transfer_id={transfer_id} call={call_key} "
-            f"(NOT confirmed to be acted on by VoiceLink): {message}"
+            f"[VoiceLink Transfer] Sending transfer event for "
+            f"transfer_id={transfer_id} call={call_key}: {message}"
         )
 
         await active_call.output_transport.queue_frame(
@@ -760,15 +762,15 @@ class VoiceLinkProvider(TelephonyProvider):
 
     def supports_transfers(self) -> bool:
         """
-        VoiceLink supports a best-effort transfer over the live call socket.
+        VoiceLink supports call transfer over the live call socket.
 
-        The plumbing to reach the live connection is real and complete (see
-        ``transfer_call``): the message genuinely reaches VoiceLink over the
-        call's WebSocket. What is NOT confirmed is whether VoiceLink acts on
-        it — that requires verification against a real live transfer.
+        Confirmed working against a real live call (2026-09-12): the
+        transfer message reaches VoiceLink over the call's WebSocket, and
+        VoiceLink acts on it as a blind transfer. Per-call completion still
+        can't be observed (VoiceLink has no callback channel for it — see
+        ``transfer_call``'s docstring), but the mechanism itself is proven.
 
         Returns:
-            True - VoiceLink provider can attempt call transfers, on a
-                best-effort, unconfirmed basis.
+            True - VoiceLink provider supports call transfers.
         """
         return True
