@@ -7,11 +7,13 @@ import {
     useExternalStoreRuntime,
 } from "@assistant-ui/react";
 import { ArrowUp, Loader2, Sparkles, X } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 
+import { BrandLogo } from "@/components/BrandLogo";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+import { AssistantWave } from "./AssistantWave";
 import type { WorkflowGenThreadItem } from "./types";
 import { useWorkflowGenChatSession, type WorkflowGenChatSessionState } from "./useWorkflowGenChatSession";
 import { WorkflowGenActionsProvider, WorkflowGenThreadView } from "./WorkflowGenThreadView";
@@ -38,6 +40,9 @@ interface WorkflowGenChatPanelProps {
      * When omitted — the per-workflow embedded panel's normal usage — the
      * component instantiates its own session exactly as before. */
     session?: WorkflowGenChatSessionState;
+    /** Notifies the caller while a turn is in flight, so the editor header
+     * can show a working indicator even with the panel closed. */
+    onBusyChange?: (busy: boolean) => void;
 }
 
 // Opened from inside a workflow's editor, the assistant's job is changing the
@@ -174,7 +179,7 @@ function ChatComposer({ placeholder, sendingMessage, statusMessage }: ChatCompos
     );
 }
 
-export function WorkflowGenChatPanel({ workflowId, onClose, className, session: externalSession }: WorkflowGenChatPanelProps) {
+export function WorkflowGenChatPanel({ workflowId, onClose, className, session: externalSession, onBusyChange }: WorkflowGenChatPanelProps) {
     // `enabled: externalSession == null` — when a caller hands us a session
     // it already instantiated (the standalone page), skip this instance's
     // own auto-start-or-restore effect entirely rather than spinning up an
@@ -194,6 +199,12 @@ export function WorkflowGenChatPanel({ workflowId, onClose, className, session: 
     } = externalSession ?? ownSession;
 
     const busy = sendingMessage || confirming;
+
+    // Surfaced so the editor header can show a working indicator while the
+    // panel is collapsed — the session state lives in here, not up there.
+    useEffect(() => {
+        onBusyChange?.(busy);
+    }, [busy, onBusyChange]);
 
     const runtime = useExternalStoreRuntime<WorkflowGenThreadItem>({
         messages: thread,
@@ -224,8 +235,9 @@ export function WorkflowGenChatPanel({ workflowId, onClose, className, session: 
         <div className={cn("flex h-full flex-col bg-background", className)}>
             <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
                 <div className="flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-muted-foreground" />
+                    <BrandLogo mark className="h-4" />
                     <span className="text-sm font-medium">AI Assistant</span>
+                    {busy ? <AssistantWave className="ml-1 text-muted-foreground" /> : null}
                 </div>
                 {onClose ? (
                     <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={onClose}>

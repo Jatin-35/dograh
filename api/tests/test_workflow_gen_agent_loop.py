@@ -182,6 +182,46 @@ async def test_create_tool_gives_up_after_max_repair_attempts_with_one_error(mon
 
 
 @pytest.mark.asyncio
+async def test_the_assistant_knows_which_workflow_it_is_open_inside(monkeypatch):
+    """Opened from a workflow's editor, it must act on that workflow rather
+    than asking the user which one they mean — they're looking at it."""
+    seen_prompts: list[str] = []
+
+    async def _fake_complete(messages, tools, **kwargs):
+        seen_prompts.append(messages[0]["content"])
+        return _FakeCompletion(_FakeMessage(content="Sure."))
+
+    class _FakeToolbox:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    monkeypatch.setattr(agent_loop, "WorkflowGenToolbox", _FakeToolbox)
+    monkeypatch.setattr(agent_loop.llm_client, "complete", _fake_complete)
+
+    async for _ in agent_loop.run_turn(
+        organization_id=1,
+        user_id=1,
+        prior_messages=[],
+        user_message="add a transfer-call tool to the closing node",
+        workflow_id=6,
+    ):
+        pass
+
+    prompt = seen_prompts[0]
+    assert "workflow **6**" in prompt
+    assert "get_workflow_code(6)" in prompt
+    assert "Never ask which workflow" in prompt
+
+    # The standalone page has no workflow yet, so it must NOT claim one.
+    seen_prompts.clear()
+    async for _ in agent_loop.run_turn(
+        organization_id=1, user_id=1, prior_messages=[], user_message="build me an agent"
+    ):
+        pass
+    assert "The workflow you are working on" not in seen_prompts[0]
+
+
+@pytest.mark.asyncio
 async def test_credential_secret_never_reaches_the_approval_card(monkeypatch):
     """The approval payload is persisted and re-sent to the browser every
     time the thread reopens, so it must carry a masked secret — while the

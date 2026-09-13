@@ -1,7 +1,7 @@
 "use client";
 
 import { ReactFlowInstance } from "@xyflow/react";
-import { AlertCircle, ArrowLeft, Bot, Clipboard, Copy, Download, Eye, History, LoaderCircle, Menu, MoreVertical, Pencil, Phone, Rocket, Sparkles } from "lucide-react";
+import { AlertCircle, ArrowLeft, Bot, Clipboard, Copy, Download, Eye, History, LoaderCircle, Menu, MoreVertical, Pencil, Phone, Rocket } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
@@ -11,6 +11,7 @@ import {
     publishWorkflowApiV1WorkflowWorkflowIdPublishPost,
 } from "@/client/sdk.gen";
 import { WorkflowError } from "@/client/types.gen";
+import { BrandLogo } from "@/components/BrandLogo";
 import { FlowEdge, FlowNode } from "@/components/flow/types";
 import { GitHubStarBadge } from "@/components/layout/GitHubStarBadge";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ import {
     PopoverTrigger,
 } from "@/components/ui/popover";
 import { useSidebar } from "@/components/ui/sidebar";
+import { AssistantWave } from "@/components/workflow-gen-chat/AssistantWave";
 import { useAppConfig } from "@/context/AppConfigContext";
 
 interface WorkflowEditorHeaderProps {
@@ -41,6 +43,8 @@ interface WorkflowEditorHeaderProps {
     onPhoneCallClick: () => void;
     onTestAgentClick: () => void;
     onAiAssistantClick: () => void;
+    /** Drives the working indicator on the Assistant button. */
+    isAiAssistantBusy?: boolean;
     onHistoryClick: () => void;
     activeVersionLabel?: string;
     isViewingHistoricalVersion: boolean;
@@ -59,6 +63,7 @@ export const WorkflowEditorHeader = ({
     onPhoneCallClick,
     onTestAgentClick,
     onAiAssistantClick,
+    isAiAssistantBusy = false,
     onHistoryClick,
     activeVersionLabel,
     isViewingHistoricalVersion,
@@ -435,11 +440,17 @@ export const WorkflowEditorHeader = ({
                 {config?.workflowGenEnabled ? (
                     <Button
                         variant="outline"
-                        className="flex items-center gap-2 bg-transparent border-[#3a3a3a] hover:bg-[#2a2a2a] text-white"
+                        size="sm"
+                        className="flex items-center gap-1.5 bg-transparent border-[#3a3a3a] hover:bg-[#2a2a2a] text-white"
                         onClick={onAiAssistantClick}
+                        title={isAiAssistantBusy ? "AI Assistant — working…" : "AI Assistant"}
                     >
-                        <Sparkles className="w-4 h-4" />
-                        AI Assistant
+                        {isAiAssistantBusy ? (
+                            <AssistantWave />
+                        ) : (
+                            <BrandLogo mark className="h-4" />
+                        )}
+                        Assistant
                     </Button>
                 ) : null}
 

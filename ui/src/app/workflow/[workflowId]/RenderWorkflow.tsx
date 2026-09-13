@@ -83,6 +83,7 @@ function RenderWorkflow({
     const [isTesterRailOpen, setIsTesterRailOpen] = useState(true);
     const [isTesterSheetOpen, setIsTesterSheetOpen] = useState(false);
     const [isAssistantRailOpen, setIsAssistantRailOpen] = useState(false);
+    const [isAssistantBusy, setIsAssistantBusy] = useState(false);
     const [isAssistantSheetOpen, setIsAssistantSheetOpen] = useState(false);
     const [isDesktopViewport, setIsDesktopViewport] = useState(false);
     const [versions, setVersions] = useState<WorkflowVersion[]>([]);
@@ -508,6 +509,7 @@ function RenderWorkflow({
                     onPhoneCallClick={() => setIsPhoneCallDialogOpen(true)}
                     onTestAgentClick={handleOpenTester}
                     onAiAssistantClick={handleOpenAssistant}
+                    isAiAssistantBusy={isAssistantBusy}
                     onHistoryClick={handleOpenVersionPanel}
                     activeVersionLabel={activeVersionLabel}
                     isViewingHistoricalVersion={isViewingHistoricalVersion}
@@ -691,6 +693,7 @@ function RenderWorkflow({
                                 <WorkflowGenChatPanel
                                     workflowId={workflowId}
                                     onClose={() => setIsAssistantRailOpen(false)}
+                                    onBusyChange={setIsAssistantBusy}
                                 />
                             </aside>
                         )}
@@ -712,7 +715,7 @@ function RenderWorkflow({
 
                     <Sheet open={isAssistantSheetOpen} onOpenChange={setIsAssistantSheetOpen}>
                         <SheetContent side="right" className="w-full max-w-none p-0 sm:max-w-xl xl:hidden">
-                            <WorkflowGenChatPanel workflowId={workflowId} />
+                            <WorkflowGenChatPanel workflowId={workflowId} onBusyChange={setIsAssistantBusy} />
                         </SheetContent>
                     </Sheet>
                 </div>

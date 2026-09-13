@@ -148,6 +148,9 @@ async def append_user_turn_and_run(
             user_id=user_id,
             prior_messages=chat_session.messages,
             user_message=text,
+            # Tells the assistant which workflow the user has open, so it acts
+            # on it instead of asking them to pick one.
+            workflow_id=chat_session.workflow_id,
         ):
             has_pending = step.event["type"] == "approval"
             # Once the workflow gets a real name (i.e. it's been built), the
@@ -204,6 +207,7 @@ async def confirm_pending_action(
             prior_messages=chat_session.messages,
             pending_action=current_pending,
             approve=approve,
+            workflow_id=chat_session.workflow_id,
         ):
             # `execute_confirmed_action` resolves `current_pending` and then
             # resumes the agent loop for any post-build follow-up — which can

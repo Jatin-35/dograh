@@ -372,18 +372,45 @@ def _summarize_mutating_call(
     return f"Ready to run {tool_name}."
 
 
+def _system_prompt(workflow_id: int | None) -> str:
+    """The base prompt, plus which workflow this session is attached to.
+
+    Without this the assistant opens inside a workflow's editor and still
+    asks which workflow to change — it can list them, but has no idea which
+    one the user is looking at.
+    """
+    from api.services.workflow_gen.system_prompt import WORKFLOW_GEN_SYSTEM_PROMPT
+
+    if workflow_id is None:
+        return WORKFLOW_GEN_SYSTEM_PROMPT
+    return (
+        WORKFLOW_GEN_SYSTEM_PROMPT
+        + f"""
+## The workflow you are working on
+
+This conversation is open inside workflow **{workflow_id}**'s editor. The user \
+is looking at it right now, so "this workflow", "the flow", "this agent", or a \
+bare node name always means workflow {workflow_id}.
+
+Never ask which workflow to change, and never list workflows to choose from — \
+you already know. Call `get_workflow_code({workflow_id})` to see its current \
+state, including the real node names, instead of asking the user to confirm \
+them. Only touch a different workflow if the user names one explicitly.
+"""
+    )
+
+
 async def run_turn(
     *,
     organization_id: int,
     user_id: int | None,
     prior_messages: list[dict[str, Any]],
     user_message: str,
+    workflow_id: int | None = None,
 ) -> AsyncIterator[LoopStep]:
-    from api.services.workflow_gen.system_prompt import WORKFLOW_GEN_SYSTEM_PROMPT
-
     toolbox = WorkflowGenToolbox(organization_id, user_id)
     messages: list[dict[str, Any]] = [
-        {"role": "system", "content": WORKFLOW_GEN_SYSTEM_PROMPT},
+        {"role": "system", "content": _system_prompt(workflow_id)},
         *prior_messages,
         {"role": "user", "content": user_message},
     ]
@@ -522,11 +549,13 @@ async def execute_confirmed_action(
     prior_messages: list[dict[str, Any]],
     pending_action: dict[str, Any],
     approve: bool,
+    workflow_id: int | None = None,
 ) -> AsyncIterator[LoopStep]:
-    from api.services.workflow_gen.system_prompt import WORKFLOW_GEN_SYSTEM_PROMPT
-
     toolbox = WorkflowGenToolbox(organization_id, user_id)
-    messages: list[dict[str, Any]] = [{"role": "system", "content": WORKFLOW_GEN_SYSTEM_PROMPT}, *prior_messages]
+    messages: list[dict[str, Any]] = [
+        {"role": "system", "content": _system_prompt(workflow_id)},
+        *prior_messages,
+    ]
     tool_call_id = pending_action["tool_call_id"]
     tool_name = pending_action["action_type"]
     arguments = pending_action["arguments"]
@@ -557,7 +586,7 @@ async def execute_confirmed_action(
             yield step
         return
 
-    workflow_id: int | None = None
+    built_workflow_id: int | None = None
     succeeded = False
     last_errors: list[str] = []
     # Whether `tool_call_id`'s current value already has a `tool`-role
@@ -589,8 +618,8 @@ async def execute_confirmed_action(
             primary_responded = True
             _respond_siblings("Handled as part of the confirmed action.")
             if result.get("kind") in ("create_workflow", "save_workflow"):
-                workflow_id = result["id"]
-                yield _step(_workflow_ready(result), workflow_id=workflow_id)
+                built_workflow_id = result["id"]
+                yield _step(_workflow_ready(result), workflow_id=built_workflow_id)
             succeeded = True
             break
 
@@ -703,6 +732,6 @@ async def execute_confirmed_action(
 
     async for step in _run_loop(messages, toolbox=toolbox):
         step.messages = step.messages[1:]
-        if workflow_id and step.workflow_id is None:
-            step.workflow_id = workflow_id
+        if built_workflow_id and step.workflow_id is None:
+            step.workflow_id = built_workflow_id
         yield step
