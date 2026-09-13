@@ -699,6 +699,20 @@ class WorkflowGenChatSessionModel(Base):
     # client) so it survives a worker restart or dropped connection; `/confirm`
     # is idempotent against `action_id` (see agent_loop.py, session_service.py).
     pending_action = Column(JSON, nullable=True)
+    # The SSE events this session has emitted, in order — the same frames the
+    # browser consumed live. `messages` is the model's transcript and can't
+    # reconstruct what the user actually saw (the work-in-progress steps, the
+    # approval and result cards), so reopening a thread used to show plain
+    # text and nothing else. Replaying these rebuilds the thread exactly,
+    # through the same client-side handler that built it live. Capped at
+    # MAX_PERSISTED_EVENTS (oldest dropped) so a long session can't grow this
+    # blob without bound.
+    events = Column(
+        JSON,
+        nullable=False,
+        default=list,
+        server_default=text("'[]'::json"),
+    )
     status = Column(
         String, nullable=False, default="idle", server_default=text("'idle'")
     )  # idle | running | awaiting_confirmation | error

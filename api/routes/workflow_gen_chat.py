@@ -49,6 +49,9 @@ class WorkflowGenChatSessionResponse(BaseModel):
     session_uuid: str
     revision: int
     messages: list[dict[str, Any]]
+    # The SSE frames this session emitted, replayed by the client to rebuild
+    # the thread it originally showed (steps and cards included).
+    events: list[dict[str, Any]] = []
     pending_action: dict[str, Any] | None = None
     status: str
     workflow_id: int | None = None
@@ -68,6 +71,7 @@ def _build_response(
         session_uuid=chat_session.session_uuid,
         revision=chat_session.revision,
         messages=chat_session.messages or [],
+        events=chat_session.events or [],
         pending_action=chat_session.pending_action,
         status=chat_session.status,
         workflow_id=chat_session.workflow_id,

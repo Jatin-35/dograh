@@ -55,6 +55,15 @@ async def _reset_status_to_idle(session_id: int, organization_id: int) -> None:
         logger.exception(f"Failed to reset workflow_gen session {session_id} status")
 
 
+def _persistable(event: dict[str, Any]) -> dict[str, Any] | None:
+    """The frames worth replaying when a thread is reopened.
+
+    `done` is pure turn punctuation with nothing to render, and skipping it
+    keeps the log meaningfully shorter on a long thread.
+    """
+    return None if event.get("type") == "done" else event
+
+
 _TITLE_MAX_LEN = 60
 
 
@@ -142,6 +151,15 @@ async def append_user_turn_and_run(
         else None
     )
 
+    # The browser renders the user's own message locally the moment it's sent,
+    # so it never arrives as an SSE frame — record it here or a reopened thread
+    # would show the assistant's replies with nothing they were replying to.
+    await db_client.update_workflow_gen_chat_session(
+        session_id,
+        organization_id=organization_id,
+        append_event={"type": "user", "data": {"message": text}},
+    )
+
     try:
         async for step in agent_loop.run_turn(
             organization_id=organization_id,
@@ -168,6 +186,7 @@ async def append_user_turn_and_run(
                 workflow_id=step.workflow_id,
                 title=title,
                 agent_name=agent_name,
+                append_event=_persistable(step.event),
             )
             yield {"event": step.event, "revision": updated.revision}
     except Exception:
@@ -231,6 +250,7 @@ async def confirm_pending_action(
                 status=_status_for(step.event["type"], has_pending=has_pending),
                 workflow_id=step.workflow_id,
                 agent_name=agent_name,
+                append_event=_persistable(step.event),
             )
             yield {"event": step.event, "revision": updated.revision}
     except Exception:

@@ -9,6 +9,7 @@ import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+import { AssistantWave } from "./AssistantWave";
 import type { WorkflowGenErrorCode, WorkflowGenThreadItem } from "./types";
 
 const ENTRANCE = "animate-in fade-in-0 slide-in-from-bottom-2 duration-300";
@@ -155,6 +156,10 @@ export function ReviewActionToolUI({ args, result }: ToolCallMessagePartProps<Re
     // surrounding JSON envelope, so show it directly when present.
     const rawCode = args.definitionPreview?.code;
     const sourceCode = typeof rawCode === "string" ? rawCode : null;
+    // A plain-language summary of the edit, computed server-side against the
+    // stored workflow — far more useful for deciding than reading the source.
+    const rawChanges = args.definitionPreview?.changes;
+    const changes = Array.isArray(rawChanges) ? (rawChanges as string[]) : [];
 
     return (
         <div className={cn("overflow-hidden rounded-xl border border-border bg-card shadow-sm", ENTRANCE)}>
@@ -182,6 +187,17 @@ export function ReviewActionToolUI({ args, result }: ToolCallMessagePartProps<Re
                     ))}
                 </div>
             )}
+
+            {changes.length > 0 ? (
+                <ul className="space-y-1 border-t border-border/70 px-4 py-3 text-sm text-foreground/90">
+                    {changes.map((change, i) => (
+                        <li key={i} className="flex items-start gap-2">
+                            <span className="mt-[0.45rem] h-1 w-1 shrink-0 rounded-full bg-muted-foreground" />
+                            <span>{change}</span>
+                        </li>
+                    ))}
+                </ul>
+            ) : null}
 
             <details className="group border-t border-border/70 px-4 py-2">
                 <summary className="flex cursor-pointer select-none items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
@@ -246,6 +262,53 @@ export function ReportErrorToolUI({ args }: ToolCallMessagePartProps<ReportError
     );
 }
 
+interface ActivityStepsArgs {
+    steps: string[];
+    running: boolean;
+}
+
+/** Renders one turn's work as a compact, expandable activity log.
+ *
+ * Collapsed it shows the current step while running, or a one-line summary
+ * once finished — so a turn's history stays readable without burying the
+ * conversation in a step per line. */
+export function ActivityStepsToolUI({ args }: ToolCallMessagePartProps<ActivityStepsArgs, boolean>) {
+    const steps = args.steps ?? [];
+    if (steps.length === 0) return null;
+    const current = steps[steps.length - 1];
+
+    return (
+        <details className={cn("group rounded-lg border border-border/70 bg-muted/30", ENTRANCE)} open={args.running}>
+            <summary className="flex cursor-pointer select-none items-center gap-2 px-3 py-2 text-xs text-muted-foreground hover:text-foreground">
+                {args.running ? (
+                    <AssistantWave className="h-3 shrink-0" />
+                ) : (
+                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                )}
+                <span className="min-w-0 flex-1 truncate">
+                    {args.running ? current : `${steps.length} step${steps.length === 1 ? "" : "s"}`}
+                </span>
+                <ChevronDown className="h-3 w-3 shrink-0 transition-transform group-open:rotate-180" />
+            </summary>
+            <ol className="space-y-1.5 px-3 pb-2.5 pl-8 text-xs text-muted-foreground">
+                {steps.map((step, i) => {
+                    const isCurrent = args.running && i === steps.length - 1;
+                    return (
+                        <li key={`${step}-${i}`} className="flex items-center gap-2">
+                            {isCurrent ? (
+                                <AssistantWave className="h-2.5 shrink-0" />
+                            ) : (
+                                <CheckCircle2 className="h-3 w-3 shrink-0 opacity-60" />
+                            )}
+                            <span className={cn(isCurrent && "text-foreground")}>{step}</span>
+                        </li>
+                    );
+                })}
+            </ol>
+        </details>
+    );
+}
+
 function UserMessage() {
     return (
         <MessagePrimitive.Root className={cn("flex justify-end", ENTRANCE)}>
@@ -268,6 +331,7 @@ function AssistantMessage() {
                             reviewAction: ReviewActionToolUI,
                             workflowReady: WorkflowReadyToolUI,
                             reportError: ReportErrorToolUI,
+                            activitySteps: ActivityStepsToolUI,
                         },
                         Fallback: () => null,
                     },

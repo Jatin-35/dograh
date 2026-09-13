@@ -13,9 +13,15 @@ import type { WorkflowGenChatSessionResponse } from "@/client/types.gen";
 import { detailFromError } from "@/lib/apiError";
 import { useAuth } from "@/lib/auth";
 
+import {
+    appendStep,
+    applyThreadEvent,
+    settleSteps,
+    THINKING,
+    threadFromSession,
+} from "./threadState";
 import type {
     WorkflowGenEvent,
-    WorkflowGenRawMessage,
     WorkflowGenSseFrame,
     WorkflowGenThreadItem,
 } from "./types";
@@ -24,49 +30,6 @@ const STANDALONE_SESSION_STORAGE_KEY = "dograh:workflow-gen:standalone-session-i
 
 function getErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : "Something went wrong";
-}
-
-/** Reconstruct the thread from a session's persisted state on load. Only
- * user/assistant text messages are replayed as bubbles — tool-call
- * machinery and past workflow_ready cards aren't reconstructed from the raw
- * transcript (that's a live-SSE-only presentation, not stored separately);
- * the model's own follow-up summary text typically covers what happened. */
-function threadFromSession(session: WorkflowGenChatSessionResponse): WorkflowGenThreadItem[] {
-    const items: WorkflowGenThreadItem[] = [];
-    const messages = (session.messages ?? []) as unknown as WorkflowGenRawMessage[];
-
-    messages.forEach((message, index) => {
-        if (message.role === "user" && message.content) {
-            items.push({ id: `restored-${index}`, kind: "user", text: message.content });
-        } else if (message.role === "assistant" && message.content) {
-            items.push({ id: `restored-${index}`, kind: "assistant", text: message.content });
-        }
-    });
-
-    const pending = session.pending_action as
-        | {
-            action_id: string;
-            action_type: "create_workflow" | "save_workflow" | "create_tool" | "create_credential";
-            arguments?: Record<string, unknown>;
-            preview?: Record<string, unknown>;
-        }
-        | null
-        | undefined;
-    if (pending) {
-        items.push({
-            id: `pending-${pending.action_id}`,
-            kind: "approval",
-            actionId: pending.action_id,
-            actionType: pending.action_type,
-            summary: "Review the proposed action before it runs.",
-            // `preview` is the server-masked view; `arguments` holds raw
-            // values (including secrets) and must not be rendered.
-            definitionPreview: pending.preview ?? {},
-            resolved: false,
-        });
-    }
-
-    return items;
 }
 
 async function* parseSseStream(response: Response): AsyncGenerator<WorkflowGenSseFrame> {
@@ -184,43 +147,15 @@ export function useWorkflowGenChatSession({ workflowId, enabled = true }: UseWor
     const handleEvent = useCallback((event: WorkflowGenEvent) => {
         if (event.type === "status") {
             setStatusMessage(event.data.message);
+            // Append to the turn's step group so the work stays visible after
+            // the turn ends, rather than overwriting one disposable line.
+            setThread((prev) => appendStep(prev, event.data.message));
             return;
         }
         setStatusMessage(null);
-
-        if (event.type === "assistant") {
-            setThread((prev) => [...prev, { id: `assistant-${Date.now()}-${prev.length}`, kind: "assistant", text: event.data.message }]);
-        } else if (event.type === "approval") {
-            setThread((prev) => [
-                ...prev,
-                {
-                    id: `approval-${event.data.action_id}`,
-                    kind: "approval",
-                    actionId: event.data.action_id,
-                    actionType: event.data.action_type,
-                    summary: event.data.summary,
-                    definitionPreview: event.data.definition_preview,
-                    resolved: false,
-                },
-            ]);
-        } else if (event.type === "workflow_ready") {
-            setThread((prev) => [
-                ...prev.map((item) =>
-                    item.kind === "approval" && !item.resolved ? { ...item, resolved: true } : item,
-                ),
-                {
-                    id: `workflow-${event.data.workflow_id}-${Date.now()}`,
-                    kind: "workflow_ready",
-                    workflowId: event.data.workflow_id,
-                    name: event.data.name,
-                    nodeCount: event.data.node_count,
-                    edgeCount: event.data.edge_count,
-                    url: event.data.url,
-                },
-            ]);
-        } else if (event.type === "error") {
-            setThread((prev) => [...prev, { id: `error-${Date.now()}`, kind: "error", code: event.data.code, text: event.data.message }]);
-        }
+        // Any non-status event means the turn produced something, so the
+        // steps that led here are finished.
+        setThread((prev) => applyThreadEvent(settleSteps(prev), event, `live-${Date.now()}`));
     }, []);
 
     const streamFrom = useCallback(
@@ -252,7 +187,7 @@ export function useWorkflowGenChatSession({ workflowId, enabled = true }: UseWor
             const trimmed = text.trim();
             if (!session || !trimmed) return;
 
-            setThread((prev) => [...prev, { id: `user-${Date.now()}`, kind: "user", text: trimmed }]);
+            setThread((prev) => appendStep([...prev, { id: `user-${Date.now()}`, kind: "user", text: trimmed }], THINKING));
             setSendingMessage(true);
             try {
                 await streamFrom(`/api/v1/workflow-gen/sessions/${session.id}/messages`, {
@@ -264,6 +199,7 @@ export function useWorkflowGenChatSession({ workflowId, enabled = true }: UseWor
             } finally {
                 setSendingMessage(false);
                 setStatusMessage(null);
+                setThread(settleSteps);
             }
         },
         [session, streamFrom],
@@ -272,6 +208,7 @@ export function useWorkflowGenChatSession({ workflowId, enabled = true }: UseWor
     const confirmPendingAction = useCallback(
         async (actionId: string, approve: boolean) => {
             if (!session) return;
+            setThread((prev) => appendStep(prev, THINKING));
             setConfirming(true);
             try {
                 await streamFrom(`/api/v1/workflow-gen/sessions/${session.id}/confirm`, {
@@ -283,6 +220,7 @@ export function useWorkflowGenChatSession({ workflowId, enabled = true }: UseWor
             } finally {
                 setConfirming(false);
                 setStatusMessage(null);
+                setThread(settleSteps);
             }
         },
         [session, streamFrom],

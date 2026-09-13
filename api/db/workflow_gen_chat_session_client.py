@@ -3,6 +3,11 @@ from sqlalchemy.future import select
 from api.db.base_client import BaseDBClient
 from api.db.models import WorkflowGenChatSessionModel
 
+# Enough to replay any realistic thread on reopen, while bounding the JSON
+# blob for a session someone keeps going indefinitely. Oldest frames are
+# dropped first, so the most recent (and most relevant) work always survives.
+MAX_PERSISTED_EVENTS = 400
+
 
 class WorkflowGenChatSessionRevisionConflictError(Exception):
     def __init__(self, expected_revision: int, actual_revision: int):
@@ -104,6 +109,7 @@ class WorkflowGenChatSessionClient(BaseDBClient):
         expected_revision: int | None = None,
         title: str | None = None,
         agent_name: str | None = None,
+        append_event: dict | None = None,
     ) -> WorkflowGenChatSessionModel:
         """Update a session, bumping its revision.
 
@@ -116,6 +122,11 @@ class WorkflowGenChatSessionClient(BaseDBClient):
         track whether it was already set (idempotent, first-write-wins). It's
         a placeholder derived from the first user message, used before a
         workflow has been named.
+
+        `append_event` adds one SSE frame to the session's event log, under
+        the same row lock as the rest of the update — so the persisted log
+        can't interleave incorrectly when steps land in quick succession.
+        The log is capped at MAX_PERSISTED_EVENTS, dropping oldest first.
 
         `agent_name` always overwrites the title, regardless of what's
         currently set — pass this once the thread's workflow gets a real
@@ -156,6 +167,13 @@ class WorkflowGenChatSessionClient(BaseDBClient):
                 chat_session.title = title
             if agent_name is not None:
                 chat_session.title = agent_name
+            if append_event is not None:
+                # Reassign rather than mutate: SQLAlchemy doesn't track
+                # in-place edits to a JSON column, so appending to the list
+                # would silently never persist.
+                existing = list(chat_session.events or [])
+                existing.append(append_event)
+                chat_session.events = existing[-MAX_PERSISTED_EVENTS:]
             chat_session.revision += 1
 
             try:

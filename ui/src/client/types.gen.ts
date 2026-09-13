@@ -7289,6 +7289,12 @@ export type WorkflowGenChatSessionResponse = {
         [key: string]: unknown;
     }>;
     /**
+     * Events
+     */
+    events?: Array<{
+        [key: string]: unknown;
+    }>;
+    /**
      * Pending Action
      */
     pending_action?: {

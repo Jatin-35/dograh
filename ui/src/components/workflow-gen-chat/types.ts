@@ -56,7 +56,13 @@ export type WorkflowGenThreadItem =
         edgeCount: number;
         url: string;
     }
-    | { id: string; kind: "error"; code: WorkflowGenErrorCode; text: string };
+    | { id: string; kind: "error"; code: WorkflowGenErrorCode; text: string }
+    /** The work done during one turn, accumulated in order. Status events used
+     * to overwrite a single line above the composer and vanish at the end of
+     * the turn, so there was no way to see what the assistant actually did —
+     * these keep that history in the thread instead. `running` is false once
+     * the turn produces its reply. */
+    | { id: string; kind: "steps"; steps: string[]; running: boolean };
 
 // Raw persisted message shapes (OpenAI chat-completions format) — only used
 // to reconstruct `user`/`assistant` thread items from a session's stored
