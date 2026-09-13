@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
     appendStep,
     applyThreadEvent,
+    resolveApproval,
     settleSteps,
     THINKING,
     threadFromSession,
@@ -112,6 +113,42 @@ describe("applyThreadEvent", () => {
     it("ignores the done frame, which carries nothing to render", () => {
         const thread = [{ id: "a", kind: "assistant", text: "hi" }] as WorkflowGenThreadItem[];
         expect(applyThreadEvent(thread, { type: "done", data: {} } as WorkflowGenEvent, "s")).toEqual(thread);
+    });
+});
+
+describe("resolveApproval — acting on a card must unblock the composer", () => {
+    /** An unresolved approval disables the composer, so a card that never
+     * settles makes the panel unusable until a reload. */
+    const openApproval = (id: string) =>
+        applyThreadEvent([], approvalEvent(id) as unknown as WorkflowGenEvent, `s-${id}`);
+
+    it("settles the card when the user cancels", () => {
+        const thread = resolveApproval(openApproval("a1"), "a1");
+        expect(thread.find((i) => i.kind === "approval")).toMatchObject({ resolved: true });
+    });
+
+    it("settles it when the approved action builds no workflow", () => {
+        // Creating a tool or a credential emits no workflow_ready, which used
+        // to be the only thing that resolved a card.
+        const thread = resolveApproval(openApproval("a2"), "a2");
+        expect(thread.some((i) => i.kind === "approval" && !i.resolved)).toBe(false);
+    });
+
+    it("leaves other cards alone", () => {
+        let thread = openApproval("a1");
+        thread = applyThreadEvent(thread, approvalEvent("a2") as unknown as WorkflowGenEvent, "s2");
+        thread = resolveApproval(thread, "a1");
+        const byId = Object.fromEntries(
+            thread
+                .filter((i): i is Extract<WorkflowGenThreadItem, { kind: "approval" }> => i.kind === "approval")
+                .map((i) => [i.actionId, i.resolved]),
+        );
+        expect(byId).toEqual({ a1: true, a2: false });
+    });
+
+    it("is a no-op for an unknown action id", () => {
+        const thread = openApproval("a1");
+        expect(resolveApproval(thread, "nope")).toEqual(thread);
     });
 });
 

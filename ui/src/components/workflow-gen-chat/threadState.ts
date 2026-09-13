@@ -89,6 +89,23 @@ export function applyThreadEvent(
     return thread;
 }
 
+/** Settle one approval card once the user has confirmed or declined it.
+ *
+ * An unresolved approval disables the composer, and only a `workflow_ready`
+ * event used to resolve one — so Cancel, and approving anything that doesn't
+ * build a workflow (creating a tool or a credential), left the card open and
+ * the panel unusable until a reload. Resolving on the user's action covers
+ * every action type and both outcomes.
+ */
+export function resolveApproval(
+    thread: WorkflowGenThreadItem[],
+    actionId: string,
+): WorkflowGenThreadItem[] {
+    return thread.map((item) =>
+        item.kind === "approval" && item.actionId === actionId ? { ...item, resolved: true } : item,
+    );
+}
+
 /** Rebuild the thread from the session's persisted SSE frames.
  *
  * Replayed through the same reducers that build the thread live, so a

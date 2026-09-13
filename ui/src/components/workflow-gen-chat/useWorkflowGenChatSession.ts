@@ -16,6 +16,7 @@ import { useAuth } from "@/lib/auth";
 import {
     appendStep,
     applyThreadEvent,
+    resolveApproval,
     settleSteps,
     THINKING,
     threadFromSession,
@@ -208,6 +209,12 @@ export function useWorkflowGenChatSession({ workflowId, enabled = true }: UseWor
     const confirmPendingAction = useCallback(
         async (actionId: string, approve: boolean) => {
             if (!session) return;
+            // Settle the card as soon as the user acts on it. Previously only a
+            // `workflow_ready` event marked one resolved, so Cancel — and
+            // approving anything that doesn't build a workflow, like creating a
+            // tool — left it open forever, and an open approval disables the
+            // composer. The panel became unusable until a reload.
+            setThread((prev) => resolveApproval(prev, actionId));
             setThread((prev) => appendStep(prev, THINKING));
             setConfirming(true);
             try {
