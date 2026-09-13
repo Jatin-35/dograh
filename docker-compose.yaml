@@ -58,6 +58,12 @@ services:
 
   minio:
     image: minio/minio
+    # The only unpinned image here, so Compose resolves it to :latest and
+    # re-checks Docker Hub on every `up`. Anonymous pulls are rate-limited,
+    # and Hub reports that throttling as "pull access denied … may require
+    # docker login" — which aborts the whole batch and fails a deploy that
+    # needed nothing from the registry. Use the local image when there is one.
+    pull_policy: missing
     container_name: minio
     command: server /data --console-address ":9001"
     environment:
