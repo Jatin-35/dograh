@@ -222,6 +222,106 @@ async def test_the_assistant_knows_which_workflow_it_is_open_inside(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_change_summary_compares_like_for_like(monkeypatch):
+    """The approval card's summary must diff two *parsed* trees.
+
+    Diffing the stored JSON against a parsed one reported edits that never
+    happened: fields sitting at their spec default are omitted from emitted
+    source and re-added by the parser, so a workflow differed from itself.
+    The baseline therefore has to go through the same round-trip — which
+    means reading the current workflow as code, not as stored JSON.
+    """
+    calls: list[str] = []
+
+    class _FakeToolbox:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def get_workflow_code(self, workflow_id: int):
+            calls.append("get_workflow_code")
+            return {"code": "BASELINE_SOURCE"}
+
+        async def get_workflow(self, workflow_id: int):
+            calls.append("get_workflow")  # the stored-JSON shortcut that caused the bug
+            return {"definition": {"nodes": [], "edges": []}}
+
+    parsed_sources: list[str] = []
+
+    async def _fake_parse(code: str):
+        parsed_sources.append(code)
+        nodes = [{"id": "1", "data": {"name": "Start Call", "prompt": "old" if code == "BASELINE_SOURCE" else "new"}}]
+        return {"ok": True, "workflowName": "Flow", "workflow": {"nodes": nodes, "edges": []}}
+
+    completions = [
+        _FakeCompletion(
+            _FakeMessage(
+                tool_calls=[_FakeToolCall("call-1", "save_workflow", {"workflow_id": 7, "code": "PROPOSED_SOURCE"})]
+            )
+        )
+    ]
+
+    async def _fake_complete(messages, tools, **kwargs):
+        return completions.pop(0)
+
+    monkeypatch.setattr(agent_loop, "WorkflowGenToolbox", _FakeToolbox)
+    monkeypatch.setattr(agent_loop.llm_client, "complete", _fake_complete)
+    monkeypatch.setattr(agent_loop, "parse_code", _fake_parse)
+
+    steps = [
+        step
+        async for step in agent_loop.run_turn(
+            organization_id=1, user_id=1, prior_messages=[], user_message="shorten the greeting", workflow_id=7
+        )
+    ]
+
+    approval = next(s for s in steps if s.event["type"] == "approval")
+    assert "get_workflow_code" in calls, "baseline must be read as code, so it round-trips like the proposal"
+    assert "get_workflow" not in calls, "reading stored JSON reintroduces the false-diff bug"
+    assert parsed_sources == ["PROPOSED_SOURCE", "BASELINE_SOURCE"]
+    assert approval.event["data"]["definition_preview"]["changes"] == [
+        "Edits “Start Call”: prompt (rewritten)"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_failed_change_summary_still_lets_the_approval_through(monkeypatch):
+    """The summary is a convenience — losing it must not block the action."""
+
+    class _FakeToolbox:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def get_workflow_code(self, workflow_id: int):
+            raise WorkflowGenToolboxError("workflow unavailable")
+
+    async def _fake_parse(code: str):
+        return {"ok": True, "workflowName": "Flow", "workflow": {"nodes": [], "edges": []}}
+
+    completions = [
+        _FakeCompletion(
+            _FakeMessage(tool_calls=[_FakeToolCall("call-1", "save_workflow", {"workflow_id": 7, "code": "SRC"})])
+        )
+    ]
+
+    async def _fake_complete(messages, tools, **kwargs):
+        return completions.pop(0)
+
+    monkeypatch.setattr(agent_loop, "WorkflowGenToolbox", _FakeToolbox)
+    monkeypatch.setattr(agent_loop.llm_client, "complete", _fake_complete)
+    monkeypatch.setattr(agent_loop, "parse_code", _fake_parse)
+
+    steps = [
+        step
+        async for step in agent_loop.run_turn(
+            organization_id=1, user_id=1, prior_messages=[], user_message="edit it", workflow_id=7
+        )
+    ]
+    approval = next(s for s in steps if s.event["type"] == "approval")
+    assert "changes" not in approval.event["data"]["definition_preview"]
+    assert [s.event for s in steps if s.event["type"] == "error"] == []
+
+
+@pytest.mark.asyncio
 async def test_credential_secret_never_reaches_the_approval_card(monkeypatch):
     """The approval payload is persisted and re-sent to the browser every
     time the thread reopens, so it must carry a masked secret — while the

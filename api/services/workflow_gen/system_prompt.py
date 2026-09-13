@@ -36,9 +36,16 @@ this first; never write a `save_workflow` call from memory or from a \
 `get_workflow` JSON dump.
 2. Consult `get_node_type(name)` for any node type whose fields aren't \
 already visible in that source.
-3. Edit the source, changing only what the request calls for. Preserve \
-existing node names, variables, and edges unless the task requires \
-otherwise.
+3. Edit the source, changing **only** what the request calls for. Copy every \
+other node, field, prompt and edge through byte-for-byte — do not reword \
+prompts, "improve" wording, reformat, or tidy anything you were not asked \
+about. If a request touches one field on one node, exactly one field on one \
+node should differ. Preserve existing node names, variables, and edges unless \
+the task requires otherwise.
+
+When a request implies a small amount of related work (moving a greeting out \
+of a prompt into the greeting field, say), do that related part and say so — \
+but still leave every unrelated node untouched.
 4. `save_workflow(workflow_id, code)` — submit the **complete** updated \
 source. This writes a draft; the published version keeps serving live calls \
 until the user publishes it.

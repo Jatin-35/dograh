@@ -225,7 +225,63 @@ async def _preview_workflow_source(code: str) -> tuple[dict[str, Any] | None, li
         "name": (parsed.get("workflowName") or "").strip(),
         "node_count": len(workflow.get("nodes", [])),
         "edge_count": len(workflow.get("edges", [])),
+        "parsed": workflow,
     }, []
+
+
+# Node fields whose contents are long prose; the card says *that* they changed
+# rather than dumping both versions.
+_PROSE_FIELDS = {"prompt", "greeting", "instructions"}
+
+
+def _node_label(node: dict[str, Any]) -> str:
+    data = node.get("data") or {}
+    return str(data.get("name") or node.get("id") or "a node")
+
+
+def _describe_workflow_changes(
+    previous: dict[str, Any], proposed: dict[str, Any]
+) -> list[str]:
+    """Say what this save actually changes, in plain language.
+
+    The approval card previously offered only raw TypeScript, which is a poor
+    basis for deciding whether to approve something — you had to read a whole
+    file to find the one edited line. Nodes are matched on `data.name`, the
+    canonical identifier the authoring guide tells the model to keep stable.
+    """
+    before = {_node_label(n): (n.get("data") or {}) for n in previous.get("nodes") or []}
+    after = {_node_label(n): (n.get("data") or {}) for n in proposed.get("nodes") or []}
+
+    changes: list[str] = []
+    for name in after:
+        if name not in before:
+            changes.append(f"Adds “{name}”")
+    for name in before:
+        if name not in after:
+            changes.append(f"Removes “{name}”")
+
+    for name, new_data in after.items():
+        old_data = before.get(name)
+        if old_data is None:
+            continue
+        edited = sorted(
+            key
+            for key in set(old_data) | set(new_data)
+            if old_data.get(key) != new_data.get(key)
+        )
+        if not edited:
+            continue
+        shown = ", ".join(
+            f"{key} (rewritten)" if key in _PROSE_FIELDS else key for key in edited[:4]
+        )
+        more = f" +{len(edited) - 4} more" if len(edited) > 4 else ""
+        changes.append(f"Edits “{name}”: {shown}{more}")
+
+    before_edges, after_edges = len(previous.get("edges") or []), len(proposed.get("edges") or [])
+    if before_edges != after_edges:
+        changes.append(f"Connections: {before_edges} → {after_edges}")
+
+    return changes or ["No structural change — the source is equivalent."]
 
 
 async def _run_loop(
@@ -288,6 +344,29 @@ async def _run_loop(
                             {"role": "tool", "tool_call_id": c.id, "content": json.dumps(content)}
                         )
                     continue
+
+                # Describe the edit so the card can say what changes instead of
+                # only offering the source.
+                parsed_workflow = preview.pop("parsed", {}) if preview else {}
+                target_id = arguments.get("workflow_id")
+                if call.function.name == "save_workflow" and target_id and preview:
+                    try:
+                        # Compare like for like. The stored JSON and a parsed
+                        # TypeScript tree normalize differently — fields sitting
+                        # at their spec default are omitted from emitted source
+                        # and re-added by the parser — so diffing one against
+                        # the other reports edits that never happened. Putting
+                        # the current workflow through the same
+                        # generate-then-parse round-trip removes that entirely.
+                        current_code = await toolbox.get_workflow_code(int(target_id))
+                        baseline = await parse_code(current_code["code"])
+                        if baseline.get("ok"):
+                            preview["changes"] = _describe_workflow_changes(
+                                baseline.get("workflow") or {}, parsed_workflow
+                            )
+                    except (WorkflowGenToolboxError, TsBridgeError, ValueError, TypeError) as e:
+                        # A summary is a nicety; never block the approval on it.
+                        logger.warning(f"workflow_gen change summary unavailable: {e}")
 
             action_id = uuid4().hex
             # What the user is shown, with any secrets redacted. Kept beside
