@@ -9,7 +9,6 @@ import {
 import { ArrowUp, Loader2, Sparkles, X } from "lucide-react";
 import { useEffect, useMemo } from "react";
 
-import { BrandLogo } from "@/components/BrandLogo";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -59,20 +58,6 @@ const EDIT_SUGGESTIONS = [
     "Change the greeting prompt to be more concise",
     "Add a node that collects the caller's email",
 ];
-
-function TypingIndicator() {
-    return (
-        <span className="inline-flex items-center gap-0.5">
-            {[0, 1, 2].map((i) => (
-                <span
-                    key={i}
-                    className="h-1 w-1 animate-bounce rounded-full bg-muted-foreground"
-                    style={{ animationDelay: `${i * 120}ms`, animationDuration: "900ms" }}
-                />
-            ))}
-        </span>
-    );
-}
 
 /** Maps a `WorkflowGenThreadItem` to assistant-ui's `ThreadMessageLike`. Text
  * items map straight to a text content part; the three interactive/terminal
@@ -139,29 +124,35 @@ function convertMessage(item: WorkflowGenThreadItem): ThreadMessageLike {
                     },
                 ],
             };
+        case "steps":
+            return {
+                id: item.id,
+                role: "assistant",
+                content: [
+                    {
+                        type: "tool-call",
+                        toolCallId: item.id,
+                        toolName: "activitySteps",
+                        args: { steps: item.steps, running: item.running },
+                        // Only a settled group is "complete"; a running one
+                        // keeps rendering its live indicator.
+                        result: item.running ? undefined : true,
+                    },
+                ],
+            };
     }
 }
 
 interface ChatComposerProps {
     placeholder: string;
     sendingMessage: boolean;
-    statusMessage: string | null;
 }
 
 /** The message-input pill, shared between the docked (non-empty-thread) and
  * centered hero (empty-thread) layouts below. */
-function ChatComposer({ placeholder, sendingMessage, statusMessage }: ChatComposerProps) {
+function ChatComposer({ placeholder, sendingMessage }: ChatComposerProps) {
     return (
         <div>
-            <div
-                className={cn(
-                    "mb-2 flex h-4 items-center gap-1.5 text-xs text-muted-foreground transition-opacity duration-200",
-                    statusMessage ? "opacity-100" : "opacity-0",
-                )}
-            >
-                <span>{statusMessage}</span>
-                {statusMessage ? <TypingIndicator /> : null}
-            </div>
             <ComposerPrimitive.Root className="flex items-end gap-2 rounded-2xl border border-input bg-background p-1.5 pl-3.5 focus-within:ring-2 focus-within:ring-ring/40">
                 <ComposerPrimitive.Input
                     placeholder={placeholder}
@@ -175,6 +166,11 @@ function ChatComposer({ placeholder, sendingMessage, statusMessage }: ChatCompos
                     </Button>
                 </ComposerPrimitive.Send>
             </ComposerPrimitive.Root>
+            {/* Scout edits real workflows that answer real calls, so the
+                caveat sits where it's read — under the box you type in. */}
+            <p className="mt-2 text-center text-[11px] text-muted-foreground">
+                Scout can make mistakes. Review changes before publishing.
+            </p>
         </div>
     );
 }
@@ -192,7 +188,6 @@ export function WorkflowGenChatPanel({ workflowId, onClose, className, session: 
         creatingSession,
         sendingMessage,
         confirming,
-        statusMessage,
         hasPendingAction,
         sendMessage,
         confirmPendingAction,
@@ -235,8 +230,11 @@ export function WorkflowGenChatPanel({ workflowId, onClose, className, session: 
         <div className={cn("flex h-full flex-col bg-background", className)}>
             <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
                 <div className="flex items-center gap-2">
-                    <BrandLogo mark className="h-4" />
-                    <span className="text-sm font-medium">AI Assistant</span>
+                    <Sparkles className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-medium">Scout</span>
+                    <span className="rounded-full border border-border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                        v1 beta
+                    </span>
                     {busy ? <AssistantWave className="ml-1 text-muted-foreground" /> : null}
                 </div>
                 {onClose ? (
@@ -265,7 +263,7 @@ export function WorkflowGenChatPanel({ workflowId, onClose, className, session: 
                                 </p>
 
                                 <div className="w-full max-w-md">
-                                    <ChatComposer placeholder={composerPlaceholder} sendingMessage={sendingMessage} statusMessage={statusMessage} />
+                                    <ChatComposer placeholder={composerPlaceholder} sendingMessage={sendingMessage} />
                                 </div>
 
                                 <div className="flex max-w-md flex-wrap items-center justify-center gap-2">
@@ -287,7 +285,7 @@ export function WorkflowGenChatPanel({ workflowId, onClose, className, session: 
                             <>
                                 <WorkflowGenThreadView />
                                 <div className="shrink-0 border-t border-border p-3">
-                                    <ChatComposer placeholder={composerPlaceholder} sendingMessage={sendingMessage} statusMessage={statusMessage} />
+                                    <ChatComposer placeholder={composerPlaceholder} sendingMessage={sendingMessage} />
                                 </div>
                             </>
                         )}
