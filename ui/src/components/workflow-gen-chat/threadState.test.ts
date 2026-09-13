@@ -205,6 +205,33 @@ describe("threadFromSession — reopening a thread", () => {
         ]);
     });
 
+    it("always shows a card when the server says one is pending", () => {
+        // The capped event log can age out the approval frame while the server
+        // still holds the pending action. Without a card the composer looks
+        // usable but every message is rejected — and a reload doesn't help.
+        const thread = threadFromSession(
+            session({
+                events: [userEvent("do the thing"), assistantEvent("working on it")],
+                messages: [{ role: "user", content: "do the thing" }],
+                pending: { action_id: "orphaned", action_type: "save_workflow", preview: { name: "Flow" } },
+            }),
+        );
+        const open = thread.filter((i) => i.kind === "approval" && !i.resolved);
+        expect(open).toHaveLength(1);
+        expect(open[0]).toMatchObject({ actionId: "orphaned" });
+    });
+
+    it("does not add a second card when the pending one already replayed", () => {
+        const thread = threadFromSession(
+            session({
+                events: [userEvent("do the thing"), approvalEvent("a1")],
+                messages: [{ role: "user", content: "do the thing" }],
+                pending: { action_id: "a1", action_type: "save_workflow" },
+            }),
+        );
+        expect(thread.filter((i) => i.kind === "approval")).toHaveLength(1);
+    });
+
     it("falls back to transcript text for a session recorded before the event log", () => {
         const thread = threadFromSession(
             session({

@@ -188,6 +188,8 @@ export function WorkflowGenChatPanel({ workflowId, onClose, className, session: 
         creatingSession,
         sendingMessage,
         confirming,
+        loadFailed,
+        retryLoadSession,
         hasPendingAction,
         sendMessage,
         confirmPendingAction,
@@ -244,7 +246,16 @@ export function WorkflowGenChatPanel({ workflowId, onClose, className, session: 
                 ) : null}
             </div>
 
-            {!session || creatingSession ? (
+            {loadFailed && !creatingSession ? (
+                // Without this branch a failed load spun forever, recoverable
+                // only by reloading the page.
+                <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+                    <p className="text-sm text-muted-foreground">Couldn&apos;t start Scout.</p>
+                    <Button variant="outline" size="sm" onClick={retryLoadSession}>
+                        Try again
+                    </Button>
+                </div>
+            ) : !session || creatingSession ? (
                 <div className="flex flex-1 items-center justify-center">
                     <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                 </div>

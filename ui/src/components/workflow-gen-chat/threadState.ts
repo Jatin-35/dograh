@@ -133,9 +133,41 @@ export function threadFromEvents(session: WorkflowGenChatSessionResponse): Workf
     // replayed without one outstanding was already resolved, one way or the
     // other (the decline path emits no event of its own).
     if (!session.pending_action) {
-        items = items.map((item) => (item.kind === "approval" ? { ...item, resolved: true } : item));
+        return items.map((item) => (item.kind === "approval" ? { ...item, resolved: true } : item));
     }
-    return items;
+
+    // The server says something is awaiting a decision, so a card must be on
+    // screen to make it. If the event that produced it aged out of the capped
+    // log, rebuild it from `pending_action` — otherwise the composer looks
+    // usable while the server rejects every message, with no way out at all.
+    const alreadyShown = items.some((item) => item.kind === "approval" && !item.resolved);
+    return alreadyShown ? items : [...items, approvalFromPendingAction(session)!];
+}
+
+type PendingAction = {
+    action_id: string;
+    action_type: Extract<WorkflowGenThreadItem, { kind: "approval" }>["actionType"];
+    preview?: Record<string, unknown>;
+};
+
+/** The approval card described by a session's `pending_action`, if any.
+ *
+ * Renders `preview` — the server-masked view — never `arguments`, which holds
+ * raw values including secrets. */
+export function approvalFromPendingAction(
+    session: WorkflowGenChatSessionResponse,
+): WorkflowGenThreadItem | null {
+    const pending = session.pending_action as PendingAction | null | undefined;
+    if (!pending) return null;
+    return {
+        id: `pending-${pending.action_id}`,
+        kind: "approval",
+        actionId: pending.action_id,
+        actionType: pending.action_type,
+        summary: "Review the proposed action before it runs.",
+        definitionPreview: pending.preview ?? {},
+        resolved: false,
+    };
 }
 
 /** Plain-text items from the model transcript, for turns the event log
@@ -177,31 +209,9 @@ export function threadFromSession(session: WorkflowGenChatSessionResponse): Work
         return [...older, ...replayed];
     }
 
-    // No event log at all (a thread from before the feature): text only.
+    // No event log at all (a thread from before the feature): text only, plus
+    // any card still awaiting a decision so it stays actionable.
     const items = threadFromTranscript(session);
-
-    const pending = session.pending_action as
-        | {
-            action_id: string;
-            action_type: "create_workflow" | "save_workflow" | "create_tool" | "create_credential";
-            arguments?: Record<string, unknown>;
-            preview?: Record<string, unknown>;
-        }
-        | null
-        | undefined;
-    if (pending) {
-        items.push({
-            id: `pending-${pending.action_id}`,
-            kind: "approval",
-            actionId: pending.action_id,
-            actionType: pending.action_type,
-            summary: "Review the proposed action before it runs.",
-            // `preview` is the server-masked view; `arguments` holds raw
-            // values (including secrets) and must not be rendered.
-            definitionPreview: pending.preview ?? {},
-            resolved: false,
-        });
-    }
-
-    return items;
+    const pending = approvalFromPendingAction(session);
+    return pending ? [...items, pending] : items;
 }

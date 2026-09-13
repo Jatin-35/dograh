@@ -77,6 +77,9 @@ export function useWorkflowGenChatSession({ workflowId, enabled = true }: UseWor
     const [confirming, setConfirming] = useState(false);
     const [statusMessage, setStatusMessage] = useState<string | null>(null);
     const hasStarted = useRef(false);
+    // Distinguishes "still loading" from "load failed", so the panel can offer
+    // a retry instead of spinning forever.
+    const [loadFailed, setLoadFailed] = useState(false);
 
     const pendingAction = thread.find(
         (item): item is Extract<WorkflowGenThreadItem, { kind: "approval" }> =>
@@ -91,6 +94,8 @@ export function useWorkflowGenChatSession({ workflowId, enabled = true }: UseWor
     const loadSession = useCallback(
         async (opts?: { sessionId?: number; forceNew?: boolean }) => {
             setCreatingSession(true);
+            setLoadFailed(false);
+            setLoadFailed(false);
             try {
                 let response;
                 if (workflowId != null) {
@@ -123,6 +128,12 @@ export function useWorkflowGenChatSession({ workflowId, enabled = true }: UseWor
                     window.localStorage.setItem(STANDALONE_SESSION_STORAGE_KEY, String(response.data.id));
                 }
             } catch (error) {
+                // Release the one-shot latch so the next mount (reopening the
+                // panel) tries again. Without this a single failed load left a
+                // spinner on screen permanently, recoverable only by reloading
+                // the page.
+                hasStarted.current = false;
+                setLoadFailed(true);
                 toast.error(getErrorMessage(error));
             } finally {
                 setCreatingSession(false);
@@ -176,7 +187,9 @@ export function useWorkflowGenChatSession({ workflowId, enabled = true }: UseWor
                 lastRevision = frame.revision;
                 handleEvent(frame);
             }
-            if (lastRevision != null) {
+            // Error frames carry -1, meaning "no revision"; adopting it would
+            // make the next message fail the revision check.
+            if (lastRevision != null && lastRevision >= 0) {
                 setSession((prev) => (prev ? { ...prev, revision: lastRevision } : prev));
             }
         },
@@ -240,6 +253,8 @@ export function useWorkflowGenChatSession({ workflowId, enabled = true }: UseWor
         sendingMessage,
         confirming,
         statusMessage,
+        loadFailed,
+        retryLoadSession: () => loadSession(),
         hasPendingAction: Boolean(pendingAction),
         sendMessage,
         confirmPendingAction,
