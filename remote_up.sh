@@ -36,7 +36,17 @@ trap cleanup EXIT
 DOGRAH_DEPLOY_PROJECT_DIR="$SCRIPT_DIR"
 
 VALIDATE_ONLY=0
-MODE="pull"
+# A docker-compose.override.yaml is what makes an install a source build, and
+# its images (dograh-local/*) exist only on that host — no registry has them.
+# Defaulting such an install to pull mode makes `--pull always` fail on the
+# first image it can't fetch and abort the whole deploy, which is how a domain
+# setup died mid-run. Detect the install type instead of assuming; `--build`
+# still forces it explicitly.
+if [[ -f "$SCRIPT_DIR/docker-compose.override.yaml" ]]; then
+    MODE="build"
+else
+    MODE="pull"
+fi
 EXTRA_ARGS=()
 
 while [[ $# -gt 0 ]]; do
