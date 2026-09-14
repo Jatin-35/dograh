@@ -21,6 +21,8 @@ export interface SuperadminOrganization {
     status: OrganizationStatus;
     created_at: string;
     user_count: number;
+    /** Whether Scout, the in-editor AI assistant, is switched on for this org. */
+    scout_enabled: boolean;
 }
 
 interface OrganizationsListResponse {
@@ -72,6 +74,22 @@ export async function updateSuperadminOrganizationStatus(
     if (error || !data) {
         throw new Error(
             typeof error === "string" ? error : "Failed to update organization status",
+        );
+    }
+    return data;
+}
+
+export async function updateSuperadminOrganizationScout(
+    organizationId: number,
+    enabled: boolean,
+): Promise<SuperadminOrganization> {
+    const { data, error } = await client.patch<SuperadminOrganization>({
+        url: `/api/v1/superuser/organizations/${organizationId}/scout`,
+        body: { enabled },
+    });
+    if (error || !data) {
+        throw new Error(
+            typeof error === "string" ? error : "Failed to update Scout access",
         );
     }
     return data;

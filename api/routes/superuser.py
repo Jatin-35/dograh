@@ -9,8 +9,13 @@ from pydantic import BaseModel
 from api.constants import PUBLIC_BASE_URL, UI_APP_URL
 from api.db import db_client
 from api.db.models import UserModel
-from api.enums import OrganizationStatus
+from api.enums import OrganizationConfigurationKey, OrganizationStatus
 from api.services.auth.depends import get_superuser
+from api.services.organization_context import (
+    is_scout_enabled_in_configuration,
+    scout_enabled_from_configuration_value,
+    set_scout_enabled_for_organization,
+)
 from api.services.auth.stack_auth import (
     StackAuthSessionError,
     StackAuthTeamError,
@@ -83,6 +88,10 @@ class SuperuserOrganizationResponse(BaseModel):
     status: str
     created_at: datetime
     user_count: int
+    # Whether a superadmin has switched Scout on for this org. Defaults to
+    # False, which is also what an org with no stored setting reports â€” Scout
+    # is opt-in per client, not something a new org inherits.
+    scout_enabled: bool = False
 
 
 class SuperuserOrganizationsListResponse(BaseModel):
@@ -92,6 +101,10 @@ class SuperuserOrganizationsListResponse(BaseModel):
 
 class UpdateOrganizationStatusRequest(BaseModel):
     status: str
+
+
+class UpdateOrganizationScoutRequest(BaseModel):
+    enabled: bool
 
 
 class CreateOrganizationRequest(BaseModel):
@@ -298,9 +311,23 @@ async def list_organizations(
 ) -> SuperuserOrganizationsListResponse:
     """List all organizations with member counts. Requires superuser privileges."""
     organizations = await db_client.list_organizations_for_superadmin()
+
+    # One query for every org's Scout setting rather than one per row â€” the
+    # list is unpaginated, so a per-row lookup would be N round trips.
+    scout_rows = await db_client.get_all_configurations_by_key(
+        OrganizationConfigurationKey.SCOUT_ENABLED.value
+    )
+    scout_by_org = {
+        row["organization_id"]: scout_enabled_from_configuration_value(row["value"])
+        for row in scout_rows
+    }
+
     return SuperuserOrganizationsListResponse(
         organizations=[
-            SuperuserOrganizationResponse(**org) for org in organizations
+            SuperuserOrganizationResponse(
+                **org, scout_enabled=scout_by_org.get(org["id"], False)
+            )
+            for org in organizations
         ],
         total_count=len(organizations),
     )
@@ -424,6 +451,49 @@ async def update_organization_status(
         status=organization.status,
         created_at=organization.created_at,
         user_count=user_count,
+        scout_enabled=await is_scout_enabled_in_configuration(organization_id),
+    )
+
+
+@router.patch("/organizations/{organization_id}/scout")
+async def update_organization_scout(
+    organization_id: int,
+    request: UpdateOrganizationScoutRequest,
+    user: UserModel = Depends(get_superuser),
+) -> SuperuserOrganizationResponse:
+    """Turn Scout (the in-editor AI assistant) on or off for one organization.
+
+    Scout is off for every org until it's switched on here, so a newly
+    provisioned client can't reach the assistant before someone decides they
+    should. Requires superuser privileges.
+    """
+    organization = await db_client.get_organization_by_id(organization_id)
+    if organization is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Organization with ID {organization_id} not found.",
+        )
+
+    enabled = await set_scout_enabled_for_organization(
+        organization_id, request.enabled
+    )
+    logger.info(
+        "Superadmin {} set Scout {} for organization {}",
+        user.id,
+        "on" if enabled else "off",
+        organization_id,
+    )
+
+    user_count = len(await db_client.get_organization_users(organization_id))
+    return SuperuserOrganizationResponse(
+        id=organization.id,
+        provider_id=organization.provider_id,
+        name=organization.name,
+        primary_contact_email=organization.primary_contact_email,
+        status=organization.status,
+        created_at=organization.created_at,
+        user_count=user_count,
+        scout_enabled=enabled,
     )
 
 

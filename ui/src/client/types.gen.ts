@@ -4243,6 +4243,10 @@ export type OrganizationContextResponse = {
      */
     organization_provider_id?: string | null;
     model_services: OrganizationModelServicesContext;
+    /**
+     * Scout Enabled
+     */
+    scout_enabled?: boolean;
 };
 
 /**

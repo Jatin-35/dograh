@@ -6,16 +6,18 @@ import Link from "next/link";
 import { useEffect, useRef } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useScoutEnabled } from "@/components/workflow-gen-chat/useScoutEnabled";
 import { useWorkflowGenChatSession } from "@/components/workflow-gen-chat/useWorkflowGenChatSession";
 import { useWorkflowGenSessionList } from "@/components/workflow-gen-chat/useWorkflowGenSessionList";
 import { WorkflowGenChatPanel } from "@/components/workflow-gen-chat/WorkflowGenChatPanel";
-import { useAppConfig } from "@/context/AppConfigContext";
 import { cn } from "@/lib/utils";
 
 export default function WorkflowGenChatPage() {
-    const { config, loading } = useAppConfig();
-    const session = useWorkflowGenChatSession();
-    const { sessions, refresh: refreshSessionList } = useWorkflowGenSessionList();
+    const { enabled: scoutEnabled, loading, configuredOnDeployment } = useScoutEnabled();
+    const session = useWorkflowGenChatSession({ enabled: scoutEnabled });
+    const { sessions, refresh: refreshSessionList } = useWorkflowGenSessionList({
+        enabled: scoutEnabled,
+    });
 
     // The sidebar's title/timestamp for the active thread only becomes
     // accurate once the in-flight turn finishes — the initial placeholder
@@ -41,14 +43,18 @@ export default function WorkflowGenChatPage() {
         return null;
     }
 
-    if (!config?.workflowGenEnabled) {
+    if (!scoutEnabled) {
         return (
             <div className="mx-auto flex h-screen max-w-2xl flex-col items-center justify-center gap-4 px-6 text-center">
-                <h1 className="text-lg font-semibold">AI assistant not configured</h1>
+                <h1 className="text-lg font-semibold">
+                    {configuredOnDeployment
+                        ? "Scout isn't enabled for your organization"
+                        : "Scout isn't configured"}
+                </h1>
                 <p className="text-sm text-muted-foreground">
-                    This deployment hasn&apos;t been set up with the environment variables the
-                    in-product AI assistant needs (WF_GEN_LLM_PROVIDER and the matching
-                    Azure OpenAI settings). Ask your operator to configure it.
+                    {configuredOnDeployment
+                        ? "Scout, the in-product AI assistant, is turned on per organization. Ask your administrator to enable it for yours."
+                        : "This deployment hasn't been set up with the environment variables the in-product AI assistant needs (WF_GEN_LLM_PROVIDER and the matching Azure OpenAI settings). Ask your operator to configure it."}
                 </p>
                 <Button asChild variant="outline">
                     <Link href="/workflow">

@@ -119,6 +119,10 @@ class OrganizationConfigurationKey(Enum):
     )
     ORGANIZATION_PREFERENCES = "ORGANIZATION_PREFERENCES"  # Org-level defaults such as timezone/test call number
     MODEL_CONFIGURATION_PREFERENCES = "MODEL_CONFIGURATION_PREFERENCES"  # Deprecated; read fallback for old org preferences
+    # Whether Scout (the in-editor AI assistant) is available to this org.
+    # Absent means off: an org only gets Scout when a superadmin turns it on,
+    # so a new client can't reach it before someone decides they should.
+    SCOUT_ENABLED = "SCOUT_ENABLED"
 
 
 class UserConfigurationKey(Enum):

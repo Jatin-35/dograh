@@ -10,8 +10,12 @@ import { useAuth } from "@/lib/auth";
 
 /** Standalone-session history for the thread-history sidebar — standalone
  * entry point only (`ui/src/app/workflow/gen-chat/page.tsx`). The
- * per-workflow embedded panel has no sidebar and never uses this hook. */
-export function useWorkflowGenSessionList() {
+ * per-workflow embedded panel has no sidebar and never uses this hook.
+ *
+ * `enabled` is false when Scout isn't available to this org, where the
+ * endpoint answers 403 by design. Fetching anyway would greet the user with
+ * an error toast about a feature they were never offered. */
+export function useWorkflowGenSessionList({ enabled = true }: { enabled?: boolean } = {}) {
     const { isAuthenticated, loading: authLoading } = useAuth();
     const [sessions, setSessions] = useState<WorkflowGenChatSessionSummary[]>([]);
     const [loading, setLoading] = useState(true);
@@ -33,10 +37,10 @@ export function useWorkflowGenSessionList() {
     }, []);
 
     useEffect(() => {
-        if (authLoading || !isAuthenticated || hasFetched.current) return;
+        if (!enabled || authLoading || !isAuthenticated || hasFetched.current) return;
         hasFetched.current = true;
         void refresh();
-    }, [authLoading, isAuthenticated, refresh]);
+    }, [enabled, authLoading, isAuthenticated, refresh]);
 
     return { sessions, loading, refresh };
 }

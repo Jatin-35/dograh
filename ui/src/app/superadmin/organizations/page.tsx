@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
     Table,
     TableBody,
@@ -34,6 +35,7 @@ import {
     listSuperadminOrganizations,
     type OrganizationStatus,
     type SuperadminOrganization,
+    updateSuperadminOrganizationScout,
     updateSuperadminOrganizationStatus,
 } from "@/lib/superadminOrganizations";
 
@@ -47,7 +49,21 @@ const STATUS_BADGE: Record<
 };
 
 function formatDate(dateString: string): string {
-    return new Date(dateString).toLocaleString();
+    const d = new Date(dateString);
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+}
+
+function formatTime(dateString: string): string {
+    const d = new Date(dateString);
+    let hours = d.getHours();
+    const minutes = String(d.getMinutes()).padStart(2, "0");
+    const seconds = String(d.getSeconds()).padStart(2, "0");
+    const ampm = hours >= 12 ? "PM" : "AM";
+    hours = hours % 12 || 12;
+    return `${String(hours).padStart(2, "0")}:${minutes}:${seconds} ${ampm}`;
 }
 
 export default function OrganizationsPage() {
@@ -66,6 +82,7 @@ export default function OrganizationsPage() {
 
     // Per-row status-change in-flight guard
     const [statusUpdatingId, setStatusUpdatingId] = useState<number | null>(null);
+    const [scoutUpdatingId, setScoutUpdatingId] = useState<number | null>(null);
 
     // "managed" = orgs you provisioned via the panel (they carry a contact
     // email); "all" = every org on the platform, incl. auto-created / legacy.
@@ -143,6 +160,38 @@ export default function OrganizationsPage() {
             toast.error(err instanceof Error ? err.message : "Failed to update status");
         } finally {
             setStatusUpdatingId(null);
+        }
+    };
+
+    const handleScoutChange = async (org: SuperadminOrganization, enabled: boolean) => {
+        setScoutUpdatingId(org.id);
+        // Move the switch immediately, then roll it back if the call fails —
+        // without this the toggle sits in its old position until the round
+        // trip lands and reads as an unresponsive control.
+        setOrganizations((prev) =>
+            prev.map((o) => (o.id === org.id ? { ...o, scout_enabled: enabled } : o)),
+        );
+        try {
+            const updated = await updateSuperadminOrganizationScout(org.id, enabled);
+            setOrganizations((prev) =>
+                prev.map((o) =>
+                    o.id === org.id ? { ...o, scout_enabled: updated.scout_enabled } : o,
+                ),
+            );
+            toast.success(
+                enabled
+                    ? `Scout enabled for ${org.name || "this organization"}.`
+                    : `Scout disabled for ${org.name || "this organization"}.`,
+            );
+        } catch (err) {
+            setOrganizations((prev) =>
+                prev.map((o) =>
+                    o.id === org.id ? { ...o, scout_enabled: org.scout_enabled } : o,
+                ),
+            );
+            toast.error(err instanceof Error ? err.message : "Failed to update Scout access");
+        } finally {
+            setScoutUpdatingId(null);
         }
     };
 
@@ -238,6 +287,7 @@ export default function OrganizationsPage() {
                                         <TableHead>Status</TableHead>
                                         <TableHead>Created At</TableHead>
                                         <TableHead className="text-center">Users</TableHead>
+                                        <TableHead className="text-center">Scout</TableHead>
                                         <TableHead>Email</TableHead>
                                         <TableHead className="text-right">Actions</TableHead>
                                     </TableRow>
@@ -277,10 +327,28 @@ export default function OrganizationsPage() {
                                                     <Badge variant={badge.variant}>{badge.label}</Badge>
                                                 </TableCell>
                                                 <TableCell className="whitespace-nowrap text-muted-foreground">
-                                                    {formatDate(org.created_at)}
+                                                    <div className="flex flex-col">
+                                                        <span>{formatDate(org.created_at)}</span>
+                                                        <span className="text-xs">{formatTime(org.created_at)}</span>
+                                                    </div>
                                                 </TableCell>
                                                 <TableCell className="text-center">
                                                     {org.user_count}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex items-center justify-center gap-2">
+                                                        <Switch
+                                                            checked={org.scout_enabled}
+                                                            disabled={scoutUpdatingId === org.id}
+                                                            onCheckedChange={(checked) =>
+                                                                handleScoutChange(org, checked)
+                                                            }
+                                                            aria-label={`Scout access for ${org.name || "organization"}`}
+                                                        />
+                                                        {scoutUpdatingId === org.id && (
+                                                            <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                                                        )}
+                                                    </div>
                                                 </TableCell>
                                                 <TableCell className="text-muted-foreground">
                                                     {org.primary_contact_email ? (
@@ -331,6 +399,11 @@ export default function OrganizationsPage() {
                                     })}
                                 </TableBody>
                             </Table>
+                            <p className="mt-4 text-xs text-muted-foreground">
+                                <strong className="font-medium">Scout</strong> is the in-editor AI
+                                assistant. It stays off for every organization until you turn it on
+                                here.
+                            </p>
                         </div>
                     )}
                 </CardContent>

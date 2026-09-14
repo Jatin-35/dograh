@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/popover";
 import { useSidebar } from "@/components/ui/sidebar";
 import { AssistantWave } from "@/components/workflow-gen-chat/AssistantWave";
-import { useAppConfig } from "@/context/AppConfigContext";
+import { useScoutEnabled } from "@/components/workflow-gen-chat/useScoutEnabled";
 
 interface WorkflowEditorHeaderProps {
     workflowName: string;
@@ -75,7 +75,7 @@ export const WorkflowEditorHeader = ({
 }: WorkflowEditorHeaderProps) => {
     const router = useRouter();
     const { toggleSidebar } = useSidebar();
-    const { config } = useAppConfig();
+    const { enabled: scoutEnabled } = useScoutEnabled();
     const [savingWorkflow, setSavingWorkflow] = useState(false);
     const [duplicating, setDuplicating] = useState(false);
     const [publishing, setPublishing] = useState(false);
@@ -436,7 +436,7 @@ export const WorkflowEditorHeader = ({
                     Test Agent
                 </Button>
 
-                {config?.workflowGenEnabled ? (
+                {scoutEnabled ? (
                     <Button
                         variant="outline"
                         size="sm"
