@@ -10,15 +10,22 @@ itself the moment someone sends another message. This script exists to do it
 eagerly across every session, so nobody has to hit the error first, and to
 report what was there.
 
-    # See what would change; writes nothing.
-    python -m scripts.repair_workflow_gen_transcripts
+On a deployed host, run it inside the api container — the database is only
+reachable from there, and the container already has the right env:
 
-    # Apply it.
-    python -m scripts.repair_workflow_gen_transcripts --apply
+    sudo docker compose exec api python -m api.scripts.repair_workflow_gen_transcripts
+    sudo docker compose exec api python -m api.scripts.repair_workflow_gen_transcripts --apply
 
-Per AGENTS.md, source the backend env first so this targets the right database:
+Locally, source the backend env first per AGENTS.md so this targets the dev
+database rather than whatever DATABASE_URL happens to be set:
 
     set -a && source api/.env && set +a
+    python -m api.scripts.repair_workflow_gen_transcripts
+
+It lives under `api/` rather than the repo-root `scripts/` for a concrete
+reason: the Dockerfile copies `./api` wholesale but whitelists only individual
+shell entrypoints out of `./scripts`, so a script placed there is absent from
+the image and unrunnable exactly where it's needed.
 """
 
 import argparse
@@ -55,7 +62,7 @@ async def main(apply: bool) -> None:
         )
         sessions = list(result.scalars().all())
 
-    print(f"Scanning {len(sessions)} chat session(s)…\n")
+    print(f"Scanning {len(sessions)} chat session(s)...\n")
 
     affected = 0
     for chat_session in sessions:
@@ -78,7 +85,7 @@ async def main(apply: bool) -> None:
             f"(workflow {chat_session.workflow_id}, org {chat_session.organization_id})\n"
             f"    largest message : {largest:,} chars (role={largest_role}, "
             f"cap={MAX_TOOL_RESULT_CHARS:,})\n"
-            f"    transcript      : {before_chars:,} → {after_chars:,} chars\n"
+            f"    transcript      : {before_chars:,} -> {after_chars:,} chars\n"
             f"    repairs         : {repair.describe()}"
         )
 
@@ -92,7 +99,7 @@ async def main(apply: bool) -> None:
         print()
 
     if affected == 0:
-        print("Nothing to repair — every transcript is within limits.")
+        print("Nothing to repair - every transcript is within limits.")
     elif apply:
         print(f"Repaired {affected} session(s).")
     else:
