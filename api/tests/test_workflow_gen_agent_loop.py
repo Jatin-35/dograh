@@ -18,6 +18,7 @@ import pytest
 
 from api.services.workflow_gen import agent_loop
 from api.services.workflow_gen.toolbox import WorkflowGenToolboxError
+from api.services.workflow_gen.transcript import MAX_TOOL_RESULT_CHARS
 
 
 class _FakeFunction:
@@ -675,3 +676,171 @@ async def test_create_tool_failure_from_tool_management_is_also_repairable(monke
 
     assert len(attempts) == 2
     assert [e for e in events if e["type"] == "error"] == []
+
+
+# ---------------------------------------------------------------------------
+# Transcript size — the path that bricked a thread in production
+# ---------------------------------------------------------------------------
+#
+# `test_tool` hands back the endpoint's raw response body. One customer API
+# returned ~17MB, which went into `messages` whole, was persisted, and then
+# replayed on every subsequent turn — so the thread failed with the same
+# provider 400 forever. These pin both halves: never write one, and heal one
+# already written.
+
+
+def _oversized_api_response() -> dict[str, Any]:
+    return {
+        "status": "success",
+        "status_code": 200,
+        "data": {
+            "items": [{"id": i, "blob": "x" * 500} for i in range(20_000)],
+            "total": 20_000,
+        },
+    }
+
+
+def _largest_content(messages: list[dict[str, Any]]) -> int:
+    return max(
+        (len(m["content"]) for m in messages if isinstance(m.get("content"), str)),
+        default=0,
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_huge_test_tool_response_is_capped_before_it_is_persisted(monkeypatch):
+    huge = _oversized_api_response()
+
+    class _FakeToolbox:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def test_tool(self, **kwargs):
+            return huge
+
+    async def _fake_complete(messages, tools, **kwargs):
+        # Whatever reaches the model must already be capped — this is the
+        # assertion that matters, since the provider rejects it otherwise.
+        assert _largest_content(messages) <= MAX_TOOL_RESULT_CHARS
+        return _FakeCompletion(_FakeMessage(content="The endpoint responded."))
+
+    monkeypatch.setattr(agent_loop, "WorkflowGenToolbox", _FakeToolbox)
+    monkeypatch.setattr(agent_loop.llm_client, "complete", _fake_complete)
+
+    # The assistant message that proposed the action is always already in the
+    # transcript by confirm time — it's persisted alongside the approval card.
+    prior_messages = [
+        {"role": "user", "content": "test the lookup tool"},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "call-1",
+                    "type": "function",
+                    "function": {"name": "test_tool", "arguments": '{"tool_uuid": "t1"}'},
+                }
+            ],
+        },
+    ]
+
+    steps = [
+        step
+        async for step in agent_loop.execute_confirmed_action(
+            organization_id=1,
+            user_id=1,
+            prior_messages=prior_messages,
+            pending_action={
+                "action_id": "a1",
+                "tool_call_id": "call-1",
+                "action_type": "test_tool",
+                "arguments": {"tool_uuid": "t1"},
+                "sibling_call_ids": [],
+            },
+            approve=True,
+        )
+    ]
+
+    persisted = steps[-1].messages
+    assert _largest_content(persisted) <= MAX_TOOL_RESULT_CHARS
+    # And the model was told it's a sample, not the whole response.
+    tool_reply = next(m for m in persisted if m.get("role") == "tool")
+    assert "_truncated" in json.loads(tool_reply["content"])
+
+
+@pytest.mark.asyncio
+async def test_a_huge_read_only_tool_result_is_capped(monkeypatch):
+    class _FakeToolbox:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def list_recordings(self, **kwargs):
+            return [{"id": i, "blob": "y" * 500} for i in range(20_000)]
+
+    completions = [
+        _FakeCompletion(
+            _FakeMessage(tool_calls=[_FakeToolCall("call-1", "list_recordings", {})])
+        ),
+        _FakeCompletion(_FakeMessage(content="Here are the recordings.")),
+    ]
+
+    async def _fake_complete(messages, tools, **kwargs):
+        assert _largest_content(messages) <= MAX_TOOL_RESULT_CHARS
+        return completions.pop(0)
+
+    monkeypatch.setattr(agent_loop, "WorkflowGenToolbox", _FakeToolbox)
+    monkeypatch.setattr(agent_loop.llm_client, "complete", _fake_complete)
+
+    steps = [
+        step
+        async for step in agent_loop.run_turn(
+            organization_id=1,
+            user_id=1,
+            prior_messages=[],
+            user_message="list my recordings",
+        )
+    ]
+
+    assert _largest_content(steps[-1].messages) <= MAX_TOOL_RESULT_CHARS
+
+
+@pytest.mark.asyncio
+async def test_a_thread_already_poisoned_heals_on_the_next_turn(monkeypatch):
+    """The threads that are dead right now. Without repair-on-load they stay
+    dead — reopening replays the same oversized history and fails again."""
+    poisoned = [
+        {"role": "user", "content": "test the tool"},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {"id": "old-1", "type": "function", "function": {"name": "test_tool", "arguments": "{}"}}
+            ],
+        },
+        {"role": "tool", "tool_call_id": "old-1", "content": json.dumps(_oversized_api_response())},
+    ]
+
+    class _FakeToolbox:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    async def _fake_complete(messages, tools, **kwargs):
+        assert _largest_content(messages) <= MAX_TOOL_RESULT_CHARS
+        return _FakeCompletion(_FakeMessage(content="Picking up where we left off."))
+
+    monkeypatch.setattr(agent_loop, "WorkflowGenToolbox", _FakeToolbox)
+    monkeypatch.setattr(agent_loop.llm_client, "complete", _fake_complete)
+
+    steps = [
+        step
+        async for step in agent_loop.run_turn(
+            organization_id=1,
+            user_id=1,
+            prior_messages=poisoned,
+            user_message="what happened?",
+        )
+    ]
+
+    persisted = steps[-1].messages
+    assert _largest_content(persisted) <= MAX_TOOL_RESULT_CHARS
+    _assert_every_tool_call_answered(persisted)

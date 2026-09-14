@@ -34,6 +34,11 @@ from api.services.workflow_gen.tool_schemas import (
     TOOL_SCHEMAS,
 )
 from api.services.workflow_gen.toolbox import WorkflowGenToolbox, WorkflowGenToolboxError
+from api.services.workflow_gen.transcript import (
+    compact_tool_result,
+    sanitize_transcript,
+    trim_to_budget,
+)
 
 MAX_TOOL_ITERATIONS = 10
 MAX_REPAIR_ATTEMPTS = 3
@@ -117,6 +122,23 @@ async def _dispatch_safe_tool(toolbox: WorkflowGenToolbox, name: str, arguments:
         return {"error": str(e)}
 
 
+def _tool_message(tool_call_id: str, payload: Any) -> dict[str, Any]:
+    """Build a `tool`-role message with its result capped.
+
+    Every tool reply in this module goes through here. A tool that returns a
+    customer's raw HTTP response can produce megabytes (`test_tool` hands back
+    `result.data` verbatim), and because the transcript is persisted and
+    replayed, an uncapped one doesn't fail a turn — it kills the thread
+    permanently. One choke point means a tool added later can't reintroduce
+    that by forgetting to cap.
+    """
+    return {
+        "role": "tool",
+        "tool_call_id": tool_call_id,
+        "content": compact_tool_result(payload),
+    }
+
+
 def _parse_arguments(raw: str | None) -> tuple[dict[str, Any] | None, str | None]:
     try:
         return json.loads(raw or "{}"), None
@@ -146,9 +168,7 @@ def _answer_dangling_tool_calls(messages: list[dict[str, Any]], reason: str) -> 
             call_id = call.get("id")
             if call_id and call_id not in answered:
                 answered.add(call_id)
-                rebuilt.append(
-                    {"role": "tool", "tool_call_id": call_id, "content": json.dumps({"skipped": reason})}
-                )
+                rebuilt.append(_tool_message(call_id, {"skipped": reason}))
     messages[:] = rebuilt
 
 
@@ -289,12 +309,30 @@ async def _run_loop(
     *,
     toolbox: WorkflowGenToolbox,
 ) -> AsyncIterator[LoopStep]:
-    # Covers both a bug anywhere above and a transcript already saved in a
-    # broken state by an earlier version — without this, such a thread stays
-    # permanently unusable because every turn replays the same bad history.
+    # Everything here repairs history rather than trusting it. A transcript is
+    # persisted and replayed, so anything wrong with it is permanent until
+    # fixed on load: a thread saved broken by an earlier version would
+    # otherwise fail identically on every future turn, forever.
+    #
+    # sanitize_transcript shrinks oversized results (a tool that returned a
+    # customer's whole API response), drops the oldest whole turns if the
+    # history has outgrown the context window, and removes any tool reply left
+    # stranded. _answer_dangling_tool_calls then covers the opposite orphan.
+    repair = sanitize_transcript(messages)
+    if repair.changed:
+        logger.info(f"workflow_gen transcript repaired on load: {repair.describe()}")
     _answer_dangling_tool_calls(messages, "This step was interrupted and did not complete.")
 
     for _ in range(MAX_TOOL_ITERATIONS):
+        # The loop can append up to MAX_TOOL_ITERATIONS results of its own
+        # within this single turn, so a transcript that fit on entry can stop
+        # fitting part-way through. Re-checked per iteration rather than only
+        # on entry; it's a no-op (one pass of the transcript) while there's
+        # room, and only ever drops turns older than the current one.
+        dropped = trim_to_budget(messages)
+        if dropped:
+            logger.info(f"workflow_gen dropped {dropped} older turn(s) to stay within budget")
+
         try:
             completion = await llm_client.complete(messages, TOOL_SCHEMAS)
         except llm_client.WorkflowGenLLMError as e:
@@ -322,7 +360,7 @@ async def _run_loop(
                 # before the next completion call, not just the broken one.
                 for c in tool_calls:
                     content = {"error": parse_error} if c.id == call.id else {"skipped": "A sibling tool call had malformed arguments."}
-                    messages.append({"role": "tool", "tool_call_id": c.id, "content": json.dumps(content)})
+                    messages.append(_tool_message(c.id, content))
                 continue
 
             preview: dict[str, Any] | None = None
@@ -340,9 +378,7 @@ async def _run_loop(
                             if c.id == call.id
                             else {"skipped": "A sibling tool call needs fixing first."}
                         )
-                        messages.append(
-                            {"role": "tool", "tool_call_id": c.id, "content": json.dumps(content)}
-                        )
+                        messages.append(_tool_message(c.id, content))
                     continue
 
                 # Describe the edit so the card can say what changes instead of
@@ -408,9 +444,7 @@ async def _run_loop(
             result: Any = {"error": parse_error} if parse_error else await _dispatch_safe_tool(
                 toolbox, call.function.name, arguments
             )
-            messages.append(
-                {"role": "tool", "tool_call_id": call.id, "content": json.dumps(result, default=str)}
-            )
+            messages.append(_tool_message(call.id, result))
 
     logger.warning("workflow_gen agent loop hit MAX_TOOL_ITERATIONS without finishing")
     messages.append(
@@ -635,15 +669,20 @@ async def execute_confirmed_action(
         {"role": "system", "content": _system_prompt(workflow_id)},
         *prior_messages,
     ]
+    # This path reaches `llm_client.complete` on its own (the repair hops
+    # below) before `_run_loop` ever runs, so it can't rely on the loop's
+    # sanitize — a confirm on an already-poisoned thread would fail here.
+    repair = sanitize_transcript(messages)
+    if repair.changed:
+        logger.info(f"workflow_gen transcript repaired on confirm: {repair.describe()}")
+
     tool_call_id = pending_action["tool_call_id"]
     tool_name = pending_action["action_type"]
     arguments = pending_action["arguments"]
 
     def _respond_siblings(reason: str) -> None:
         for sibling_id in pending_action.get("sibling_call_ids", []):
-            messages.append(
-                {"role": "tool", "tool_call_id": sibling_id, "content": json.dumps({"skipped": reason})}
-            )
+            messages.append(_tool_message(sibling_id, {"skipped": reason}))
 
     def _step(event: dict[str, Any], *, workflow_id: int | None = None) -> LoopStep:
         # `messages[0]` is always the system prompt injected at the top of
@@ -653,11 +692,10 @@ async def execute_confirmed_action(
 
     if not approve:
         messages.append(
-            {
-                "role": "tool",
-                "tool_call_id": tool_call_id,
-                "content": json.dumps({"declined": True, "message": "The user reviewed this and chose not to proceed."}),
-            }
+            _tool_message(
+                tool_call_id,
+                {"declined": True, "message": "The user reviewed this and chose not to proceed."},
+            )
         )
         _respond_siblings("A related action was declined by the user.")
         async for step in _run_loop(messages, toolbox=toolbox):
@@ -693,7 +731,10 @@ async def execute_confirmed_action(
 
         if outcome is not None and outcome.get("result") is not None:
             result = outcome["result"]
-            messages.append({"role": "tool", "tool_call_id": tool_call_id, "content": json.dumps(result, default=str)})
+            # `test_tool` lands here carrying the endpoint's raw response body,
+            # which is unbounded — this is the path that produced a 17MB
+            # message and permanently bricked the thread it was in.
+            messages.append(_tool_message(tool_call_id, result))
             primary_responded = True
             _respond_siblings("Handled as part of the confirmed action.")
             if result.get("kind") in ("create_workflow", "save_workflow"):
@@ -711,11 +752,10 @@ async def execute_confirmed_action(
             # nodes/edges, then re-extract its corrected create_workflow/
             # save_workflow call for the next attempt.
             messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": tool_call_id,
-                    "content": json.dumps({"validation_errors": last_errors, "please_fix_and_resubmit": True}),
-                }
+                _tool_message(
+                    tool_call_id,
+                    {"validation_errors": last_errors, "please_fix_and_resubmit": True},
+                )
             )
             primary_responded = True
 
@@ -750,13 +790,7 @@ async def execute_confirmed_action(
                         if lookup_err
                         else await _dispatch_safe_tool(toolbox, lookup.function.name, lookup_args)
                     )
-                    messages.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": lookup.id,
-                            "content": json.dumps(lookup_result, default=str),
-                        }
-                    )
+                    messages.append(_tool_message(lookup.id, lookup_result))
                 if repaired is not None or not lookups:
                     break
 
@@ -769,13 +803,7 @@ async def execute_confirmed_action(
             if parse_error:
                 # `repaired` is itself an unanswered tool call — settle it
                 # before this transcript reaches another completion.
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": repaired.id,
-                        "content": json.dumps({"error": parse_error}),
-                    }
-                )
+                messages.append(_tool_message(repaired.id, {"error": parse_error}))
                 last_errors = [parse_error]
                 break
             tool_call_id = repaired.id
@@ -789,9 +817,7 @@ async def execute_confirmed_action(
         # tool_call_id here or the next completion call violates the
         # OpenAI/Azure tool-call contract.
         last_errors = [hard_failure_message] if hard_failure_message else ["The action failed."]
-        messages.append(
-            {"role": "tool", "tool_call_id": tool_call_id, "content": json.dumps({"error": last_errors[0]})}
-        )
+        messages.append(_tool_message(tool_call_id, {"error": last_errors[0]}))
         primary_responded = True
         error_already_yielded = True
         break
@@ -800,11 +826,7 @@ async def execute_confirmed_action(
         _respond_siblings("The primary action failed.")
         if not primary_responded:
             messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": tool_call_id,
-                    "content": json.dumps({"validation_errors": last_errors, "gave_up": True}),
-                }
+                _tool_message(tool_call_id, {"validation_errors": last_errors, "gave_up": True})
             )
         if last_errors and not error_already_yielded:
             yield _step(_error("validation_failed", "; ".join(filter(None, last_errors))))

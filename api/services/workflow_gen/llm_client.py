@@ -13,7 +13,7 @@ from typing import Any
 
 import httpx
 from loguru import logger
-from openai import AsyncAzureOpenAI
+from openai import APIConnectionError, APITimeoutError, AsyncAzureOpenAI
 from openai.types.chat import ChatCompletion
 
 from api.constants import (
@@ -23,10 +23,15 @@ from api.constants import (
     WF_GEN_AZURE_OPENAI_ENDPOINT,
 )
 from api.services.workflow_gen.config import is_workflow_gen_configured
+from api.services.workflow_gen.transcript import PROVIDER_MAX_CONTENT_CHARS
 
 REQUEST_TIMEOUT_SECONDS = 90.0
 CONNECT_TIMEOUT_SECONDS = 15.0
 MAX_LLM_RETRIES = 2
+
+# Transient by nature: the identical request may well succeed a moment later.
+# 408 request-timeout, 409 conflict, 429 rate-limited, plus anything 5xx.
+_RETRYABLE_STATUS_CODES = frozenset({408, 409, 429})
 
 
 class WorkflowGenNotConfiguredError(Exception):
@@ -59,6 +64,42 @@ def _get_client() -> AsyncAzureOpenAI:
     return _client
 
 
+def _is_retryable(exc: Exception) -> bool:
+    """Whether re-sending the identical request could plausibly succeed.
+
+    Retrying a 400 cannot work — the request is malformed, and it will be just
+    as malformed the second and third time. Doing it anyway burns the backoff
+    budget (~7s) and buries the real cause under a retry-exhausted message.
+    """
+    if isinstance(exc, (APITimeoutError, APIConnectionError)):
+        return True
+    status = getattr(exc, "status_code", None)
+    if not isinstance(status, int):
+        # An unrecognised failure is far more likely to be a bug here than a
+        # blip worth re-sending. Surface it instead of hiding it behind retries.
+        return False
+    return status in _RETRYABLE_STATUS_CODES or status >= 500
+
+
+def _oversized_content(messages: list[dict[str, Any]]) -> str | None:
+    """Name a message that exceeds the provider's per-string limit.
+
+    Belt-and-braces: `transcript.sanitize_transcript` caps everything far below
+    this, so reaching it means a new path is appending uncapped content. Better
+    to say exactly which message and how big than to let it come back as an
+    opaque 400 three retries later.
+    """
+    for index, message in enumerate(messages):
+        content = message.get("content")
+        if isinstance(content, str) and len(content) > PROVIDER_MAX_CONTENT_CHARS:
+            return (
+                f"messages[{index}] (role={message.get('role')!r}) is "
+                f"{len(content):,} characters, over the provider's "
+                f"{PROVIDER_MAX_CONTENT_CHARS:,} limit"
+            )
+    return None
+
+
 async def complete(
     messages: list[dict[str, Any]],
     tools: list[dict[str, Any]],
@@ -66,6 +107,16 @@ async def complete(
     retries: int = MAX_LLM_RETRIES,
 ) -> ChatCompletion:
     """Call the model with the given tools, bounded retries + backoff."""
+    # Validated before the client is even constructed: an oversized request is
+    # wrong regardless of how the deployment is configured.
+    oversized = _oversized_content(messages)
+    if oversized:
+        logger.error(f"workflow_gen refusing oversized LLM request: {oversized}")
+        raise WorkflowGenLLMError(
+            f"The conversation contains a message too large to send ({oversized}). "
+            "This is a bug — a tool result was stored without being capped."
+        )
+
     client = _get_client()
     last_exc: Exception | None = None
     for attempt in range(retries + 1):
@@ -78,6 +129,9 @@ async def complete(
             )
         except Exception as e:  # noqa: BLE001
             last_exc = e
+            if not _is_retryable(e):
+                logger.warning(f"workflow_gen LLM call failed, not retryable: {e}")
+                raise WorkflowGenLLMError(f"LLM call failed: {e}") from e
             logger.warning(f"workflow_gen LLM call attempt {attempt + 1} failed: {e}")
             if attempt < retries:
                 await asyncio.sleep(min(2**attempt, 5))
