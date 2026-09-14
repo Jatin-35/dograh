@@ -389,7 +389,7 @@ export default function ToolsPage() {
                                                                     tool.icon_color || getCategoryConfig(tool.category as ToolCategory)?.iconColor || "#3B82F6",
                                                             }}
                                                         >
-                                                            {renderToolIcon(tool.category)}
+                                                            {renderToolIcon(tool.category, undefined, tool.definition)}
                                                         </div>
                                                         <div>
                                                             <div className="flex items-center gap-2">
@@ -452,7 +452,7 @@ export default function ToolsPage() {
                                                                         tool.icon_color || getCategoryConfig(tool.category as ToolCategory)?.iconColor || "#3B82F6",
                                                                 }}
                                                             >
-                                                                {renderToolIcon(tool.category)}
+                                                                {renderToolIcon(tool.category, undefined, tool.definition)}
                                                             </div>
                                                             <div>
                                                                 <div className="flex items-center gap-2">

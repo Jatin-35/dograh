@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleDollarSign,
+  Code2,
   Database,
   FileText,
   Home,
@@ -122,6 +123,11 @@ const NAV_SECTIONS: SidebarNavSection[] = [
         title: "Tools",
         url: "/tools",
         icon: Wrench,
+      },
+      {
+        title: "Code Editor",
+        url: "/code-editor",
+        icon: Code2,
       },
       {
         title: "Files",

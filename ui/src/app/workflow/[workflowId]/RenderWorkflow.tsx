@@ -90,6 +90,28 @@ function RenderWorkflow({
     const [versionsLoading, setVersionsLoading] = useState(false);
     const [versionsLoadingMore, setVersionsLoadingMore] = useState(false);
     const [versionsHasMore, setVersionsHasMore] = useState(false);
+
+    // Arriving from the assistant's "Open workflow" card.
+    //
+    // That card is a real navigation, so the editor mounts fresh with its
+    // panels closed — you'd land on the workflow you were just discussing
+    // with the assistant nowhere in sight. The hint is then stripped from
+    // the URL so a later manual refresh is an ordinary refresh rather than a
+    // replay of this arrival.
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        const params = new URLSearchParams(window.location.search);
+        if (params.get("assistant") !== "1") return;
+        setIsAssistantRailOpen(true);
+        params.delete("assistant");
+        const query = params.toString();
+        window.history.replaceState(
+            null,
+            "",
+            `${window.location.pathname}${query ? `?${query}` : ""}`,
+        );
+    }, []);
+
     const [activeVersionId, setActiveVersionId] = useState<number | null>(null);
     const hasAutoOpenedTester = useRef(false);
     // Version info that updates immediately from the GET/save/publish responses.
@@ -268,6 +290,7 @@ function RenderWorkflow({
             fetchVersions(true);
         }
     }, [versions, handleSelectVersion, workflowId, setNodes, setEdges, setIsDirty, fetchVersions]);
+
 
     // After a successful publish, refresh the version list and update status
     const handlePublished = useCallback(() => {

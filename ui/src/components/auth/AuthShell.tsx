@@ -1,6 +1,6 @@
 // Shared dark two-column auth shell, used by BOTH the Stack Auth handler
 // (/handler/[...stack], cloud) and the local/OSS auth pages (/auth/login,
-// /auth/signup). LEFT (lg+ only): a brand/value panel with the Dograh logo,
+// /auth/signup). LEFT (lg+ only): a brand/value panel with the BotrixAI logo,
 // proof points, and a Bland-style enterprise CTA block at the bottom (passed
 // in as `enterpriseSlot`). RIGHT: a centered card that wraps the auth form
 // (`children`). Mobile collapses to the single card column. The form column

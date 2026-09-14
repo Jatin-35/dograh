@@ -4,7 +4,7 @@ import { ExternalLink, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
-import { renderToolIcon } from "@/app/tools/config";
+import { getToolIconColor, renderToolIcon } from "@/app/tools/config";
 import { useWorkflowOptional } from "@/app/workflow/[workflowId]/contexts/WorkflowContext";
 import type { ToolResponse } from "@/client/types.gen";
 import { Button } from "@/components/ui/button";
@@ -201,10 +201,14 @@ export function ToolSelector({
                                         <div
                                             className="w-6 h-6 rounded flex items-center justify-center shrink-0"
                                             style={{
-                                                backgroundColor: tool.icon_color || "#3B82F6",
+                                                backgroundColor: getToolIconColor(
+                                                    tool.category,
+                                                    tool.icon_color || "#3B82F6",
+                                                    tool.definition,
+                                                ),
                                             }}
                                         >
-                                            {renderToolIcon(tool.category, "h-3 w-3 text-white")}
+                                            {renderToolIcon(tool.category, "h-3 w-3 text-white", tool.definition)}
                                         </div>
                                         <div className="flex flex-col min-w-0 flex-1">
                                             <span className="text-sm font-medium truncate">
@@ -243,7 +247,7 @@ export function ToolSelector({
                                                     backgroundColor: tool.icon_color || "#8B5CF6",
                                                 }}
                                             >
-                                                {renderToolIcon(tool.category, "h-3 w-3 text-white")}
+                                                {renderToolIcon(tool.category, "h-3 w-3 text-white", tool.definition)}
                                             </div>
                                             <div className="flex flex-col min-w-0 flex-1">
                                                 <span className="text-sm font-medium truncate">

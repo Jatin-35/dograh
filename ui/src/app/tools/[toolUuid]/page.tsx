@@ -777,7 +777,7 @@ const data = await response.json();`;
                                         backgroundColor: tool.icon_color || categoryConfig?.iconColor || "#3B82F6",
                                     }}
                                 >
-                                    {renderToolIcon(tool.category)}
+                                    {renderToolIcon(tool.category, undefined, tool.definition)}
                                 </div>
                                 <div>
                                     <h1 className="text-xl font-bold">{name}</h1>
