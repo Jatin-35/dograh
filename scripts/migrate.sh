@@ -21,7 +21,7 @@ fi
 export $(grep -v '^#' "$env_file" | xargs)
 
 # Run migrations
-alembic -c api/alembic.ini upgrade head
+alembic -c api/alembic.ini upgrade heads
 
 # Create initial data in DB
 # python api/initial_data.py

@@ -47,6 +47,7 @@ SERVICE_NAMES=(
   "campaign_orchestrator"
   "uvicorn"
   "arq"
+  "handlers"
 )
 
 SERVICE_COMMANDS=(
@@ -54,6 +55,10 @@ SERVICE_COMMANDS=(
   "python -m api.services.campaign.campaign_orchestrator"
   "uvicorn api.app:app --host 0.0.0.0 --port $UVICORN_BASE_PORT --reload --reload-dir api"
   "python -m arq api.tasks.arq.WorkerSettings --custom-log-dict api.tasks.arq.LOG_CONFIG"
+  # The Code Editor sandbox. Its own process for the same reason it is its own
+  # container in production: user code must not share a process with the voice
+  # pipeline, where one wedged handler would stall every concurrent call.
+  "uvicorn handlers.main:app --host 127.0.0.1 --port 8080"
 )
 
 ###############################################################################
@@ -156,7 +161,7 @@ rm -f "$RUN_DIR/uvicorn.port" "$RUN_DIR/uvicorn_new.port" "$RUN_DIR/uvicorn_old.
 ### 5) Run migrations
 ###############################################################################
 
-alembic -c "$BASE_DIR/api/alembic.ini" upgrade head
+alembic -c "$BASE_DIR/api/alembic.ini" upgrade heads
 
 ###############################################################################
 ### 6) Prepare logs

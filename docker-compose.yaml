@@ -267,6 +267,30 @@ services:
       WF_GEN_AZURE_OPENAI_DEPLOYMENT: "${WF_GEN_AZURE_OPENAI_DEPLOYMENT:-}"
       WF_GEN_AZURE_OPENAI_API_VERSION: "${WF_GEN_AZURE_OPENAI_API_VERSION:-}"
 
+      # Code Editor. The API does not execute anything itself — it calls the
+      # handlers container, which owns the sandbox. This URL must be the
+      # service name on app-network: the code's own fallback is localhost:8080,
+      # which inside this container is nothing at all, so leaving it unset
+      # makes every test run and every deployed tool call fail.
+      HANDLERS_URL: "${HANDLERS_URL:-http://handlers:8080}"
+      # The address the API is reachable at from inside the network. It is
+      # baked into every tool the Code Editor generates, so a wrong value here
+      # is not noticed until a live call invokes one. The service name works
+      # from any container including this one, where the code's `localhost`
+      # fallback only happens to work because calls run in this process today.
+      API_INTERNAL_URL: "${API_INTERNAL_URL:-http://api:8000}"
+      # Must match the value the handlers service is given below, or that
+      # service answers 401 to everything the API sends it.
+      HANDLERS_API_KEY: "${HANDLERS_API_KEY:-}"
+      # Encrypts Code Editor environment variables at rest (a urlsafe base64
+      # 32-byte Fernet key). Optional: leaving it empty disables *only* the
+      # variables feature — files, versions, deploys and test runs all keep
+      # working — and storing a secret then fails loudly rather than silently
+      # writing plaintext. Generate with:
+      #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+      # Rotating it makes existing values undecryptable; they must be re-entered.
+      CODE_EDITOR_ENCRYPTION_KEY: "${CODE_EDITOR_ENCRYPTION_KEY:-}"
+
       # Telemetry
       ENABLE_TELEMETRY: "${ENABLE_TELEMETRY:-true}"
       POSTHOG_API_KEY: "phc_ItizB1dP6yv7ZYobbcqrpxTdbomDA8hJFSEmAMdYvIr"
@@ -291,6 +315,41 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
+    networks:
+      - app-network
+
+  # Custom tool handlers — integration logic that a plain HTTP tool can't
+  # express (response headers, a persisted session, a multi-step handshake).
+  #
+  # Its own container on purpose: a handler that blocks or hangs must not stall
+  # the voice pipeline, and one that crashes must not take the API with it.
+  #
+  # No `ports:` — it is reachable only on app-network. Dograh tools call
+  # http://handlers:8080/tools/<name>; nginx never proxies it. HANDLERS_API_KEY
+  # is still required, because Dograh's custom HTTP tools have no SSRF guard and
+  # any org could otherwise invoke another org's integrations.
+  handlers:
+    image: ${REGISTRY:-dograhai}/dograh-handlers:latest
+    build:
+      context: .
+      dockerfile: handlers/Dockerfile
+    environment:
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+      # Must stay below the calling Dograh tool's timeout_ms so this service
+      # fails first and can return a speakable error.
+      HANDLER_TIMEOUT_SECONDS: "${HANDLER_TIMEOUT_SECONDS:-8}"
+      HANDLERS_API_KEY: "${HANDLERS_API_KEY:-}"
+      # Per-integration credentials. Add new ones here as handlers are added —
+      # compose does not forward .env into containers automatically.
+      SAP_BASIC_AUTH_HEADER: "${SAP_BASIC_AUTH_HEADER:-}"
+    restart: unless-stopped
+    profiles: ["remote"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=5).status == 200 else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     networks:
       - app-network
 

@@ -33,4 +33,4 @@ if (Test-Path $EnvFile) {
 }
 
 # Run migrations
-alembic -c api/alembic.ini upgrade head
+alembic -c api/alembic.ini upgrade heads

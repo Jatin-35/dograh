@@ -148,7 +148,7 @@ fi
 ### 5) Run migrations
 ###############################################################################
 
-alembic -c "$BASE_DIR/api/alembic.ini" upgrade head
+alembic -c "$BASE_DIR/api/alembic.ini" upgrade heads
 
 ###############################################################################
 ### 7) Prepare logs

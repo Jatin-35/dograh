@@ -67,6 +67,11 @@ if ($IncludeTelephonyWorkers) {
 $serviceSpecs += @{ Name = 'uvicorn'; Cmd = "uvicorn api.app:app --host 0.0.0.0 --port $($env:UVICORN_BASE_PORT) --reload --reload-dir api" }
 $serviceSpecs += @{ Name = 'arq';     Cmd = "python -m arq api.tasks.arq.WorkerSettings --custom-log-dict api.tasks.arq.LOG_CONFIG" }
 
+# The Code Editor sandbox. Runs as its own process for the same reason it is
+# its own container in production: user code must not share a process with the
+# voice pipeline, where one wedged handler would stall every concurrent call.
+$serviceSpecs += @{ Name = 'handlers'; Cmd = "uvicorn handlers.main:app --host 127.0.0.1 --port 8080" }
+
 ###############################################################################
 ### 3) Activate virtual environment
 ###############################################################################
@@ -105,7 +110,7 @@ foreach ($spec in $serviceSpecs) {
 ###############################################################################
 
 if (-not $NoMigrations) {
-    alembic -c (Join-Path $BaseDir 'api/alembic.ini') upgrade head
+    alembic -c (Join-Path $BaseDir 'api/alembic.ini') upgrade heads
 }
 
 ###############################################################################

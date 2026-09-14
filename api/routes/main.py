@@ -28,6 +28,7 @@ from api.routes.user import router as user_router
 from api.routes.webrtc_signaling import router as webrtc_signaling_router
 from api.routes.workflow import router as workflow_router
 from api.routes.workflow_embed import router as workflow_embed_router
+from api.routes.code_editor import router as code_editor_router
 from api.routes.workflow_gen_chat import router as workflow_gen_chat_router
 from api.routes.workflow_recording import router as workflow_recording_router
 from api.routes.workflow_text_chat import router as workflow_text_chat_router
@@ -42,6 +43,7 @@ router.include_router(telephony_router)
 router.include_router(superuser_router)
 router.include_router(workflow_router)
 router.include_router(workflow_text_chat_router)
+router.include_router(code_editor_router)
 router.include_router(workflow_gen_chat_router)
 router.include_router(user_router)
 router.include_router(campaign_router)

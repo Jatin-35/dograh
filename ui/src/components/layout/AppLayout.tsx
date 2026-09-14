@@ -150,7 +150,13 @@ const AppLayout: React.FC<AppLayoutProps> = ({
         <LeadFormsProvider>
           <div className="flex min-h-screen w-full">
             <AppSidebar />
-            <SidebarInset className="flex-1">
+            {/* min-w-0 is load-bearing: a flex item defaults to min-width:auto, so it
+                refuses to shrink below its content's intrinsic width. The sidebar
+                renders a spacer in flow beside this, so any page wide enough — a code
+                editor, a wide table — pushed the whole shell past the viewport and
+                clipped everything on the right, the header included. This only
+                permits shrinking; a page that already fits is unaffected. */}
+            <SidebarInset className="min-w-0 flex-1">
               <BackendStatusBanner />
               {!isWorkflowEditor && <AppHeader />}
               {/* Optional header area for specific pages */}

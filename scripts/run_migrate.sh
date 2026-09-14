@@ -9,4 +9,4 @@ if [[ -f "$ENV_FILE" ]]; then
 fi
 
 cd "$BASE_DIR"
-exec alembic -c "$BASE_DIR/api/alembic.ini" upgrade head
+exec alembic -c "$BASE_DIR/api/alembic.ini" upgrade heads

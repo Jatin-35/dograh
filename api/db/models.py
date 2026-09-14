@@ -641,7 +641,6 @@ class WorkflowRunTextSessionModel(Base):
     __table_args__ = (Index("ix_workflow_run_text_sessions_updated_at", "updated_at"),)
 
 
-
 class WorkflowGenChatSessionModel(Base):
     """A conversation with the in-product AI assistant (chat-driven authoring
     over Dograh's own MCP tools). Distinct from WorkflowRunTextSessionModel,
@@ -672,6 +671,14 @@ class WorkflowGenChatSessionModel(Base):
     # `workflow_id` starts null but gets attached once it successfully builds
     # a workflow — so `workflow_id IS NULL` is NOT a stable way to tell
     # "standalone" sessions apart for the thread-history sidebar; this flag is.
+    # Which part of the product this session was opened from: "workflow" (the
+    # editor panel), "code_editor", or "standalone". It steers the prompt's
+    # orientation only — the toolset stays the same everywhere, because the
+    # requests worth answering often span both (a workflow needing a custom
+    # Python function is the common case, not the exception).
+    surface = Column(
+        String(32), nullable=False, default="standalone", server_default=text("'standalone'")
+    )
     is_workflow_scoped = Column(
         Boolean, nullable=False, default=False, server_default=text("false")
     )
@@ -738,6 +745,7 @@ class WorkflowGenChatSessionModel(Base):
             postgresql_where=text("workflow_id IS NOT NULL"),
         ),
     )
+
 
 class OrganizationUsageCycleModel(Base):
     """
@@ -1565,4 +1573,114 @@ class KnowledgeBaseChunkModel(Base):
             postgresql_with={"lists": 100},  # Adjust based on dataset size
             postgresql_ops={"embedding": "vector_cosine_ops"},
         ),
+    )
+
+
+class CodeEditorFileModel(Base):
+    """One file in an organization's Code Editor workspace.
+
+    A virtual filesystem, not real files. Storing paths as rows keeps the tree
+    per-organization and lets a deploy snapshot it atomically, and it means user
+    code never touches the host filesystem.
+
+    Paths are the contract with the rest of the feature:
+      all_events_entry_point.py   the single Python router
+      function_definitions/*.json OpenAI-format tool schemas
+      agents/*.ts                 Dograh SDK agent source
+    """
+
+    __tablename__ = "code_editor_files"
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(
+        Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    path = Column(String(512), nullable=False)
+    content = Column(Text, nullable=False, default="")
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+    updated_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    organization = relationship("OrganizationModel")
+
+    __table_args__ = (
+        UniqueConstraint("organization_id", "path", name="uq_code_editor_files_org_path"),
+        Index("ix_code_editor_files_org", "organization_id"),
+    )
+
+
+class CodeEditorVersionModel(Base):
+    """An immutable snapshot of a workspace.
+
+    `files` holds the whole tree as {path: content}. Snapshotting the content
+    rather than referencing the live rows is the point — a deployed version must
+    keep running exactly as it was even while the draft is edited, which is what
+    separates "what I'm working on" from "what is answering calls".
+
+    The deployed version is the one with the most recent non-null `deployed_at`,
+    so redeploying an older version is a rollback and needs no extra state.
+    """
+
+    __tablename__ = "code_editor_versions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(
+        Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    version_number = Column(Integer, nullable=False)
+    description = Column(String(500), nullable=True)
+    files = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    deployed_at = Column(DateTime(timezone=True), nullable=True)
+
+    organization = relationship("OrganizationModel")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id", "version_number", name="uq_code_editor_versions_org_num"
+        ),
+        Index("ix_code_editor_versions_org", "organization_id"),
+        Index("ix_code_editor_versions_deployed", "organization_id", "deployed_at"),
+    )
+
+
+class CodeEditorEnvVarModel(Base):
+    """A per-organization secret, injected into user code as os.environ.
+
+    `value` is Fernet-encrypted at rest (see services/code_editor/secrets.py) and
+    never returned to the client after it is written — the UI shows the key and a
+    masked hint only. Encrypting matters more here than for most stored config:
+    these values are handed to code the platform did not write.
+    """
+
+    __tablename__ = "code_editor_env_vars"
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(
+        Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    key = Column(String(128), nullable=False)
+    value_encrypted = Column(Text, nullable=False)
+    # Last few characters, kept in clear so the UI can show "…a1b2" without
+    # decrypting or ever re-displaying the secret.
+    value_hint = Column(String(8), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+    organization = relationship("OrganizationModel")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id", "key", name="uq_code_editor_env_vars_org_key"
+        ),
+        Index("ix_code_editor_env_vars_org", "organization_id"),
     )

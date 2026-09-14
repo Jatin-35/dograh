@@ -259,7 +259,7 @@ else
   log_warn "No virtual environment at $VENV_PATH, continuing without"
 fi
 
-if ! alembic -c "$BASE_DIR/api/alembic.ini" upgrade head; then
+if ! alembic -c "$BASE_DIR/api/alembic.ini" upgrade heads; then
   log_error "Alembic migration failed. Aborting — nothing has been touched."
   exit 1
 fi
