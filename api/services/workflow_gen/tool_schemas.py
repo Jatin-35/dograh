@@ -28,6 +28,11 @@ MUTATING_TOOLS = frozenset(
         # Not a write, but it fires a real request at the user's endpoint —
         # a side effect they should approve, not something to do silently.
         "test_tool",
+        # Code Editor writes. The spec for this feature is explicit that
+        # generated code is never applied without the user accepting it, and
+        # the approval card is where the diff is shown.
+        "write_code_file",
+        "delete_code_file",
     }
 )
 
@@ -90,7 +95,7 @@ _HTTP_API_TOOL_DEFINITION_SCHEMA = {
                 "preset_parameters": {
                     "type": "array",
                     "items": _PRESET_TOOL_PARAMETER_SCHEMA,
-                    "description": "Fixed or templated values Dograh injects automatically.",
+                    "description": "Fixed or templated values BotrixAI injects automatically.",
                 },
                 "timeout_ms": {"type": "integer"},
             },
@@ -463,6 +468,108 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "list_code_files",
+            "description": (
+                "List the organization's Code Editor workspace: the Python router, "
+                "function definition schemas, and any helper modules. Paths and "
+                "sizes only — call read_code_file for contents."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_code_file",
+            "description": (
+                "Read one file from the Code Editor workspace. Always read a file "
+                "before rewriting it so the edit builds on what is actually there."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": (
+                            "e.g. all_events_entry_point.py or "
+                            "function_definitions/get_order_status.json"
+                        ),
+                    }
+                },
+                "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "write_code_file",
+            "description": (
+                "Create or replace a Code Editor file. The content is validated "
+                "before it is stored, so a malformed function schema or a Python "
+                "syntax error is rejected with the specific problem. Paths must be "
+                "all_events_entry_point.py, function_definitions/<name>.json (the "
+                "filename must equal the schema's name), agents/<name>.ts, or a "
+                "*.py helper module. Never declare function_name or call in a "
+                "schema — the platform injects both."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Workspace-relative path."},
+                    "content": {"type": "string", "description": "The complete new file content."},
+                },
+                "required": ["path", "content"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_code_file",
+            "description": (
+                "Delete a Code Editor file. The router itself cannot be deleted."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {"path": {"type": "string"}},
+                "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "test_code_run",
+            "description": (
+                "Run the draft workspace against a test payload and return the "
+                "result, captured print output and status code. Use this to check "
+                "your own work before telling the user it is ready. Include "
+                "function_name in the event; the router dispatches on it."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "event": {
+                        "type": "object",
+                        "description": (
+                            "Test payload, e.g. "
+                            '{"function_name": "get_order_status", "order_id": "ORD-1"}'
+                        ),
+                        "additionalProperties": True,
+                    },
+                    "timeout_seconds": {
+                        "type": "number",
+                        "description": "Seconds before the run is stopped. Default 10.",
+                    },
+                },
+                "required": ["event"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_voice_prompting_guide",
             "description": "Fetch staged voice-prompting guidance. Call before composing or revising any prompt field.",
             "parameters": {
@@ -479,7 +586,7 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "search_docs",
-            "description": "Keyword search over Dograh's documentation.",
+            "description": "Keyword search over the platform documentation.",
             "parameters": {
                 "type": "object",
                 "properties": {"query": {"type": "string"}, "limit": {"type": "integer"}},

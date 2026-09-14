@@ -9925,8 +9925,18 @@ export type ListWorkflowGenSessionsApiV1WorkflowGenSessionsGetResponses = {
 
 export type ListWorkflowGenSessionsApiV1WorkflowGenSessionsGetResponse = ListWorkflowGenSessionsApiV1WorkflowGenSessionsGetResponses[keyof ListWorkflowGenSessionsApiV1WorkflowGenSessionsGetResponses];
 
+/**
+ * CreateWorkflowGenSessionRequest
+ */
+export type CreateWorkflowGenSessionRequest = {
+    /**
+     * Surface
+     */
+    surface?: string;
+};
+
 export type CreateWorkflowGenSessionApiV1WorkflowGenSessionsPostData = {
-    body?: never;
+    body?: CreateWorkflowGenSessionRequest | null;
     headers?: {
         /**
          * Authorization

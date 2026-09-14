@@ -24,11 +24,13 @@ class WorkflowGenChatSessionClient(BaseDBClient):
         self,
         organization_id: int,
         created_by: int | None = None,
+        surface: str = "standalone",
     ) -> WorkflowGenChatSessionModel:
         async with self.async_session() as session:
             chat_session = WorkflowGenChatSessionModel(
                 organization_id=organization_id,
                 created_by=created_by,
+                surface=surface,
                 messages=[],
                 status="idle",
             )
@@ -69,6 +71,7 @@ class WorkflowGenChatSessionClient(BaseDBClient):
                 organization_id=organization_id,
                 created_by=created_by,
                 workflow_id=workflow_id,
+                surface="workflow",
                 is_workflow_scoped=True,
                 messages=[],
                 status="idle",

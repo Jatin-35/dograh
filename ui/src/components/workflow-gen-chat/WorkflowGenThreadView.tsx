@@ -240,7 +240,11 @@ export function WorkflowReadyToolUI({ args }: ToolCallMessagePartProps<WorkflowR
                     {args.nodeCount} node{args.nodeCount === 1 ? "" : "s"} · {args.edgeCount} edge{args.edgeCount === 1 ? "" : "s"}
                 </p>
                 <Button size="sm" variant="outline" className="mt-3" asChild>
-                    <a href={args.url}>
+                    {/* Carries the assistant across the navigation. This is a real
+                        page load, so the editor mounts fresh with its panels
+                        closed — without the hint you land on the workflow you
+                        just discussed with the assistant nowhere in sight. */}
+                    <a href={`${args.url}${args.url.includes("?") ? "&" : "?"}assistant=1`}>
                         Open workflow
                         <ArrowRight className="h-3.5 w-3.5" />
                     </a>

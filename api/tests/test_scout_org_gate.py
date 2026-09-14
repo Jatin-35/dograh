@@ -387,3 +387,4 @@ async def test_every_chat_route_is_gated():
             f"{name} does not call _require_scout_enabled — every workflow-gen "
             "route must enforce the org gate server-side."
         )
+

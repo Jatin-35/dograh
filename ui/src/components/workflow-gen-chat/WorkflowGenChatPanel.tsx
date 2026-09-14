@@ -42,6 +42,15 @@ interface WorkflowGenChatPanelProps {
     /** Notifies the caller while a turn is in flight, so the editor header
      * can show a working indicator even with the panel closed. */
     onBusyChange?: (busy: boolean) => void;
+    /** Overrides the empty-state prompts. The defaults are workflow-shaped;
+     * the Code Editor opens the same assistant against a different subject and
+     * needs to suggest writing a function, not building an agent. */
+    suggestions?: string[];
+    /** Empty-state heading, for the same reason. */
+    emptyStateTitle?: string;
+    /** Which part of the product this panel sits in. Reaches the prompt so
+     * an ambiguous request is read the way the surface implies. */
+    surface?: "standalone" | "code_editor";
 }
 
 // Opened from inside a workflow's editor, the assistant's job is changing the
@@ -175,13 +184,26 @@ function ChatComposer({ placeholder, sendingMessage }: ChatComposerProps) {
     );
 }
 
-export function WorkflowGenChatPanel({ workflowId, onClose, className, session: externalSession, onBusyChange }: WorkflowGenChatPanelProps) {
+export function WorkflowGenChatPanel({
+    workflowId,
+    onClose,
+    className,
+    session: externalSession,
+    onBusyChange,
+    suggestions: suggestionsOverride,
+    emptyStateTitle,
+    surface,
+}: WorkflowGenChatPanelProps) {
     // `enabled: externalSession == null` — when a caller hands us a session
     // it already instantiated (the standalone page), skip this instance's
     // own auto-start-or-restore effect entirely rather than spinning up an
     // unused parallel session. Rules of Hooks requires calling this
     // unconditionally either way.
-    const ownSession = useWorkflowGenChatSession({ workflowId, enabled: externalSession == null });
+    const ownSession = useWorkflowGenChatSession({
+        workflowId,
+        enabled: externalSession == null,
+        surface,
+    });
     const {
         session,
         thread,
@@ -225,7 +247,9 @@ export function WorkflowGenChatPanel({ workflowId, onClose, className, session: 
             : "Describe the agent you want to build…";
     }, [hasPendingAction, isEditingExistingWorkflow]);
 
-    const suggestions = isEditingExistingWorkflow ? EDIT_SUGGESTIONS : BUILD_SUGGESTIONS;
+    const suggestions =
+        suggestionsOverride ??
+        (isEditingExistingWorkflow ? EDIT_SUGGESTIONS : BUILD_SUGGESTIONS);
     const isEmpty = thread.length === 0;
 
     return (
@@ -268,9 +292,10 @@ export function WorkflowGenChatPanel({ workflowId, onClose, className, session: 
                                     <Sparkles className="h-5 w-5" />
                                 </div>
                                 <p className="max-w-sm text-sm text-muted-foreground">
-                                    {isEditingExistingWorkflow
-                                        ? "Ask for a change to this workflow — adding a tool, editing a prompt, reshaping the flow. I'll show you the change for review before anything is saved."
-                                        : "Describe the voice agent you want, and I'll draft it here for your review before anything is built."}
+                                    {emptyStateTitle ??
+                                        (isEditingExistingWorkflow
+                                            ? "Ask for a change to this workflow — adding a tool, editing a prompt, reshaping the flow. I'll show you the change for review before anything is saved."
+                                            : "Describe the voice agent you want, and I'll draft it here for your review before anything is built.")}
                                 </p>
 
                                 <div className="w-full max-w-md">

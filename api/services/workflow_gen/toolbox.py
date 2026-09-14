@@ -34,6 +34,7 @@ from api.mcp_server.tools.docs_search import search_docs as _search_docs
 from api.mcp_server.tools.save_workflow import save_workflow_for_user
 from api.mcp_server.ts_bridge import TsBridgeError
 from api.schemas.tool import CreateToolRequest
+from api.services.code_editor import workspace as code_workspace
 from api.services.credential_management import (
     CredentialManagementError,
     create_credential_for_user,
@@ -436,3 +437,71 @@ class WorkflowGenToolbox:
 
     async def list_docs(self, path: str | None = None, depth: int = 1) -> list[dict[str, Any]]:
         return await _list_docs(path, depth)
+
+    # ------------------------------------------------------------------
+    # Code Editor (per-org Python workspace)
+    # ------------------------------------------------------------------
+
+    async def list_code_files(self) -> dict[str, Any]:
+        """Paths and sizes only.
+
+        Deliberately not contents: a workspace can run to tens of thousands of
+        characters, and returning all of it on every listing would crowd out the
+        conversation for information the model mostly doesn't need yet.
+        """
+        files = await code_workspace.ensure_workspace(self.organization_id)
+        return {
+            "files": [
+                {"path": path, "chars": len(content)}
+                for path, content in sorted(files.items())
+            ]
+        }
+
+    async def read_code_file(self, path: str) -> dict[str, Any]:
+        file = await db_client.get_code_editor_file(self.organization_id, path)
+        if file is None:
+            raise WorkflowGenToolboxError(
+                f"{path} does not exist. Call list_code_files to see the workspace."
+            )
+        return {"path": file.path, "content": file.content}
+
+    async def write_code_file(self, path: str, content: str) -> dict[str, Any]:
+        """Create or replace a file. Validated before it is stored."""
+        try:
+            result = await code_workspace.save_file(
+                self.organization_id, path, content, self.user_id
+            )
+        except code_workspace.WorkspaceError as e:
+            raise WorkflowGenToolboxError(e.message, errors=e.errors) from e
+        return {"saved": True, "path": path, "warnings": result.warnings}
+
+    async def delete_code_file(self, path: str) -> dict[str, Any]:
+        try:
+            deleted = await code_workspace.delete_file(self.organization_id, path)
+        except code_workspace.WorkspaceError as e:
+            raise WorkflowGenToolboxError(e.message) from e
+        if not deleted:
+            raise WorkflowGenToolboxError(f"{path} does not exist.")
+        return {"deleted": True, "path": path}
+
+    async def test_code_run(
+        self, event: dict[str, Any], timeout_seconds: float = 10.0
+    ) -> dict[str, Any]:
+        """Execute the draft workspace against a test payload.
+
+        Read-only from the platform's point of view — it runs in the sandbox,
+        touches nothing persistent, and is how the model checks its own work
+        before asking for anything to be deployed.
+        """
+        try:
+            outcome = await code_workspace.run_test(
+                self.organization_id, event, timeout_seconds=timeout_seconds
+            )
+        except code_workspace.WorkspaceError as e:
+            raise WorkflowGenToolboxError(e.message) from e
+        # Logs can be large and go straight into the transcript; the tail is
+        # what matters when something failed.
+        logs = outcome.get("logs") or ""
+        if len(logs) > 4000:
+            outcome = {**outcome, "logs": f"… [earlier output omitted]\n{logs[-4000:]}"}
+        return outcome

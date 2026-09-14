@@ -27,7 +27,11 @@ import type {
     WorkflowGenThreadItem,
 } from "./types";
 
-const STANDALONE_SESSION_STORAGE_KEY = "dograh:workflow-gen:standalone-session-id";
+/** Keyed per surface. One shared key meant opening Scout in the Code Editor
+ * restored whatever conversation the standalone page last used — landing the
+ * user in an unrelated workflow-building thread with no way to tell why. */
+const sessionStorageKey = (surface: string) =>
+    `dograh:workflow-gen:session-id:${surface}`;
 
 function getErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : "Something went wrong";
@@ -66,9 +70,17 @@ interface UseWorkflowGenChatSessionOptions {
      * its thread-history sidebar) so the panel doesn't also spin up an
      * unused parallel session in the background. Defaults to true. */
     enabled?: boolean;
+    /** Which part of the product opened this session. Steers the prompt's
+     * orientation so an ambiguous request is read the way the surface
+     * implies — in the Code Editor, "add a tool" means write a function. */
+    surface?: "standalone" | "code_editor";
 }
 
-export function useWorkflowGenChatSession({ workflowId, enabled = true }: UseWorkflowGenChatSessionOptions = {}) {
+export function useWorkflowGenChatSession({
+    workflowId,
+    enabled = true,
+    surface,
+}: UseWorkflowGenChatSessionOptions = {}) {
     const { isAuthenticated, loading: authLoading, getAccessToken } = useAuth();
     const [session, setSession] = useState<WorkflowGenChatSessionResponse | null>(null);
     const [thread, setThread] = useState<WorkflowGenThreadItem[]>([]);
@@ -103,19 +115,24 @@ export function useWorkflowGenChatSession({ workflowId, enabled = true }: UseWor
                         path: { workflow_id: workflowId },
                     });
                 } else if (opts?.forceNew) {
-                    response = await createWorkflowGenSessionApiV1WorkflowGenSessionsPost({});
+                    response = await createWorkflowGenSessionApiV1WorkflowGenSessionsPost(
+                        surface ? { body: { surface } } : {},
+                    );
                 } else if (opts?.sessionId != null) {
                     response = await getWorkflowGenSessionApiV1WorkflowGenSessionsSessionIdGet({
                         path: { session_id: opts.sessionId },
                     });
                 } else {
-                    const storedId = typeof window !== "undefined" ? window.localStorage.getItem(STANDALONE_SESSION_STORAGE_KEY) : null;
+                    const storageKey = sessionStorageKey(surface ?? "standalone");
+                    const storedId = typeof window !== "undefined" ? window.localStorage.getItem(storageKey) : null;
                     if (storedId) {
                         response = await getWorkflowGenSessionApiV1WorkflowGenSessionsSessionIdGet({
                             path: { session_id: Number(storedId) },
                         });
                     } else {
-                        response = await createWorkflowGenSessionApiV1WorkflowGenSessionsPost({});
+                        response = await createWorkflowGenSessionApiV1WorkflowGenSessionsPost(
+                        surface ? { body: { surface } } : {},
+                    );
                     }
                 }
 
@@ -125,7 +142,7 @@ export function useWorkflowGenChatSession({ workflowId, enabled = true }: UseWor
                 setSession(response.data);
                 setThread(threadFromSession(response.data));
                 if (workflowId == null && typeof window !== "undefined") {
-                    window.localStorage.setItem(STANDALONE_SESSION_STORAGE_KEY, String(response.data.id));
+                    window.localStorage.setItem(sessionStorageKey(surface ?? "standalone"), String(response.data.id));
                 }
             } catch (error) {
                 // Release the one-shot latch so the next mount (reopening the
@@ -139,7 +156,7 @@ export function useWorkflowGenChatSession({ workflowId, enabled = true }: UseWor
                 setCreatingSession(false);
             }
         },
-        [workflowId],
+        [workflowId, surface],
     );
 
     useEffect(() => {

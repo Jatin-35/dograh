@@ -89,7 +89,7 @@ class SuperuserOrganizationResponse(BaseModel):
     created_at: datetime
     user_count: int
     # Whether a superadmin has switched Scout on for this org. Defaults to
-    # False, which is also what an org with no stored setting reports â€” Scout
+    # False, which is also what an org with no stored setting reports — Scout
     # is opt-in per client, not something a new org inherits.
     scout_enabled: bool = False
 
@@ -312,7 +312,7 @@ async def list_organizations(
     """List all organizations with member counts. Requires superuser privileges."""
     organizations = await db_client.list_organizations_for_superadmin()
 
-    # One query for every org's Scout setting rather than one per row â€” the
+    # One query for every org's Scout setting rather than one per row — the
     # list is unpaginated, so a per-row lookup would be N round trips.
     scout_rows = await db_client.get_all_configurations_by_key(
         OrganizationConfigurationKey.SCOUT_ENABLED.value

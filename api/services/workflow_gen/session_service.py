@@ -78,10 +78,10 @@ def _title_from_message(text: str) -> str:
 
 
 async def create_session(
-    organization_id: int, user_id: int | None
+    organization_id: int, user_id: int | None, surface: str = "standalone"
 ) -> WorkflowGenChatSessionModel:
     return await db_client.create_workflow_gen_chat_session(
-        organization_id=organization_id, created_by=user_id
+        organization_id=organization_id, created_by=user_id, surface=surface
     )
 
 
@@ -169,6 +169,7 @@ async def append_user_turn_and_run(
             # Tells the assistant which workflow the user has open, so it acts
             # on it instead of asking them to pick one.
             workflow_id=chat_session.workflow_id,
+            surface=chat_session.surface or "standalone",
         ):
             has_pending = step.event["type"] == "approval"
             # Once the workflow gets a real name (i.e. it's been built), the
@@ -227,6 +228,7 @@ async def confirm_pending_action(
             pending_action=current_pending,
             approve=approve,
             workflow_id=chat_session.workflow_id,
+            surface=chat_session.surface or "standalone",
         ):
             # `execute_confirmed_action` resolves `current_pending` and then
             # resumes the agent loop for any post-build follow-up — which can

@@ -364,6 +364,14 @@ async def _run_loop(
                 continue
 
             preview: dict[str, Any] | None = None
+            if call.function.name == "write_code_file":
+                # Build the diff before the card is shown, so the user reviews
+                # the change rather than a wall of proposed file content.
+                preview = await _preview_code_file(
+                    toolbox,
+                    arguments.get("path", ""),
+                    arguments.get("content", ""),
+                )
             if call.function.name in _WORKFLOW_SOURCE_TOOLS:
                 yield LoopStep(_status("Checking the proposed changes…"), list(messages))
                 preview, preview_errors = await _preview_workflow_source(
@@ -408,7 +416,14 @@ async def _run_loop(
             # What the user is shown, with any secrets redacted. Kept beside
             # `arguments` (which stays intact, since it's what executes) so a
             # reopened thread can re-render the card without the raw secret.
-            display_preview = {**_mask_secret_arguments(arguments), **(preview or {})}
+            shown_arguments = _mask_secret_arguments(arguments)
+            if call.function.name == "write_code_file":
+                # The diff is the review surface; the full proposed content
+                # would only bloat the card and the persisted transcript.
+                shown_arguments = {
+                    k: v for k, v in shown_arguments.items() if k != "content"
+                }
+            display_preview = {**shown_arguments, **(preview or {})}
             pending_action = {
                 "action_id": action_id,
                 "tool_call_id": call.id,
@@ -482,35 +497,102 @@ def _summarize_mutating_call(
     if tool_name == "create_credential":
         name = arguments.get("name") or "a new credential"
         return f'Ready to securely store "{name}" — the secret is saved once and referenced by tools, never shown again.'
+    if tool_name == "write_code_file":
+        path = arguments.get("path") or "a file"
+        existing = shape.get("previous_chars")
+        if existing is None:
+            return f'Ready to create "{path}".'
+        return (
+            f'Ready to rewrite "{path}" '
+            f"({existing} → {len(arguments.get('content') or '')} characters)."
+        )
+    if tool_name == "delete_code_file":
+        return f'Ready to delete "{arguments.get("path")}".'
     return f"Ready to run {tool_name}."
 
 
-def _system_prompt(workflow_id: int | None) -> str:
-    """The base prompt, plus which workflow this session is attached to.
+async def _preview_code_file(
+    toolbox: WorkflowGenToolbox, path: str, content: str
+) -> dict[str, Any]:
+    """What the approval card shows for a file write.
 
-    Without this the assistant opens inside a workflow's editor and still
-    asks which workflow to change — it can list them, but has no idea which
-    one the user is looking at.
+    A unified diff rather than the whole new file: the spec requires the user
+    accept the change, and they can only meaningfully do that if they can see
+    what changed. Handing them a 200-line file and asking "ok?" is a rubber
+    stamp, not a review.
+    """
+    import difflib
+
+    previous: str | None = None
+    try:
+        existing = await toolbox.read_code_file(path)
+        previous = existing.get("content")
+    except WorkflowGenToolboxError:
+        previous = None  # a new file
+
+    preview: dict[str, Any] = {"path": path}
+    if previous is None:
+        preview["is_new"] = True
+        preview["diff"] = "\n".join(f"+{line}" for line in content.splitlines()[:200])
+        return preview
+
+    preview["is_new"] = False
+    preview["previous_chars"] = len(previous)
+    diff = list(
+        difflib.unified_diff(
+            previous.splitlines(),
+            content.splitlines(),
+            fromfile=f"{path} (current)",
+            tofile=f"{path} (proposed)",
+            lineterm="",
+            n=3,
+        )
+    )
+    if not diff:
+        preview["diff"] = "No change — the proposed content is identical."
+    else:
+        # Bounded: this is persisted into the transcript and replayed on every
+        # later turn, so an unbounded diff would grow the context permanently.
+        preview["diff"] = "\n".join(diff[:200])
+        if len(diff) > 200:
+            preview["diff"] += f"\n… [{len(diff) - 200} more diff lines]"
+    return preview
+
+
+def _system_prompt(workflow_id: int | None, surface: str = "standalone") -> str:
+    """The base prompt, plus where this conversation is open.
+
+    Two short orientation blocks rather than two separate prompts. The toolset
+    is deliberately identical everywhere: the requests worth answering often
+    span both surfaces — "add complaint creation to this agent" needs a Python
+    handler *and* a tool attached to a node — and splitting the prompt would
+    leave the assistant able to do only half, with the user expected to know
+    which half lives where. Everything shared (secrets, approvals, the repair
+    loop, the voice constraints) then stays written once and cannot drift.
     """
     from api.services.workflow_gen.system_prompt import WORKFLOW_GEN_SYSTEM_PROMPT
 
-    if workflow_id is None:
-        return WORKFLOW_GEN_SYSTEM_PROMPT
-    return (
-        WORKFLOW_GEN_SYSTEM_PROMPT
-        + f"""
+    prompt = WORKFLOW_GEN_SYSTEM_PROMPT
+
+    if workflow_id is not None:
+        prompt += f"""
 ## The workflow you are working on
 
-This conversation is open inside workflow **{workflow_id}**'s editor. The user \
-is looking at it right now, so "this workflow", "the flow", "this agent", or a \
-bare node name always means workflow {workflow_id}.
+This conversation is open inside workflow **{workflow_id}**'s editor. The user is looking at it right now, so "this workflow", "the flow", "this agent", or a bare node name always means workflow {workflow_id}.
 
-Never ask which workflow to change, and never list workflows to choose from — \
-you already know. Call `get_workflow_code({workflow_id})` to see its current \
-state, including the real node names, instead of asking the user to confirm \
-them. Only touch a different workflow if the user names one explicitly.
+Never ask which workflow to change, and never list workflows to choose from — you already know. Call `get_workflow_code({workflow_id})` to see its current state, including the real node names, instead of asking the user to confirm them. Only touch a different workflow if the user names one explicitly.
 """
-    )
+
+    if surface == "code_editor":
+        prompt += """
+## Where you are
+
+This conversation is open in the **Code Editor**, so the user is looking at the Python workspace, not a workflow graph. Read an ambiguous request as being about code: "add a tool for checking stock" here means write the function schema and the router branch, not create a Dograh HTTP tool.
+
+You still have every workflow tool, and should use them when the request genuinely calls for it — attaching a finished function to a node, for example. Just don't reach for them by default, and don't offer to build a voice agent unless that is plainly what was asked for.
+"""
+
+    return prompt
 
 
 async def run_turn(
@@ -520,10 +602,11 @@ async def run_turn(
     prior_messages: list[dict[str, Any]],
     user_message: str,
     workflow_id: int | None = None,
+    surface: str = "standalone",
 ) -> AsyncIterator[LoopStep]:
     toolbox = WorkflowGenToolbox(organization_id, user_id)
     messages: list[dict[str, Any]] = [
-        {"role": "system", "content": _system_prompt(workflow_id)},
+        {"role": "system", "content": _system_prompt(workflow_id, surface)},
         *prior_messages,
         {"role": "user", "content": user_message},
     ]
@@ -547,6 +630,37 @@ async def _persist_mutating_action(
     calls this once per attempt with a fresh (LLM-corrected) `arguments` each
     time — this function does not retry internally.
     """
+    if tool_name == "write_code_file":
+        yield {"event": _status("Saving the file…")}
+        try:
+            result = await toolbox.write_code_file(
+                arguments.get("path", ""), arguments.get("content", "")
+            )
+        except WorkflowGenToolboxError as e:
+            # Validation failures are exactly what the repair loop is for: the
+            # errors name the field, so the model fixes the file and resubmits
+            # rather than the user seeing a red card for a fixable mistake.
+            yield {"event": None, "result": None, "errors": e.errors}
+            return
+        yield {
+            "event": _status("File saved."),
+            "result": {"kind": "write_code_file", **result},
+        }
+        return
+
+    if tool_name == "delete_code_file":
+        yield {"event": _status("Deleting the file…")}
+        try:
+            result = await toolbox.delete_code_file(arguments.get("path", ""))
+        except WorkflowGenToolboxError as e:
+            yield {"event": None, "result": None, "errors": e.errors}
+            return
+        yield {
+            "event": _status("File deleted."),
+            "result": {"kind": "delete_code_file", **result},
+        }
+        return
+
     if tool_name == "create_credential":
         yield {"event": _status("Storing the credential…")}
         try:
@@ -663,10 +777,11 @@ async def execute_confirmed_action(
     pending_action: dict[str, Any],
     approve: bool,
     workflow_id: int | None = None,
+    surface: str = "standalone",
 ) -> AsyncIterator[LoopStep]:
     toolbox = WorkflowGenToolbox(organization_id, user_id)
     messages: list[dict[str, Any]] = [
-        {"role": "system", "content": _system_prompt(workflow_id)},
+        {"role": "system", "content": _system_prompt(workflow_id, surface)},
         *prior_messages,
     ]
     # This path reaches `llm_client.complete` on its own (the repair hops

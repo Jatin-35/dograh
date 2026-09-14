@@ -21,6 +21,7 @@ from api.db.workflow_gen_chat_session_client import (
     WorkflowGenChatSessionRevisionConflictError,
 )
 from api.services.auth.depends import get_user_with_selected_organization
+from api.services.organization_context import is_scout_enabled_for_organization
 from api.services.workflow_gen import session_service
 from api.services.workflow_gen.config import is_workflow_gen_configured
 from api.services.workflow_gen.session_service import PendingActionRequiredError
@@ -32,6 +33,17 @@ _SSE_HEADERS = {
     "Connection": "keep-alive",
     "X-Accel-Buffering": "no",  # disable nginx buffering for SSE
 }
+
+
+class CreateWorkflowGenSessionRequest(BaseModel):
+    """Which part of the product the session was opened from.
+
+    Steers the prompt's orientation only; the toolset is identical everywhere,
+    because a request worth answering often spans both (a workflow needing a
+    custom Python function is the common case, not the exception).
+    """
+
+    surface: str = "standalone"
 
 
 class AppendWorkflowGenMessageRequest(BaseModel):
@@ -55,6 +67,7 @@ class WorkflowGenChatSessionResponse(BaseModel):
     pending_action: dict[str, Any] | None = None
     status: str
     workflow_id: int | None = None
+    surface: str = "standalone"
 
 
 class WorkflowGenChatSessionSummary(BaseModel):
@@ -75,6 +88,7 @@ def _build_response(
         pending_action=chat_session.pending_action,
         status=chat_session.status,
         workflow_id=chat_session.workflow_id,
+        surface=chat_session.surface or "standalone",
     )
 
 
@@ -88,11 +102,22 @@ def _build_summary(
     )
 
 
-def _require_configured() -> None:
+async def _require_scout_enabled(user: UserModel) -> None:
+    """Both gates Scout has to clear, checked server-side on every entry point.
+
+    Hiding the button in the UI is a nicety, not a control — an org that hasn't
+    been switched on must be refused here too, or anyone who knows the URL can
+    still drive the assistant.
+    """
     if not is_workflow_gen_configured():
         raise HTTPException(
             status_code=503,
             detail="The in-product AI assistant isn't configured on this deployment.",
+        )
+    if not await is_scout_enabled_for_organization(user.selected_organization_id):
+        raise HTTPException(
+            status_code=403,
+            detail="Scout isn't enabled for your organization. Contact your administrator.",
         )
 
 
@@ -102,11 +127,17 @@ def _sse(event: dict[str, Any], revision: int) -> str:
 
 @router.post("/sessions", response_model=WorkflowGenChatSessionResponse)
 async def create_workflow_gen_session(
+    request: CreateWorkflowGenSessionRequest | None = None,
     user: UserModel = Depends(get_user_with_selected_organization),
 ) -> WorkflowGenChatSessionResponse:
-    _require_configured()
+    await _require_scout_enabled(user)
+    surface = (request.surface if request else "standalone") or "standalone"
+    if surface not in {"standalone", "code_editor", "workflow"}:
+        raise HTTPException(status_code=400, detail=f"Unknown surface {surface!r}.")
     chat_session = await session_service.create_session(
-        organization_id=user.selected_organization_id, user_id=user.id
+        organization_id=user.selected_organization_id,
+        user_id=user.id,
+        surface=surface,
     )
     return _build_response(chat_session)
 
@@ -120,7 +151,7 @@ async def ensure_workflow_gen_session_for_workflow(
 ) -> WorkflowGenChatSessionResponse:
     """Get-or-create the one canonical chat session for a workflow — the
     per-editor "AI Assistant" entry point, persisted across visits."""
-    _require_configured()
+    await _require_scout_enabled(user)
     chat_session = await session_service.ensure_session_for_workflow(
         workflow_id,
         organization_id=user.selected_organization_id,
@@ -135,6 +166,7 @@ async def list_workflow_gen_sessions(
 ) -> list[WorkflowGenChatSessionSummary]:
     """List the current user's standalone (non-per-workflow) sessions, most
     recently updated first — backs the thread-history sidebar."""
+    await _require_scout_enabled(user)
     sessions = await session_service.list_standalone_sessions(
         organization_id=user.selected_organization_id, user_id=user.id
     )
@@ -146,6 +178,7 @@ async def get_workflow_gen_session(
     session_id: int,
     user: UserModel = Depends(get_user_with_selected_organization),
 ) -> WorkflowGenChatSessionResponse:
+    await _require_scout_enabled(user)
     chat_session = await session_service.get_session(
         session_id, organization_id=user.selected_organization_id
     )
@@ -160,7 +193,7 @@ async def append_workflow_gen_message(
     request: AppendWorkflowGenMessageRequest,
     user: UserModel = Depends(get_user_with_selected_organization),
 ) -> StreamingResponse:
-    _require_configured()
+    await _require_scout_enabled(user)
 
     async def event_stream():
         try:
@@ -212,7 +245,7 @@ async def confirm_workflow_gen_action(
     request: ConfirmWorkflowGenActionRequest,
     user: UserModel = Depends(get_user_with_selected_organization),
 ) -> StreamingResponse:
-    _require_configured()
+    await _require_scout_enabled(user)
 
     async def event_stream():
         try:
