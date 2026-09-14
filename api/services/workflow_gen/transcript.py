@@ -37,6 +37,13 @@ from typing import Any
 # them still fits the window.
 MAX_TOOL_RESULT_CHARS = 24_000
 
+# Per user/assistant message. Far more generous than the tool cap, and
+# deliberately so: a tool result is machine output nobody chose, while a long
+# user message is someone pasting a catalogue or a spec they want worked on.
+# Shrinking that to a sample destroys the actual request. Only the transcript
+# budget should ever push these out, and then as whole turns.
+MAX_TEXT_MESSAGE_CHARS = 200_000
+
 # Whole transcript, excluding the system prompt. ~70k tokens, leaving room for
 # the tool schemas and the response inside a 128k window.
 MAX_TRANSCRIPT_CHARS = 280_000
@@ -162,21 +169,57 @@ def _recompact_content(content: str, max_chars: int) -> str:
         return compact_tool_result(content, max_chars=max_chars)
 
 
+def compact_text_message(content: str, *, max_chars: int = MAX_TEXT_MESSAGE_CHARS) -> str:
+    """Trim a user or assistant message, keeping it readable prose.
+
+    Deliberately not the tool-result treatment. That wraps the value in a JSON
+    envelope and talks about "the full result" and "narrower queries" — which
+    is nonsense addressed to a human's own paragraph, and turns their message
+    into a JSON blob the model then reads as data rather than as what the
+    person said. Here the text stays text and the omission is stated in a
+    plain sentence at the end.
+    """
+    if len(content) <= max_chars:
+        return content
+    omitted = len(content) - max_chars
+    return (
+        f"{content[:max_chars]}\n\n"
+        f"[This message was truncated to fit the conversation: {len(content):,} "
+        f"characters total, {omitted:,} omitted from the end. Ask the user to "
+        f"re-send the part you need if it mattered.]"
+    )
+
+
 def compact_oversized_messages(
-    messages: list[dict[str, Any]], *, max_chars: int = MAX_TOOL_RESULT_CHARS
+    messages: list[dict[str, Any]],
+    *,
+    max_chars: int = MAX_TOOL_RESULT_CHARS,
+    max_text_chars: int = MAX_TEXT_MESSAGE_CHARS,
 ) -> int:
-    """Shrink any message content already over the cap. Returns how many.
+    """Shrink any message content already over its cap. Returns how many.
 
     This is what heals a thread poisoned by an earlier version: the giant
     payload is rewritten in place before the transcript is sent anywhere, and
     the compacted form is what gets persisted back.
+
+    The cap is role-aware. A `tool` message is machine output and gets the
+    aggressive structural treatment; a user or assistant message is someone's
+    actual words and gets a much larger budget and a plain-text trim.
     """
     repaired = 0
     for message in messages:
         content = message.get("content")
-        if not isinstance(content, str) or len(content) <= max_chars:
+        if not isinstance(content, str):
             continue
-        message["content"] = _recompact_content(content, max_chars)
+
+        if message.get("role") == "tool":
+            if len(content) <= max_chars:
+                continue
+            message["content"] = _recompact_content(content, max_chars)
+        else:
+            if len(content) <= max_text_chars:
+                continue
+            message["content"] = compact_text_message(content, max_chars=max_text_chars)
         repaired += 1
     return repaired
 
@@ -308,6 +351,7 @@ def sanitize_transcript(
     messages: list[dict[str, Any]],
     *,
     max_tool_result_chars: int = MAX_TOOL_RESULT_CHARS,
+    max_text_message_chars: int = MAX_TEXT_MESSAGE_CHARS,
     max_transcript_chars: int = MAX_TRANSCRIPT_CHARS,
 ) -> TranscriptRepair:
     """Make a transcript safe to send, in place.
@@ -319,7 +363,9 @@ def sanitize_transcript(
     """
     report = TranscriptRepair()
     report.compacted_messages = compact_oversized_messages(
-        messages, max_chars=max_tool_result_chars
+        messages,
+        max_chars=max_tool_result_chars,
+        max_text_chars=max_text_message_chars,
     )
     report.dropped_turns = trim_to_budget(messages, max_chars=max_transcript_chars)
     report.removed_orphans = drop_orphan_tool_messages(messages)

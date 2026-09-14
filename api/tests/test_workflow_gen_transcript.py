@@ -401,3 +401,74 @@ async def test_an_oversized_request_is_refused_before_it_is_sent():
 
     assert "too large" in str(exc.value)
     assert "messages[0]" in str(exc.value)
+
+
+# ---------------------------------------------------------------------------
+# Role-aware caps
+# ---------------------------------------------------------------------------
+#
+# Shipped initially with one cap for every role, which rewrote a 57,892-char
+# *user* message on production into a 2KB JSON envelope talking about "the
+# full result" and "narrower queries". Tool output is machine noise nobody
+# chose; a long user message is someone pasting the catalogue they want an
+# agent built from. They must not be treated the same.
+
+
+def test_a_long_user_paste_keeps_its_content():
+    paste = "Build me an agent from this catalogue.\n\n" + ("Product line. " * 5_000)
+    assert len(paste) > MAX_TOOL_RESULT_CHARS  # would have been mangled before
+    messages = [{"role": "user", "content": paste}]
+
+    assert compact_oversized_messages(messages) == 0
+    assert messages[0]["content"] == paste
+
+
+def test_a_long_user_paste_stays_prose_not_json():
+    """The person's own words must not come back as a JSON object — the model
+    reads that as data rather than as what they said."""
+    from api.services.workflow_gen.transcript import (
+        MAX_TEXT_MESSAGE_CHARS,
+        compact_text_message,
+    )
+
+    paste = "Please read this.\n\n" + ("x" * (MAX_TEXT_MESSAGE_CHARS + 5_000))
+    out = compact_text_message(paste)
+
+    assert out.startswith("Please read this.")
+    with pytest.raises(json.JSONDecodeError):
+        json.loads(out)
+    assert "truncated to fit the conversation" in out
+    assert "_truncated" not in out
+
+
+def test_an_enormous_user_message_is_still_bounded():
+    from api.services.workflow_gen.transcript import MAX_TEXT_MESSAGE_CHARS
+
+    messages = [{"role": "user", "content": "z" * (MAX_TEXT_MESSAGE_CHARS * 3)}]
+
+    assert compact_oversized_messages(messages) == 1
+    assert len(messages[0]["content"]) < MAX_TEXT_MESSAGE_CHARS + 1_000
+
+
+def test_tool_messages_keep_the_aggressive_cap():
+    """The looser text budget must not leak onto tool results — that's the
+    original 17MB bug."""
+    messages = [
+        {"role": "tool", "tool_call_id": "c", "content": json.dumps(_huge_api_response())}
+    ]
+
+    assert compact_oversized_messages(messages) == 1
+    assert len(messages[0]["content"]) <= MAX_TOOL_RESULT_CHARS
+
+
+def test_assistant_prose_is_treated_as_text_not_tool_output():
+    messages = [{"role": "assistant", "content": "a" * (MAX_TOOL_RESULT_CHARS + 1_000)}]
+
+    assert compact_oversized_messages(messages) == 0
+    assert len(messages[0]["content"]) == MAX_TOOL_RESULT_CHARS + 1_000
+    assert messages[0]["content"].startswith("aaa")
+
+
+def test_a_none_content_assistant_message_is_skipped():
+    messages = [{"role": "assistant", "content": None, "tool_calls": []}]
+    assert compact_oversized_messages(messages) == 0
