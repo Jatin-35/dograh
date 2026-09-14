@@ -38,9 +38,28 @@ COPY ui/src ./src
 # Set build-time environment variables (needed for Next.js build)
 ENV NEXT_PUBLIC_NODE_ENV="oss"
 ENV NEXT_TELEMETRY_DISABLED="1"
-ENV NEXT_PUBLIC_CHATWOOT_URL="https://chat.dograh.com"
-ENV NEXT_PUBLIC_CHATWOOT_TOKEN="3fkFx2mCEjNHjM9gaNc4A82X"
 ENV BACKEND_URL="http://api:8000"
+
+# Live chat. Empty by default, which shows our own `SupportGreeter` instead.
+# Upstream hardcoded dograh-hq's Chatwoot server and website token here, so
+# every client on this deployment saw Dograh's branding and opened support
+# conversations in dograh-hq's inbox — a website token names an inbox, so our
+# clients' messages were reaching a third party. Set both to a Chatwoot we own
+# to turn live chat back on; the greeter stands down by itself.
+ARG NEXT_PUBLIC_CHATWOOT_URL=""
+ARG NEXT_PUBLIC_CHATWOOT_TOKEN=""
+ENV NEXT_PUBLIC_CHATWOOT_URL="${NEXT_PUBLIC_CHATWOOT_URL}"
+ENV NEXT_PUBLIC_CHATWOOT_TOKEN="${NEXT_PUBLIC_CHATWOOT_TOKEN}"
+
+# Support contact details rendered by the greeter. Each is optional and shown
+# only when set — unset means that row simply isn't there, never a placeholder
+# address that would bounce.
+ARG NEXT_PUBLIC_SUPPORT_EMAIL=""
+ARG NEXT_PUBLIC_SUPPORT_PHONE=""
+ARG NEXT_PUBLIC_SUPPORT_WHATSAPP=""
+ENV NEXT_PUBLIC_SUPPORT_EMAIL="${NEXT_PUBLIC_SUPPORT_EMAIL}"
+ENV NEXT_PUBLIC_SUPPORT_PHONE="${NEXT_PUBLIC_SUPPORT_PHONE}"
+ENV NEXT_PUBLIC_SUPPORT_WHATSAPP="${NEXT_PUBLIC_SUPPORT_WHATSAPP}"
 
 # Domain-separated deployments only: baked into the client bundle at build
 # time so browser-side redirects (impersonation, post-login routing) can

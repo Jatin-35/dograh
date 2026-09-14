@@ -3,6 +3,13 @@
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 
+import {
+  CHATWOOT_BASE_URL,
+  CHATWOOT_WEBSITE_TOKEN,
+  hidesSupportLauncher,
+  isChatwootConfigured,
+} from "@/lib/support";
+
 declare global {
   interface Window {
     chatwootSDK?: {
@@ -23,24 +30,15 @@ declare global {
   }
 }
 
-const CHATWOOT_BASE_URL = process.env.NEXT_PUBLIC_CHATWOOT_URL;
-const CHATWOOT_WEBSITE_TOKEN = process.env.NEXT_PUBLIC_CHATWOOT_TOKEN;
-
-// Hide the support bubble only on the workflow builder (/workflow/<id> and its
-// sub-routes), where the in-app chat tester occupies the same bottom-right
-// corner. It stays visible everywhere else, including the /workflow list and
-// /workflow/create.
-const isBuilderPath = (pathname: string) =>
-  /^\/workflow\/(?!create(?:$|\/))[^/]+(?:\/.*)?$/.test(pathname);
-
 export default function ChatwootWidget() {
   const pathname = usePathname();
 
   // Load the Chatwoot SDK exactly once for the lifetime of the app.
   useEffect(() => {
-    // Don't initialize if environment variables are not set
-    if (!CHATWOOT_BASE_URL || !CHATWOOT_WEBSITE_TOKEN) {
-      console.warn("Chatwoot not configured: Missing NEXT_PUBLIC_CHATWOOT_URL or NEXT_PUBLIC_CHATWOOT_TOKEN");
+    // No inbox configured is the default, not a misconfiguration —
+    // `SupportGreeter` takes the corner instead. Staying silent here keeps
+    // every page load from logging a warning about the expected state.
+    if (!isChatwootConfigured) {
       return;
     }
 
@@ -91,7 +89,7 @@ export default function ChatwootWidget() {
   useEffect(() => {
     const applyVisibility = () => {
       if (!window.$chatwoot) return;
-      if (isBuilderPath(pathname)) {
+      if (hidesSupportLauncher(pathname)) {
         window.$chatwoot.toggle?.("close");
         window.$chatwoot.toggleBubbleVisibility?.("hide");
       } else {

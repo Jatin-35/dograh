@@ -9,6 +9,7 @@ import AppLayout from "@/components/layout/AppLayout";
 import PostHogIdentify from "@/components/PostHogIdentify";
 import { SentryErrorBoundary } from "@/components/SentryErrorBoundary";
 import SpinLoader from "@/components/SpinLoader";
+import SupportGreeter from "@/components/SupportGreeter";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { Toaster } from "@/components/ui/sonner";
 import { AppConfigProvider } from "@/context/AppConfigContext";
@@ -78,7 +79,11 @@ export default function RootLayout({
                           {children}
                         </AppLayout>
                         <Toaster />
+                        {/* Exactly one of these renders: live chat when this
+                            deployment has a Chatwoot inbox of its own, our own
+                            greeting card otherwise. See @/lib/support. */}
                         <ChatwootWidget />
+                        <SupportGreeter />
                       </OnboardingProvider>
                     </TelephonyConfigWarningsProvider>
                   </OrgConfigProvider>
