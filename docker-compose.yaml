@@ -57,12 +57,13 @@ services:
       - app-network
 
   minio:
-    image: minio/minio
-    # The only unpinned image here, so Compose resolves it to :latest and
-    # re-checks Docker Hub on every `up`. Anonymous pulls are rate-limited,
-    # and Hub reports that throttling as "pull access denied … may require
-    # docker login" — which aborts the whole batch and fails a deploy that
-    # needed nothing from the registry. Use the local image when there is one.
+    # MinIO retired the minio/minio Docker Hub repository — every tag there
+    # now 404s as "pull access denied", which was previously misdiagnosed here
+    # as anonymous-pull rate limiting. quay.io/minio/minio is their own
+    # replacement registry, same images. `pull_policy: missing` stays as
+    # defense in depth: a registry going away entirely must not abort a
+    # deploy that needed nothing from it.
+    image: quay.io/minio/minio
     pull_policy: missing
     container_name: minio
     command: server /data --console-address ":9001"

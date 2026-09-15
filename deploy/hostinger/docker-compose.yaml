@@ -66,7 +66,10 @@ services:
       - app-network
 
   minio:
-    image: minio/minio
+    # MinIO retired the minio/minio Docker Hub repository — every tag there
+    # now 404s as "pull access denied". quay.io/minio/minio is their own
+    # replacement registry, same images.
+    image: quay.io/minio/minio
     container_name: minio
     restart: unless-stopped
     command: server /data --console-address ":9001"

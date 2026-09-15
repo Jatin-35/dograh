@@ -565,8 +565,12 @@ redisinternal:
 minio:
   # Official upstream MinIO. Root creds are shared with the app (single source of
   # truth) so they can't drift; the app creates its bucket on first use.
+  #
+  # MinIO retired the minio/minio Docker Hub repository — it 404s as "pull
+  # access denied" now, on every tag. quay.io/minio/minio is their own
+  # replacement registry, same images; this exact tag was verified there.
   image:
-    registry: docker.io
+    registry: quay.io
     repository: minio/minio
     tag: RELEASE.2025-04-22T22-12-26Z
     pullPolicy: IfNotPresent
