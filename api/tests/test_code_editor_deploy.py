@@ -65,12 +65,24 @@ def _db(version, tools):
     db.archive_tool = AsyncMock(return_value=True)
     db.mark_code_editor_version_deployed = AsyncMock()
     db.get_credentials_for_organization = AsyncMock(
-        return_value=[SimpleNamespace(name="Code Editor runtime", credential_uuid="cred-1")]
+        return_value=[
+            SimpleNamespace(
+                name="Code Editor runtime",
+                credential_uuid="cred-1",
+                # A real credential carries the key; without it these fixtures
+                # could not exercise the ownership check that decides whether
+                # the credential is safe to reuse. See
+                # test_code_editor_runtime_credential.py for that check itself.
+                credential_data={"header_name": "X-API-Key", "header_value": "raw-key"},
+            )
+        ]
     )
+    db.validate_api_key = AsyncMock(return_value=SimpleNamespace(organization_id=ORG))
     db.create_api_key = AsyncMock(return_value=(None, "raw-key"))
     db.create_credential = AsyncMock(
         return_value=SimpleNamespace(credential_uuid="cred-new")
     )
+    db.update_credential = AsyncMock(return_value=SimpleNamespace())
     return db
 
 

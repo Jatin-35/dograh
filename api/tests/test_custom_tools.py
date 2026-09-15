@@ -972,6 +972,121 @@ class TestExecuteHttpTool:
                 mock_db.get_credential_by_uuid.assert_not_called()
 
 
+class TestCodeEditorContextInjection:
+    """`execute_http_tool` hands a Code Editor function's router the call it is
+    running inside — see `_inject_code_editor_context`.
+
+    The two properties that matter: only a tool this platform generated for
+    Code Editor gets the extra fields (an arbitrary customer HTTP endpoint
+    must never receive a body field it didn't ask for), and both fields are
+    always present — even null — so a router can tell "not a real call" from
+    "the platform forgot to tell me."
+    """
+
+    # What deploy.py actually writes (see its `url` line): the host varies per
+    # deployment, the /api/v1 route does not.
+    RUNTIME_URL = "http://api:8000/api/v1/code-editor/run/check_order_status"
+
+    @staticmethod
+    def _tool(*, managed_by: str | None, url: str | None = None) -> "MockToolModel":
+        definition: Dict[str, Any] = {
+            "schema_version": 1,
+            "config": {
+                "method": "POST",
+                "url": url or TestCodeEditorContextInjection.RUNTIME_URL,
+                "timeout_ms": 5000,
+            },
+        }
+        if managed_by is not None:
+            definition["managed_by"] = managed_by
+        return MockToolModel(
+            tool_uuid="test-uuid",
+            name="check_order_status",
+            description="",
+            category="http_api",
+            definition=definition,
+        )
+
+    async def _run(self, tool, **kwargs):
+        with patch(
+            "api.services.workflow.tools.custom_tool.httpx.AsyncClient"
+        ) as mock_client_class:
+            mock_client = AsyncMock()
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {}
+            mock_client.request.return_value = mock_response
+            mock_client_class.return_value.__aenter__.return_value = mock_client
+
+            await execute_http_tool(tool, {"order_id": "ORD-1"}, **kwargs)
+            return mock_client.request.call_args.kwargs["json"]
+
+    @pytest.mark.asyncio
+    async def test_a_code_editor_tool_receives_the_call_it_is_running_inside(self):
+        body = await self._run(
+            self._tool(managed_by="code_editor"),
+            workflow_id=7,
+            workflow_run_id=42,
+        )
+        assert body["_dograh_workflow_id"] == 7
+        assert body["_dograh_workflow_run_id"] == 42
+        # And the model's own arguments still made it through untouched.
+        assert body["order_id"] == "ORD-1"
+
+    @pytest.mark.asyncio
+    async def test_a_managed_tool_pointed_elsewhere_is_not_trusted(self):
+        """The marker alone is not proof of destination.
+
+        A tool's definition is replaced wholesale when edited — including by
+        the assistant's `update_tool`, from model-produced JSON — so it can
+        keep `managed_by: code_editor` while its URL is changed to somebody
+        else's host. Without checking the URL, every live call would then POST
+        this organization's internal workflow and call ids to that host.
+        """
+        body = await self._run(
+            self._tool(
+                managed_by="code_editor",
+                url="https://attacker.example.com/collect",
+            ),
+            workflow_id=7,
+            workflow_run_id=42,
+        )
+        assert "_dograh_workflow_id" not in body
+        assert "_dograh_workflow_run_id" not in body
+        # The tool still works — it just doesn't get the privileged context.
+        assert body["order_id"] == "ORD-1"
+
+    @pytest.mark.asyncio
+    async def test_a_hand_made_tool_never_sees_these_fields(self):
+        """The regression this guards: a customer's own HTTP endpoint getting
+        an unannounced extra field in every request body."""
+        body = await self._run(
+            self._tool(managed_by=None), workflow_id=7, workflow_run_id=42
+        )
+        assert "_dograh_workflow_id" not in body
+        assert "_dograh_workflow_run_id" not in body
+
+    @pytest.mark.asyncio
+    async def test_a_tool_managed_by_something_else_is_also_left_alone(self):
+        """Not just 'unset' — a *different* managed_by must not match either,
+        in case Code Editor's marker string ever collides with a future one."""
+        body = await self._run(
+            self._tool(managed_by="some_other_feature"),
+            workflow_id=7,
+            workflow_run_id=42,
+        )
+        assert "_dograh_workflow_id" not in body
+
+    @pytest.mark.asyncio
+    async def test_an_interactive_test_run_sends_null_not_a_missing_key(self):
+        """Test Latest/Test Deployed have no real call behind them. The keys
+        must still be present — null, not absent — so the router can tell
+        'this is an interactive test' from 'the platform has a bug'."""
+        body = await self._run(self._tool(managed_by="code_editor"))
+        assert body["_dograh_workflow_id"] is None
+        assert body["_dograh_workflow_run_id"] is None
+
+
 class TestCoerceParameterValue:
     """Tests for _coerce_parameter_value function."""
 

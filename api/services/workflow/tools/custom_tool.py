@@ -233,6 +233,64 @@ def _resolve_preset_parameters(
     return resolved
 
 
+# Reserved keys a Code Editor function's router reads out of `context`, never
+# `event` — see the router docstring generated in
+# `api.services.code_editor.workspace.STARTER_ENTRY_POINT`. Namespaced so they
+# can never collide with a real, model-declared parameter name.
+_CODE_EDITOR_WORKFLOW_ID_KEY = "_dograh_workflow_id"
+_CODE_EDITOR_WORKFLOW_RUN_ID_KEY = "_dograh_workflow_run_id"
+
+
+# The path every generated Code Editor tool posts to. Matched as a substring
+# because the host differs per deployment (see API_INTERNAL_URL) while the
+# route does not.
+_CODE_EDITOR_RUN_PATH = "/api/v1/code-editor/run/"
+
+
+def _inject_code_editor_context(
+    definition: Dict[str, Any],
+    resolved_arguments: Dict[str, Any],
+    workflow_id: Optional[int],
+    workflow_run_id: Optional[int],
+    url: Optional[str],
+) -> Dict[str, Any]:
+    """Add which agent and which call this is to a Code Editor tool's body.
+
+    Only for tools this platform generated (`managed_by: code_editor` — see
+    `api.services.code_editor.deploy.MANAGED_MARKER`) *and* still pointing at
+    our own runtime route, which knows to pull these two keys back out before
+    handing the rest to the user's router as `event`.
+
+    Both conditions, not just the marker. A tool's definition is replaced
+    wholesale when it is edited — including by the assistant's `update_tool`,
+    with model-produced JSON — so a definition can keep `managed_by` while its
+    URL is changed to a third-party host. Trusting the marker alone would then
+    POST the organization's internal workflow and call ids to that host on
+    every live call. A hand-made HTTP tool must likewise never receive a body
+    field it didn't ask for.
+
+    Local import: `services/code_editor` is a different subsystem, and this
+    keeps that dependency confined to the one call site that needs it rather
+    than a module-level import every caller of this file pays for.
+    """
+    from api.services.code_editor.deploy import MANAGED_MARKER
+
+    if definition.get("managed_by") != MANAGED_MARKER:
+        return resolved_arguments
+    if _CODE_EDITOR_RUN_PATH not in (url or ""):
+        logger.warning(
+            "Tool is marked managed_by=code_editor but posts to "
+            f"{url!r}, which is not the Code Editor runtime route — "
+            "withholding the workflow context."
+        )
+        return resolved_arguments
+    return {
+        **resolved_arguments,
+        _CODE_EDITOR_WORKFLOW_ID_KEY: workflow_id,
+        _CODE_EDITOR_WORKFLOW_RUN_ID_KEY: workflow_run_id,
+    }
+
+
 async def execute_http_tool(
     tool: Any,
     arguments: Dict[str, Any],
@@ -241,6 +299,8 @@ async def execute_http_tool(
     preset_params: Optional[Dict[str, Any]] = None,
     organization_id: Optional[int] = None,
     include_request_headers: bool = False,
+    workflow_id: Optional[int] = None,
+    workflow_run_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Execute an HTTP API tool.
 
@@ -254,6 +314,13 @@ async def execute_http_tool(
         organization_id: Organization ID for credential lookup
         include_request_headers: Include a client-safe header preview in the result.
             Headers supplied by a stored credential are masked.
+        workflow_id: The agent this call is running. Forwarded to a Code
+            Editor function's ``context`` (see `_inject_code_editor_context`);
+            ignored for every other tool category, since an arbitrary
+            customer HTTP endpoint has no use for it and shouldn't receive an
+            unexpected body field.
+        workflow_run_id: The specific call this tool invocation belongs to.
+            Same treatment as workflow_id.
 
     Returns:
         Result dict with response data or error
@@ -315,6 +382,9 @@ async def execute_http_tool(
         preset_arguments = dict(preset_params)
 
     resolved_arguments = {**(arguments or {}), **preset_arguments}
+    resolved_arguments = _inject_code_editor_context(
+        definition, resolved_arguments, workflow_id, workflow_run_id, url
+    )
 
     # Build request: JSON body for POST/PUT/PATCH, query params for GET/DELETE
     body = None

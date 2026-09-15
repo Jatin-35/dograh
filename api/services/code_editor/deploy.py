@@ -41,6 +41,22 @@ RUNTIME_API_KEY_NAME = "Code Editor runtime"
 CODE_TOOL_ICON_COLOR = "#CA8A04"
 
 
+async def _key_belongs_to(credential: Any, organization_id: int) -> bool:
+    """Whether this credential's API key authenticates as `organization_id`.
+
+    Resolved the same way the runtime route resolves it — `validate_api_key`,
+    then the key's own `organization_id` — so the answer here is exactly what
+    a live call would get, rather than a second opinion that could drift from
+    it.
+    """
+    data = credential.credential_data or {}
+    raw_key = data.get("header_value")
+    if not isinstance(raw_key, str) or not raw_key:
+        return False
+    api_key = await db_client.validate_api_key(raw_key)
+    return bool(api_key) and api_key.organization_id == organization_id
+
+
 async def ensure_runtime_credential(organization_id: int, user_id: Optional[int]) -> str:
     """The credential a generated tool authenticates with, created on demand.
 
@@ -54,9 +70,27 @@ async def ensure_runtime_credential(organization_id: int, user_id: Optional[int]
     call, which is a miserable thing to debug from a transcript.
     """
     existing = await db_client.get_credentials_for_organization(organization_id)
+    stale: Optional[str] = None
     for credential in existing:
-        if credential.name == RUNTIME_CREDENTIAL_NAME:
+        if credential.name != RUNTIME_CREDENTIAL_NAME:
+            continue
+        # The name is not proof of contents. A credential is editable by any
+        # org admin, and a user who belongs to two organizations can put this
+        # organization's name on a key minted in the other one. Reusing it on
+        # that basis would make every generated tool authenticate as the other
+        # org — running *its* deployed code with *its* decrypted secrets, and
+        # returning the result into this org's call. So check where the key
+        # actually leads before trusting it.
+        if await _key_belongs_to(credential, organization_id):
             return credential.credential_uuid
+        logger.warning(
+            "Credential %r in organization %s does not carry a key for this "
+            "organization; re-provisioning it.",
+            RUNTIME_CREDENTIAL_NAME,
+            organization_id,
+        )
+        stale = credential.credential_uuid
+        break
 
     # An API key's raw value exists only at creation, so the key and the
     # credential that carries it are created together or not at all.
@@ -65,6 +99,18 @@ async def ensure_runtime_credential(organization_id: int, user_id: Optional[int]
         name=RUNTIME_API_KEY_NAME,
         created_by=user_id,
     )
+
+    if stale is not None:
+        # Overwritten in place rather than left beside a second credential of
+        # the same name: tools already deployed reference it by uuid, and two
+        # identically named credentials would make the next lookup a coin toss.
+        await db_client.update_credential(
+            credential_uuid=stale,
+            organization_id=organization_id,
+            credential_type=WebhookCredentialType.CUSTOM_HEADER.value,
+            credential_data={"header_name": "X-API-Key", "header_value": raw_key},
+        )
+        return stale
     credential = await db_client.create_credential(
         organization_id=organization_id,
         user_id=user_id,
