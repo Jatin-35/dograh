@@ -44,6 +44,31 @@ MAX_TOOL_RESULT_CHARS = 24_000
 # budget should ever push these out, and then as whole turns.
 MAX_TEXT_MESSAGE_CHARS = 200_000
 
+# For a tool whose result *is* the document being edited, rather than data the
+# model happened to fetch. `get_node` exists precisely so a long prompt can be
+# read in full; shrinking its result to the generic tool cap defeats it — and
+# defeats it silently, because the model then rewrites a prompt it only saw the
+# start of. Same reasoning as MAX_TEXT_MESSAGE_CHARS above: this is the
+# equivalent of someone pasting the document they want worked on, not machine
+# output nobody chose. Well under the transcript budget, so one of these still
+# leaves room for the conversation around it.
+MAX_DOCUMENT_RESULT_CHARS = 120_000
+
+# The tools that get that budget. Deliberately a short list: everything else
+# stays on the aggressive cap, which is what keeps a runaway `test_tool`
+# response from poisoning a thread.
+DOCUMENT_RESULT_TOOLS = frozenset({"get_node", "get_workflow_code", "read_code_file"})
+
+
+def result_cap_for(tool_name: str | None) -> int:
+    """How much of this tool's result is worth keeping."""
+    return (
+        MAX_DOCUMENT_RESULT_CHARS
+        if tool_name in DOCUMENT_RESULT_TOOLS
+        else MAX_TOOL_RESULT_CHARS
+    )
+
+
 # Whole transcript, excluding the system prompt. ~70k tokens, leaving room for
 # the tool schemas and the response inside a 128k window.
 MAX_TRANSCRIPT_CHARS = 280_000
@@ -190,6 +215,26 @@ def compact_text_message(content: str, *, max_chars: int = MAX_TEXT_MESSAGE_CHAR
     )
 
 
+def _tool_names_by_call_id(messages: list[dict[str, Any]]) -> dict[str, str]:
+    """Map each tool_call_id to the tool that produced it.
+
+    A `tool` message carries only the call id; the name lives on the assistant
+    message that requested it. Anything unmatched simply isn't in the map and
+    falls back to the default cap.
+    """
+    names: dict[str, str] = {}
+    for message in messages:
+        if message.get("role") != "assistant":
+            continue
+        for call in message.get("tool_calls") or []:
+            call_id = call.get("id")
+            function = call.get("function") or {}
+            name = function.get("name") if isinstance(function, dict) else None
+            if call_id and name:
+                names[call_id] = name
+    return names
+
+
 def compact_oversized_messages(
     messages: list[dict[str, Any]],
     *,
@@ -205,7 +250,15 @@ def compact_oversized_messages(
     The cap is role-aware. A `tool` message is machine output and gets the
     aggressive structural treatment; a user or assistant message is someone's
     actual words and gets a much larger budget and a plain-text trim.
+
+    It is also tool-aware, and has to be. A transcript is re-sanitized on every
+    load, so a `get_node` result that was returned in full on one turn would be
+    shrunk on the next — the model would read a prompt completely, then find it
+    truncated a turn later, which is worse than never having had it. The tool a
+    reply belongs to isn't on the reply itself, so it's recovered from the
+    assistant message that made the call.
     """
+    names = _tool_names_by_call_id(messages)
     repaired = 0
     for message in messages:
         content = message.get("content")
@@ -213,9 +266,15 @@ def compact_oversized_messages(
             continue
 
         if message.get("role") == "tool":
-            if len(content) <= max_chars:
+            cap = max_chars
+            if max_chars == MAX_TOOL_RESULT_CHARS:
+                # Only when the caller is using the default. An explicit,
+                # smaller cap is a deliberate instruction and must not be
+                # quietly overridden per tool.
+                cap = result_cap_for(names.get(message.get("tool_call_id")))
+            if len(content) <= cap:
                 continue
-            message["content"] = _recompact_content(content, max_chars)
+            message["content"] = _recompact_content(content, cap)
         else:
             if len(content) <= max_text_chars:
                 continue

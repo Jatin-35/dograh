@@ -36,6 +36,7 @@ from api.services.workflow_gen.tool_schemas import (
 from api.services.workflow_gen.toolbox import WorkflowGenToolbox, WorkflowGenToolboxError
 from api.services.workflow_gen.transcript import (
     compact_tool_result,
+    result_cap_for,
     sanitize_transcript,
     trim_to_budget,
 )
@@ -124,7 +125,9 @@ async def _dispatch_safe_tool(toolbox: WorkflowGenToolbox, name: str, arguments:
         return {"error": str(e)}
 
 
-def _tool_message(tool_call_id: str, payload: Any) -> dict[str, Any]:
+def _tool_message(
+    tool_call_id: str, payload: Any, *, tool_name: str | None = None
+) -> dict[str, Any]:
     """Build a `tool`-role message with its result capped.
 
     Every tool reply in this module goes through here. A tool that returns a
@@ -133,11 +136,18 @@ def _tool_message(tool_call_id: str, payload: Any) -> dict[str, Any]:
     replayed, an uncapped one doesn't fail a turn — it kills the thread
     permanently. One choke point means a tool added later can't reintroduce
     that by forgetting to cap.
+
+    The cap varies by tool. A handful of tools exist specifically to return a
+    document the user asked to work on — a node's prompt, a workflow's source —
+    and shrinking those to the generic cap defeats their whole purpose
+    silently: the model then edits something it only saw the beginning of. Pass
+    `tool_name` so those get the document budget; everything else, including
+    anything added later that forgets to pass it, keeps the aggressive default.
     """
     return {
         "role": "tool",
         "tool_call_id": tool_call_id,
-        "content": compact_tool_result(payload),
+        "content": compact_tool_result(payload, max_chars=result_cap_for(tool_name)),
     }
 
 
@@ -461,7 +471,9 @@ async def _run_loop(
             result: Any = {"error": parse_error} if parse_error else await _dispatch_safe_tool(
                 toolbox, call.function.name, arguments
             )
-            messages.append(_tool_message(call.id, result))
+            messages.append(
+                _tool_message(call.id, result, tool_name=call.function.name)
+            )
 
     logger.warning("workflow_gen agent loop hit MAX_TOOL_ITERATIONS without finishing")
     messages.append(
@@ -494,6 +506,18 @@ def _summarize_mutating_call(
         fields = ", ".join(sorted(arguments.get("fields") or {})) or "nothing"
         node = arguments.get("node_id") or "a node"
         return f'Ready to update {fields} on "{node}", saved as a draft.'
+    if tool_name == "replace_in_node":
+        node = arguments.get("node_id") or "a node"
+        field = arguments.get("field") or "a field"
+        removed = len(arguments.get("old_text") or "")
+        added = len(arguments.get("new_text") or "")
+        # Say which way it goes. "Removing" and "replacing" are different
+        # enough decisions that the card should not make the user infer it.
+        what = "Removing" if added == 0 else "Replacing"
+        return (
+            f'{what} {removed} characters in {field} on "{node}"'
+            + (f", replaced by {added}." if added else ", deleting it.")
+        )
     if tool_name == "create_tool":
         name = (arguments.get("tool_definition") or {}).get("name")
         return f'Ready to create the tool "{name}".' if name else "Ready to create a new reusable tool."
@@ -599,6 +623,8 @@ Never ask which workflow to change, and never list workflows to choose from — 
 
 Most requests — rewriting a prompt, renaming a node, adjusting a node's settings — change **one node's data**. For those, use `list_nodes` → `get_node` → `update_node`. Pass only the fields that change; anything you omit is left as it was.
 
+When the change is to *part* of a long field — removing a paragraph, fixing one line — prefer `replace_in_node`. It swaps an exact piece of text and leaves everything else byte for byte, so nothing outside what you matched can be lost. That makes it the only safe edit for a field too large to have read in full: if `get_node` came back marked truncated, do not rewrite that field with `update_node`, use `replace_in_node` or tell the user what you can't see.
+
 Do **not** reach for `get_workflow_code` + `save_workflow` to do that. Those replace the entire workflow, which means re-emitting every node verbatim. On a large workflow — one with a long prompt or an embedded data table — the source may come back to you shortened, and rewriting it all in one response may not finish. Saving from source you were only shown part of would delete the parts you never saw.
 
 Use `save_workflow` only when the **structure** changes: adding or removing nodes, or rewiring edges. If you ever find yourself about to save source you suspect is incomplete, stop and say so instead.
@@ -669,14 +695,24 @@ async def _persist_mutating_action(
         }
         return
 
-    if tool_name == "update_node":
+    if tool_name in ("update_node", "replace_in_node"):
         yield {"event": _status("Updating the node…")}
         try:
-            result = await toolbox.update_node(
-                arguments.get("workflow_id"),
-                arguments.get("node_id", ""),
-                arguments.get("fields") or {},
-            )
+            if tool_name == "replace_in_node":
+                result = await toolbox.replace_in_node(
+                    arguments.get("workflow_id"),
+                    arguments.get("node_id", ""),
+                    arguments.get("field", ""),
+                    arguments.get("old_text", ""),
+                    arguments.get("new_text", ""),
+                    bool(arguments.get("replace_all")),
+                )
+            else:
+                result = await toolbox.update_node(
+                    arguments.get("workflow_id"),
+                    arguments.get("node_id", ""),
+                    arguments.get("fields") or {},
+                )
         except WorkflowGenToolboxError as e:
             yield {"event": None, "result": None, "errors": e.errors}
             return
@@ -687,7 +723,7 @@ async def _persist_mutating_action(
             return
         yield {
             "event": _status("Node updated."),
-            "result": {"kind": "update_node", **result},
+            "result": {"kind": tool_name, **result},
         }
         return
 
@@ -976,7 +1012,11 @@ async def execute_confirmed_action(
                         if lookup_err
                         else await _dispatch_safe_tool(toolbox, lookup.function.name, lookup_args)
                     )
-                    messages.append(_tool_message(lookup.id, lookup_result))
+                    messages.append(
+                        _tool_message(
+                            lookup.id, lookup_result, tool_name=lookup.function.name
+                        )
+                    )
                 if repaired is not None or not lookups:
                     break
 

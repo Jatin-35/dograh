@@ -145,6 +145,20 @@ function summarizeDefinition(actionType: string, preview: Record<string, unknown
             chips: [] as string[],
         };
     }
+    if (actionType === "replace_in_node") {
+        // The lengths are the review surface here: the user is approving the
+        // removal of a specific piece of a prompt they cannot see in full.
+        const removed = String(preview.old_text ?? "").length;
+        const added = String(preview.new_text ?? "").length;
+        return {
+            icon: Wand2,
+            title: (preview.node_id as string) || "a node",
+            chips: [
+                String(preview.field ?? "prompt"),
+                added === 0 ? `−${removed} chars` : `${removed} → ${added} chars`,
+            ],
+        };
+    }
     if (actionType === "update_node") {
         // Names the node and the fields, not node/edge counts. A targeted edit
         // touches one node, so "12 nodes, 14 edges" would describe the

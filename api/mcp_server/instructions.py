@@ -53,6 +53,7 @@ Most edits — rewriting a prompt, renaming a node, changing a node's settings �
 3. `get_node` — read the one you intend to change. Its prompt comes back complete.
 4. (optional) `get_voice_prompting_guide` — as in the editing flow below, before revising any prompt.
 5. `update_node` — pass only the fields that change; anything you omit is left as it was. Saves as a draft, validated exactly as a full save is.
+6. `replace_in_node` — when the change is to part of a long field, swap an exact piece of text instead. Everything outside the match is untouched, so this is the only safe edit for a field too large to have read in full. `old_text` must occur exactly once or nothing is written.
 
 This path has no size limit. The whole-source flow below does: a large workflow's source may come back to you shortened, and re-emitting all of it may exceed one response. **Never call `save_workflow` with source you suspect is incomplete** — it replaces the entire workflow, so the parts you did not see would be deleted. If the source looks truncated, use `update_node`, or tell the user rather than saving.
 

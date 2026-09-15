@@ -40,6 +40,7 @@ MUTATING_TOOLS = frozenset(
         # Writes a workflow draft, exactly as save_workflow does — the fact
         # that it changes less is not a reason to change it unasked.
         "update_node",
+        "replace_in_node",
     }
 )
 
@@ -325,6 +326,34 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                     },
                 },
                 "required": ["workflow_id", "node_id", "fields"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "replace_in_node",
+            "description": (
+                "Replace an exact piece of text inside one of a node's fields, "
+                "without rewriting the rest. Use this for changing part of a "
+                "long prompt — removing a paragraph, fixing a line — where "
+                "re-sending the whole field would be wasteful or unsafe. "
+                "`old_text` must appear exactly once or nothing is written, so "
+                "an ambiguous edit is refused rather than guessed. Pass an "
+                "empty `new_text` to delete the matched text. Match the text "
+                "exactly as get_node returned it, whitespace included."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "workflow_id": {"type": "integer"},
+                    "node_id": {"type": "string", "description": "Node id, or its unique display name."},
+                    "field": {"type": "string", "description": "The node data field to edit, e.g. \"prompt\"."},
+                    "old_text": {"type": "string", "description": "Exact text to replace."},
+                    "new_text": {"type": "string", "description": "Replacement; empty string deletes."},
+                    "replace_all": {"type": "boolean", "description": "Change every occurrence instead of requiring exactly one."},
+                },
+                "required": ["workflow_id", "node_id", "field", "old_text", "new_text"],
             },
         },
     },

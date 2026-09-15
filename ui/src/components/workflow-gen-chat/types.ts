@@ -46,6 +46,7 @@ export type WorkflowGenThreadItem =
             | "create_workflow"
             | "save_workflow"
             | "update_node"
+            | "replace_in_node"
             | "create_tool"
             | "update_tool"
             | "test_tool"

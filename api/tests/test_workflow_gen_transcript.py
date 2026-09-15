@@ -472,3 +472,117 @@ def test_assistant_prose_is_treated_as_text_not_tool_output():
 def test_a_none_content_assistant_message_is_skipped():
     messages = [{"role": "assistant", "content": None, "tool_calls": []}]
     assert compact_oversized_messages(messages) == 0
+
+
+# ---------------------------------------------------------------------------
+# Document-sized tool results
+# ---------------------------------------------------------------------------
+
+
+class TestDocumentResultsAreNotShrunkAway:
+    """Reported from production: asked to rewrite a ~29,000-character node
+    prompt, the assistant said the prompt came back truncated and refused to
+    save — correctly, since a partial rewrite would delete what it never saw.
+
+    `get_node` returned the whole thing. The generic 24,000-char tool cap then
+    shrank it before the model ever read it, defeating the one tool that exists
+    to return a long field in full.
+    """
+
+    PROMPT = "A" * 29_000
+
+    def test_a_node_prompt_over_the_generic_cap_survives(self):
+        from api.services.workflow_gen.transcript import (
+            MAX_TOOL_RESULT_CHARS,
+            compact_tool_result,
+            result_cap_for,
+        )
+
+        payload = {"id": "node-agenda", "data": {"prompt": self.PROMPT}}
+        assert len(self.PROMPT) > MAX_TOOL_RESULT_CHARS  # the situation
+
+        shrunk = compact_tool_result(payload)
+        assert "_truncated" in shrunk  # what production actually did
+
+        kept = compact_tool_result(payload, max_chars=result_cap_for("get_node"))
+        assert "_truncated" not in kept
+        assert self.PROMPT in kept
+
+    def test_an_ordinary_tool_still_gets_the_aggressive_cap(self):
+        """The document budget is an exception, not a relaxation. A runaway
+        `test_tool` response must still be shrunk — that cap is what stops one
+        from poisoning a thread permanently."""
+        from api.services.workflow_gen.transcript import (
+            MAX_TOOL_RESULT_CHARS,
+            compact_tool_result,
+            result_cap_for,
+        )
+
+        assert result_cap_for("test_tool") == MAX_TOOL_RESULT_CHARS
+        assert result_cap_for(None) == MAX_TOOL_RESULT_CHARS
+        assert result_cap_for("list_workflows") == MAX_TOOL_RESULT_CHARS
+
+        huge = compact_tool_result(
+            {"data": {"rows": ["x" * 100] * 5_000}},
+            max_chars=result_cap_for("test_tool"),
+        )
+        assert "_truncated" in huge
+
+    def test_a_document_result_is_not_re_shrunk_on_reload(self):
+        """A transcript is re-sanitized every time it loads. Without tool
+        awareness here, the model would read a prompt in full on one turn and
+        find it truncated on the next — worse than never having had it."""
+        from api.services.workflow_gen.transcript import (
+            compact_oversized_messages,
+            compact_tool_result,
+            result_cap_for,
+        )
+
+        content = compact_tool_result(
+            {"id": "node-agenda", "data": {"prompt": self.PROMPT}},
+            max_chars=result_cap_for("get_node"),
+        )
+        messages = [
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {"id": "call-1", "function": {"name": "get_node", "arguments": "{}"}}
+                ],
+            },
+            {"role": "tool", "tool_call_id": "call-1", "content": content},
+        ]
+
+        compact_oversized_messages(messages)
+
+        assert self.PROMPT in messages[1]["content"]
+        assert "_truncated" not in messages[1]["content"]
+
+    def test_an_ordinary_tools_reply_is_still_re_shrunk_on_reload(self):
+        from api.services.workflow_gen.transcript import compact_oversized_messages
+
+        messages = [
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {"id": "call-1", "function": {"name": "test_tool", "arguments": "{}"}}
+                ],
+            },
+            {"role": "tool", "tool_call_id": "call-1", "content": "z" * 60_000},
+        ]
+
+        repaired = compact_oversized_messages(messages)
+
+        assert repaired == 1
+        assert len(messages[1]["content"]) < 60_000
+
+    def test_a_reply_whose_call_is_gone_falls_back_to_the_safe_cap(self):
+        """Defensive: a trimmed transcript can leave a tool reply whose
+        originating call was dropped. Unknown provenance gets the tight cap,
+        never the generous one."""
+        from api.services.workflow_gen.transcript import compact_oversized_messages
+
+        messages = [{"role": "tool", "tool_call_id": "orphan", "content": "z" * 60_000}]
+        compact_oversized_messages(messages)
+        assert len(messages[0]["content"]) < 60_000

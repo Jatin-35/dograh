@@ -11,7 +11,12 @@ from api.mcp_server.tools.catalog import (
 from api.mcp_server.tools.create_workflow import create_workflow
 from api.mcp_server.tools.docs_search import list_docs, read_doc, search_docs
 from api.mcp_server.tools.get_workflow_code import get_workflow_code
-from api.mcp_server.tools.node_edit import get_node, list_nodes, update_node
+from api.mcp_server.tools.node_edit import (
+    get_node,
+    list_nodes,
+    replace_in_node,
+    update_node,
+)
 from api.mcp_server.tools.node_types import get_node_type, list_node_types
 from api.mcp_server.tools.save_workflow import save_workflow
 from api.mcp_server.tools.tool_creation import create_tool

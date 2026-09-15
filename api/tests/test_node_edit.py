@@ -303,3 +303,152 @@ async def test_another_organizations_workflow_is_not_reachable():
     assert exc.value.status_code == 404
     assert db.get_workflow.await_args.kwargs["organization_id"] == ORG_ID
     db.save_workflow_draft.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# Replacing part of a field, for a prompt too large to have read in full
+# ---------------------------------------------------------------------------
+
+
+PRICING_LINE = (
+    'If asked about pricing, then acknowledge and reply. Use this exactly: '
+    '"Actually, hamare prices region to region vary karta h."'
+)
+
+
+def _payload_with_long_prompt() -> dict:
+    payload = _workflow_json()
+    node = next(n for n in payload["nodes"] if n["id"] == "node-agenda")
+    node["data"]["prompt"] = (
+        "## Persona\nYou are Aastha.\n\n"
+        + PRICING_LINE
+        + "\n\nYe details WhatsApp par bhi share ho jayengi.\n\n"
+        + "## Product database\n"
+        + ("Tank model row. " * 2000)
+    )
+    return payload
+
+
+@pytest.mark.asyncio
+async def test_a_line_is_removed_without_touching_the_rest():
+    """The production case: a 29,000-character prompt where three specific
+    lines must go. Nothing outside the matched text may change — which is what
+    makes this safe on a field nobody could read in full."""
+    from api.mcp_server.tools.node_edit import replace_in_node_for_user
+
+    payload = _payload_with_long_prompt()
+    before = payload["nodes"][1]["data"]["prompt"]
+    db = _db(payload=payload)
+
+    result = await _call(
+        db,
+        lambda: replace_in_node_for_user(
+            WORKFLOW_ID, "node-agenda", "prompt", PRICING_LINE + "\n\n", "", _user()
+        ),
+    )
+
+    assert result["saved"] is True
+    assert result["replacements"] == 1
+    saved = db.save_workflow_draft.await_args.kwargs["workflow_definition"]
+    after = next(n for n in saved["nodes"] if n["id"] == "node-agenda")["data"]["prompt"]
+
+    assert PRICING_LINE not in after
+    # Everything else is byte-for-byte intact, product database included.
+    assert "## Product database" in after
+    assert after.count("Tank model row. ") == 2000
+    assert len(after) == len(before) - len(PRICING_LINE) - 2
+
+
+@pytest.mark.asyncio
+async def test_text_that_appears_twice_is_refused_not_guessed():
+    """An edit that could land in two places must not pick one. This is the
+    property that makes a blind edit safe."""
+    from api.mcp_server.tools.node_edit import replace_in_node_for_user
+
+    payload = _payload_with_long_prompt()
+    db = _db(payload=payload)
+
+    result = await _call(
+        db,
+        lambda: replace_in_node_for_user(
+            WORKFLOW_ID, "node-agenda", "prompt", "Tank model row. ", "", _user()
+        ),
+    )
+
+    assert result["saved"] is False
+    assert result["error_code"] == "text_not_unique"
+    assert "2000" in result["error"]
+    db.save_workflow_draft.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_replace_all_changes_every_occurrence_when_asked():
+    from api.mcp_server.tools.node_edit import replace_in_node_for_user
+
+    payload = _payload_with_long_prompt()
+    db = _db(payload=payload)
+
+    result = await _call(
+        db,
+        lambda: replace_in_node_for_user(
+            WORKFLOW_ID, "node-agenda", "prompt", "Tank model row. ", "X. ", _user(),
+            replace_all=True,
+        ),
+    )
+
+    assert result["saved"] is True
+    assert result["replacements"] == 2000
+
+
+@pytest.mark.asyncio
+async def test_text_that_is_not_there_writes_nothing():
+    from api.mcp_server.tools.node_edit import replace_in_node_for_user
+
+    db = _db(payload=_payload_with_long_prompt())
+    result = await _call(
+        db,
+        lambda: replace_in_node_for_user(
+            WORKFLOW_ID, "node-agenda", "prompt", "text that is absent", "x", _user()
+        ),
+    )
+
+    assert result["saved"] is False
+    assert result["error_code"] == "text_not_found"
+    db.save_workflow_draft.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_a_replacement_that_breaks_the_node_is_rejected():
+    """Same validation as any other write — emptying a required prompt fails."""
+    from api.mcp_server.tools.node_edit import replace_in_node_for_user
+
+    payload = _workflow_json()
+    db = _db(payload=payload)
+    whole = payload["nodes"][0]["data"]["prompt"]
+
+    result = await _call(
+        db,
+        lambda: replace_in_node_for_user(
+            WORKFLOW_ID, "node-start", "prompt", whole, "", _user()
+        ),
+    )
+
+    assert result["saved"] is False
+    db.save_workflow_draft.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_a_non_text_field_is_refused_clearly():
+    from api.mcp_server.tools.node_edit import replace_in_node_for_user
+
+    db = _db(payload=_payload_with_long_prompt())
+    result = await _call(
+        db,
+        lambda: replace_in_node_for_user(
+            WORKFLOW_ID, "node-agenda", "is_start", "False", "True", _user()
+        ),
+    )
+
+    assert result["saved"] is False
+    assert result["error_code"] == "validation_error"
+    db.save_workflow_draft.assert_not_awaited()

@@ -34,6 +34,7 @@ from api.mcp_server.tools.docs_search import search_docs as _search_docs
 from api.mcp_server.tools.node_edit import (
     get_node_for_user,
     list_nodes_for_user,
+    replace_in_node_for_user,
     update_node_for_user,
 )
 from api.mcp_server.tools.save_workflow import save_workflow_for_user
@@ -182,6 +183,24 @@ class WorkflowGenToolbox:
         user = await self._scoped_user()
         return await self._translating(
             update_node_for_user(workflow_id, node_id, fields, user)
+        )
+
+    async def replace_in_node(
+        self,
+        workflow_id: int,
+        node_id: str,
+        field: str,
+        old_text: str,
+        new_text: str,
+        replace_all: bool = False,
+    ) -> dict[str, Any]:
+        """Change part of a long field without rewriting all of it."""
+        user = await self._scoped_user()
+        return await self._translating(
+            replace_in_node_for_user(
+                workflow_id, node_id, field, old_text, new_text, user,
+                replace_all=replace_all,
+            )
         )
 
     @staticmethod

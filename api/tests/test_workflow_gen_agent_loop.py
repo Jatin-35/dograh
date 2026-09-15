@@ -849,3 +849,109 @@ async def test_a_thread_already_poisoned_heals_on_the_next_turn(monkeypatch):
     persisted = steps[-1].messages
     assert _largest_content(persisted) <= MAX_TOOL_RESULT_CHARS
     _assert_every_tool_call_answered(persisted)
+
+
+class TestALongNodePromptReachesTheModel:
+    """Reported from production: asked to rewrite a ~29,000-character node
+    prompt, the assistant reported it came back truncated and refused to save.
+
+    `get_node` returned the whole prompt and the transcript layer allowed it —
+    but the agent loop is what actually builds the tool reply, and it caps
+    every result. This drives the real loop and asserts what the *model*
+    receives, because fixing the layers while mis-wiring the call between them
+    is exactly how the original bug survived its own fix.
+    """
+
+    PROMPT = "PRODUCT DATABASE ROW. " * 1400  # ~29,400 chars, like Main Agenda
+
+    @pytest.mark.asyncio
+    async def test_the_whole_prompt_is_in_the_message_the_model_sees(
+        self, monkeypatch
+    ):
+        seen: list[list[dict[str, Any]]] = []
+
+        class _FakeToolbox:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def get_node(self, workflow_id: int, node_id: str):
+                return {
+                    "workflow_id": workflow_id,
+                    "id": node_id,
+                    "type": "agentNode",
+                    "data": {"name": "Main Agenda", "prompt": TestALongNodePromptReachesTheModel.PROMPT},
+                }
+
+        completions = [
+            _FakeCompletion(
+                _FakeMessage(
+                    tool_calls=[_FakeToolCall("call-1", "get_node", {"workflow_id": 7, "node_id": "n1"})]
+                )
+            ),
+            _FakeCompletion(_FakeMessage(content="Read it.")),
+        ]
+
+        async def _fake_complete(messages, tools, **kwargs):
+            seen.append([dict(m) for m in messages])
+            return completions.pop(0)
+
+        monkeypatch.setattr(agent_loop, "WorkflowGenToolbox", _FakeToolbox)
+        monkeypatch.setattr(agent_loop.llm_client, "complete", _fake_complete)
+
+        async for _ in agent_loop.run_turn(
+            organization_id=1,
+            user_id=1,
+            prior_messages=[],
+            user_message="clean up the Main Agenda prompt",
+            workflow_id=7,
+        ):
+            pass
+
+        # The second completion call is the one that carries the tool reply.
+        tool_replies = [
+            m for m in seen[-1] if m.get("role") == "tool" and m.get("tool_call_id") == "call-1"
+        ]
+        assert tool_replies, "the get_node reply never reached the model"
+        content = tool_replies[0]["content"]
+
+        assert "_truncated" not in content, "the prompt was shrunk before the model saw it"
+        assert self.PROMPT in content
+        assert len(self.PROMPT) > MAX_TOOL_RESULT_CHARS  # the situation is real
+
+    @pytest.mark.asyncio
+    async def test_an_ordinary_tools_huge_reply_is_still_capped(self, monkeypatch):
+        """The exception must stay narrow. `test_tool` hands back a customer's
+        raw HTTP response verbatim; an uncapped one kills the thread for good,
+        since the transcript is persisted and replayed."""
+        seen: list[list[dict[str, Any]]] = []
+
+        class _FakeToolbox:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def list_tools(self):
+                return {"tools": [{"blob": "z" * 200} for _ in range(1000)]}
+
+        completions = [
+            _FakeCompletion(
+                _FakeMessage(tool_calls=[_FakeToolCall("call-1", "list_tools", {})])
+            ),
+            _FakeCompletion(_FakeMessage(content="Done.")),
+        ]
+
+        async def _fake_complete(messages, tools, **kwargs):
+            seen.append([dict(m) for m in messages])
+            return completions.pop(0)
+
+        monkeypatch.setattr(agent_loop, "WorkflowGenToolbox", _FakeToolbox)
+        monkeypatch.setattr(agent_loop.llm_client, "complete", _fake_complete)
+
+        async for _ in agent_loop.run_turn(
+            organization_id=1, user_id=1, prior_messages=[], user_message="list my tools"
+        ):
+            pass
+
+        reply = next(
+            m for m in seen[-1] if m.get("role") == "tool" and m.get("tool_call_id") == "call-1"
+        )
+        assert len(reply["content"]) <= MAX_TOOL_RESULT_CHARS * 1.1

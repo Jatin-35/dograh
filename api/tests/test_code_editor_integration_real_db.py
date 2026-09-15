@@ -449,3 +449,123 @@ class TestRunIdentityForReal:
         )
 
         assert captured["workflow_id"] == own.id
+
+
+# ---------------------------------------------------------------------------
+# replace_in_node against a real workflow, at production size
+# ---------------------------------------------------------------------------
+
+
+class TestReplaceInNodeForReal:
+    """The Vectus case, end to end. A ~29,000-character Main Agenda prompt with
+    a product database inside it, where three specific lines must go and
+    nothing else may move."""
+
+    PRICING = (
+        'If asked about pricing, then acknowledge and reply. Use this exactly: '
+        '"Actually, hamare prices region to region vary karta h."'
+    )
+    WHATSAPP = "Ye details WhatsApp par bhi share ho jayengi."
+    DATABASE = "1000L Tank | model A | HDPE\n" * 1000
+
+    def _prompt(self) -> str:
+        return (
+            "## Persona\nYou are a female, do not use a male persona.\n\n"
+            f"{self.PRICING}\n\n"
+            f"Ji, aapke area ke Area Manager hain. {self.WHATSAPP}\n\n"
+            "## Product database\n" + self.DATABASE
+        )
+
+    async def _workflow(self, db_session, org, user):
+        graph = {
+            "nodes": [
+                dict(GRAPH["nodes"][0]),
+                {
+                    "id": "n-agenda",
+                    "type": "agentNode",
+                    "position": {"x": 200, "y": 0},
+                    "data": {"name": "Main Agenda", "prompt": self._prompt()},
+                },
+                dict(GRAPH["nodes"][2]),
+            ],
+            "edges": GRAPH["edges"],
+        }
+        return await db_session.create_workflow(
+            name="Vectus Smart Care",
+            workflow_definition=graph,
+            user_id=user.id,
+            organization_id=org.id,
+        )
+
+    async def test_three_cleanups_leave_the_product_database_byte_identical(
+        self, db_session, two_orgs
+    ):
+        from api.mcp_server.tools.node_edit import replace_in_node_for_user
+
+        (org, user), _ = two_orgs
+        workflow = await self._workflow(db_session, org, user)
+        user.selected_organization_id = org.id
+        original_len = len(self._prompt())
+        assert original_len > 24_000  # past the cap that broke this
+
+        for old, new in (
+            (self.PRICING + "\n\n", ""),
+            (" " + self.WHATSAPP, ""),
+            ("You are a female, do not use a male persona.", "See the Global Node."),
+        ):
+            result = await replace_in_node_for_user(
+                workflow.id, "Main Agenda", "prompt", old, new, user
+            )
+            assert result["saved"] is True, result
+
+        draft = await db_session.get_draft_version(workflow.id)
+        final = next(
+            n for n in draft.workflow_json["nodes"] if n["id"] == "n-agenda"
+        )["data"]["prompt"]
+
+        assert self.PRICING not in final
+        assert self.WHATSAPP not in final
+        assert "See the Global Node." in final
+        # The whole point: the database is untouched, every row of it.
+        assert self.DATABASE in final
+        assert final.count("1000L Tank | model A | HDPE") == 1000
+        # And the other nodes are as they were.
+        nodes = {n["id"]: n for n in draft.workflow_json["nodes"]}
+        assert nodes["n-start"]["data"]["prompt"] == "Hello there."
+        assert nodes["n-end"]["data"]["prompt"] == "Goodbye."
+
+    async def test_an_ambiguous_match_writes_nothing_to_the_database(
+        self, db_session, two_orgs
+    ):
+        from api.mcp_server.tools.node_edit import replace_in_node_for_user
+
+        (org, user), _ = two_orgs
+        workflow = await self._workflow(db_session, org, user)
+        user.selected_organization_id = org.id
+
+        result = await replace_in_node_for_user(
+            workflow.id, "Main Agenda", "prompt", "1000L Tank", "X", user
+        )
+
+        assert result["saved"] is False
+        assert result["error_code"] == "text_not_unique"
+        assert await db_session.get_draft_version(workflow.id) is None
+
+    async def test_another_org_cannot_replace_text_in_this_ones_prompt(
+        self, db_session, two_orgs
+    ):
+        from fastapi import HTTPException
+
+        from api.mcp_server.tools.node_edit import replace_in_node_for_user
+
+        (org_a, user_a), (org_b, user_b) = two_orgs
+        workflow = await self._workflow(db_session, org_a, user_a)
+        user_b.selected_organization_id = org_b.id
+
+        with pytest.raises(HTTPException) as exc:
+            await replace_in_node_for_user(
+                workflow.id, "Main Agenda", "prompt", self.PRICING, "", user_b
+            )
+
+        assert exc.value.status_code == 404
+        assert await db_session.get_draft_version(workflow.id) is None

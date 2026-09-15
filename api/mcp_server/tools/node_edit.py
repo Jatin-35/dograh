@@ -223,6 +223,125 @@ async def update_node(
     return await update_node_for_user(workflow_id, node_id, fields, user)
 
 
+@traced_tool
+async def replace_in_node(
+    workflow_id: int,
+    node_id: str,
+    field: str,
+    old_text: str,
+    new_text: str,
+    replace_all: bool = False,
+) -> dict[str, Any]:
+    """Replace an exact piece of text inside one of a node's fields.
+
+    For changing part of a long prompt — removing a paragraph, correcting a
+    line — without reading or rewriting the whole thing. Nothing outside
+    `old_text` is touched, so the parts you never saw cannot be lost. Pass an
+    empty `new_text` to delete the matched text.
+
+    `old_text` must appear exactly once, or nothing is written and the result
+    says whether it was absent or ambiguous. That is the safety property: an
+    edit that could land in two places is refused rather than guessed at. Pass
+    `replace_all` only when you intend every occurrence to change.
+
+    Prefer this over `update_node` whenever the change is a part of a long
+    field rather than a wholesale rewrite: it is the only edit that is safe on
+    a field too large to have read in full.
+
+    Match on the text exactly as `get_node` returned it, whitespace included.
+    On failure the result has `saved: false` and an `error_code`:
+    - `node_not_found` — no such node id or unique name.
+    - `text_not_found` — `old_text` does not appear in that field.
+    - `text_not_unique` — it appears more than once and `replace_all` is false.
+    - `validation_error` / `graph_validation` — the result broke a rule.
+    """
+    user = await authenticate_mcp_request()
+    return await replace_in_node_for_user(
+        workflow_id, node_id, field, old_text, new_text, user, replace_all=replace_all
+    )
+
+
+async def replace_in_node_for_user(
+    workflow_id: int,
+    node_id: str,
+    field: str,
+    old_text: str,
+    new_text: str,
+    user: UserModel,
+    *,
+    replace_all: bool = False,
+) -> dict[str, Any]:
+    if not old_text:
+        return _error("validation_error", "`old_text` must not be empty.")
+
+    workflow, payload = await _load(workflow_id, user)
+    node, known = _find_node(payload, node_id)
+    if node is None:
+        return _error(
+            "node_not_found",
+            f"No node {node_id!r} in workflow {workflow_id}. Known ids: "
+            + (", ".join(known) if known else "(none)"),
+        )
+
+    data = node.get("data")
+    if not isinstance(data, dict):
+        return _error("validation_error", f"Node {node.get('id')!r} has no editable data.")
+
+    current = data.get(field)
+    if not isinstance(current, str):
+        return _error(
+            "validation_error",
+            f"Field {field!r} on node {node.get('id')!r} is not text"
+            + (" (it is unset)." if current is None else f" (it is {type(current).__name__})."),
+        )
+
+    occurrences = current.count(old_text)
+    if occurrences == 0:
+        return _error(
+            "text_not_found",
+            f"That text does not appear in {field!r} on node {node.get('id')!r}. "
+            "Match it exactly as get_node returned it, whitespace included.",
+        )
+    if occurrences > 1 and not replace_all:
+        return _error(
+            "text_not_unique",
+            f"That text appears {occurrences} times in {field!r} on node "
+            f"{node.get('id')!r}. Include enough surrounding text to make it "
+            "unique, or pass replace_all to change every occurrence.",
+        )
+
+    updated = (
+        current.replace(old_text, new_text)
+        if replace_all
+        else current.replace(old_text, new_text, 1)
+    )
+    node["data"] = {**data, field: updated}
+
+    invalid = _validate(payload)
+    if invalid:
+        return invalid
+
+    draft = await db_client.save_workflow_draft(
+        workflow_id=workflow_id, workflow_definition=payload
+    )
+    logger.info(
+        f"replace_in_node: workflow={workflow_id} node={node.get('id')} "
+        f"field={field} replaced={occurrences if replace_all else 1} "
+        f"version={draft.version_number}"
+    )
+    return {
+        "saved": True,
+        "workflow_id": workflow_id,
+        "node_id": node.get("id"),
+        "field": field,
+        "replacements": occurrences if replace_all else 1,
+        "length_before": len(current),
+        "length_after": len(updated),
+        "version_number": draft.version_number,
+        "status": draft.status,
+    }
+
+
 async def update_node_for_user(
     workflow_id: int, node_id: str, fields: dict[str, Any], user: UserModel
 ) -> dict[str, Any]:
