@@ -31,9 +31,15 @@ from api.mcp_server.tools.create_workflow import create_workflow_for_user
 from api.mcp_server.tools.docs_search import list_docs as _list_docs
 from api.mcp_server.tools.docs_search import read_doc as _read_doc
 from api.mcp_server.tools.docs_search import search_docs as _search_docs
+from api.mcp_server.tools.node_edit import (
+    get_node_for_user,
+    list_nodes_for_user,
+    update_node_for_user,
+)
 from api.mcp_server.tools.save_workflow import save_workflow_for_user
 from api.mcp_server.ts_bridge import TsBridgeError
 from api.schemas.tool import CreateToolRequest
+from api.services.code_editor import secrets as code_secrets
 from api.services.code_editor import workspace as code_workspace
 from api.services.credential_management import (
     CredentialManagementError,
@@ -155,6 +161,37 @@ class WorkflowGenToolbox:
             "version": view["version"],
             "code": view["code"],
         }
+
+    async def list_nodes(self, workflow_id: int) -> dict[str, Any]:
+        """A workflow's nodes without its source — see `node_edit`."""
+        user = await self._scoped_user()
+        return await self._translating(list_nodes_for_user(workflow_id, user))
+
+    async def get_node(self, workflow_id: int, node_id: str) -> dict[str, Any]:
+        """One node's full data, whatever the size of the workflow."""
+        user = await self._scoped_user()
+        return await self._translating(get_node_for_user(workflow_id, node_id, user))
+
+    async def update_node(
+        self, workflow_id: int, node_id: str, fields: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Change node data without a whole-document round-trip.
+
+        Same result-shape contract as `save_workflow`, keyed `saved`, so the
+        agent loop's repair path treats a rejected edit identically."""
+        user = await self._scoped_user()
+        return await self._translating(
+            update_node_for_user(workflow_id, node_id, fields, user)
+        )
+
+    @staticmethod
+    async def _translating(awaitable):
+        """The shared cores signal "not in your org" the HTTP way; this caller
+        isn't an HTTP surface, so translate it."""
+        try:
+            return await awaitable
+        except HTTPException as e:
+            raise WorkflowGenToolboxError(str(e.detail)) from e
 
     async def create_workflow(self, code: str) -> dict[str, Any]:
         """Create a workflow from SDK TypeScript source.
@@ -505,3 +542,45 @@ class WorkflowGenToolbox:
         if len(logs) > 4000:
             outcome = {**outcome, "logs": f"… [earlier output omitted]\n{logs[-4000:]}"}
         return outcome
+
+    async def list_env_vars(self) -> dict[str, Any]:
+        """Keys and hints only — a stored value is never returned, matching
+        the editor's own rule that a secret is never shown again once saved."""
+        rows = await code_workspace.list_env_vars(self.organization_id)
+        return {
+            "env_vars": [
+                {"key": r["key"], "hint": r["hint"], "length": r["length"]}
+                for r in rows
+            ]
+        }
+
+    async def set_env_var(self, key: str, value: str) -> dict[str, Any]:
+        """Store or replace one variable, encrypted at rest.
+
+        The result never carries `value` — only a hint, the same trailing
+        characters the Variables dialog itself shows — so the plaintext isn't
+        persisted a second time into the session transcript on every later
+        turn (`create_credential` follows the identical rule for the same
+        reason)."""
+        if not code_secrets.is_configured():
+            raise WorkflowGenToolboxError(
+                "CODE_EDITOR_ENCRYPTION_KEY is not configured on this "
+                "deployment, so secrets cannot be stored. This needs a "
+                "deployment operator, not something fixable from here."
+            )
+        try:
+            await code_workspace.set_env_var(self.organization_id, key, value)
+        except code_workspace.WorkspaceError as e:
+            raise WorkflowGenToolboxError(e.message, errors=e.errors) from e
+        return {
+            "saved": True,
+            "key": key,
+            "hint": code_secrets.hint(value),
+            "length": len(value),
+        }
+
+    async def delete_env_var(self, key: str) -> dict[str, Any]:
+        deleted = await db_client.delete_code_editor_env_var(self.organization_id, key)
+        if not deleted:
+            raise WorkflowGenToolboxError(f"{key!r} does not exist.")
+        return {"deleted": True, "key": key}

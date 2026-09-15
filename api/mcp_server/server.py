@@ -11,6 +11,7 @@ from api.mcp_server.tools.catalog import (
 from api.mcp_server.tools.create_workflow import create_workflow
 from api.mcp_server.tools.docs_search import list_docs, read_doc, search_docs
 from api.mcp_server.tools.get_workflow_code import get_workflow_code
+from api.mcp_server.tools.node_edit import get_node, list_nodes, update_node
 from api.mcp_server.tools.node_types import get_node_type, list_node_types
 from api.mcp_server.tools.save_workflow import save_workflow
 from api.mcp_server.tools.tool_creation import create_tool
@@ -22,16 +23,19 @@ mcp = FastMCP("dograh", instructions=DOGRAH_MCP_INSTRUCTIONS)
 for _tool in (
     create_workflow,
     create_tool,
+    get_node,
     get_node_type,
     get_workflow,
     get_workflow_code,
     list_credentials,
     list_documents,
     list_node_types,
+    list_nodes,
     list_recordings,
     list_tools,
     list_workflows,
     save_workflow,
+    update_node,
 ):
     mcp.tool(_tool)
 

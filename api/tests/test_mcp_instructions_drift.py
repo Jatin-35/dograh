@@ -25,6 +25,7 @@ import pytest
 from api.mcp_server import instructions as instructions_module
 from api.mcp_server.server import mcp
 from api.mcp_server.tools import create_workflow as create_workflow_module
+from api.mcp_server.tools import node_edit as node_edit_module
 from api.mcp_server.tools import save_workflow as save_workflow_module
 
 # Every registered MCP tool name starts with one of these verbs. A
@@ -98,6 +99,10 @@ async def test_guide_only_references_registered_tools():
     [
         ("save_workflow", save_workflow_module),
         ("create_workflow", create_workflow_module),
+        # update_node returns its own error codes and is the tool an external
+        # client should reach for first on a large workflow — an undocumented
+        # code here costs them the same round of confusion.
+        ("update_node", node_edit_module),
     ],
 )
 async def test_tool_documents_every_error_code_it_returns(tool_name, module):

@@ -210,8 +210,13 @@ async def test_the_assistant_knows_which_workflow_it_is_open_inside(monkeypatch)
 
     prompt = seen_prompts[0]
     assert "workflow **6**" in prompt
-    assert "get_workflow_code(6)" in prompt
+    # Read it rather than ask the user — and read it the way that works at any
+    # size. Steering here at `get_workflow_code` is what walked large workflows
+    # into a shortened fetch and a whole-document save they could not complete.
+    assert "list_nodes(6)" in prompt
     assert "Never ask which workflow" in prompt
+    assert "update_node" in prompt
+    assert "save_workflow` only when the **structure** changes" in prompt
 
     # The standalone page has no workflow yet, so it must NOT claim one.
     seen_prompts.clear()

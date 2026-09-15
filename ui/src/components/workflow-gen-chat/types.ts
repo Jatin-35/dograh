@@ -42,7 +42,18 @@ export type WorkflowGenThreadItem =
         id: string;
         kind: "approval";
         actionId: string;
-        actionType: "create_workflow" | "save_workflow" | "create_tool" | "create_credential";
+        actionType:
+            | "create_workflow"
+            | "save_workflow"
+            | "update_node"
+            | "create_tool"
+            | "update_tool"
+            | "test_tool"
+            | "create_credential"
+            | "write_code_file"
+            | "delete_code_file"
+            | "set_env_var"
+            | "delete_env_var";
         summary: string;
         definitionPreview: Record<string, unknown>;
         resolved: boolean;

@@ -33,13 +33,20 @@ MUTATING_TOOLS = frozenset(
         # the approval card is where the diff is shown.
         "write_code_file",
         "delete_code_file",
+        # Env var writes carry a secret the user just typed in chat — same
+        # "never applied silently" reasoning as the file writes above.
+        "set_env_var",
+        "delete_env_var",
+        # Writes a workflow draft, exactly as save_workflow does — the fact
+        # that it changes less is not a reason to change it unasked.
+        "update_node",
     }
 )
 
 # Argument paths whose values are secrets and must be masked before the
 # approval card (and the persisted transcript's preview) is built.
 SECRET_ARGUMENT_KEYS = frozenset(
-    {"api_key", "token", "password", "header_value", "username"}
+    {"api_key", "token", "password", "header_value", "username", "value"}
 )
 
 _TOOL_PARAMETER_SCHEMA = {
@@ -251,6 +258,73 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                     "description": {"type": "string"},
                 },
                 "required": ["name", "credential_type", "credential_data"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_nodes",
+            "description": (
+                "List a workflow's nodes — id, type, name, a short prompt preview "
+                "and the full prompt length — without fetching the whole workflow. "
+                "Start here when the user wants to change specific nodes."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {"workflow_id": {"type": "integer"}},
+                "required": ["workflow_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_node",
+            "description": (
+                "Read one node's full data by id (or by its unique display name). "
+                "Returns the prompt complete, where a large workflow's full source "
+                "may come back shortened."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "workflow_id": {"type": "integer"},
+                    "node_id": {"type": "string"},
+                },
+                "required": ["workflow_id", "node_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_node",
+            "description": (
+                "Change specific fields on one node and save the workflow as a "
+                "draft. `fields` is merged into the node's existing data — pass "
+                "only what changes, e.g. {\"prompt\": \"...\"}; anything omitted "
+                "is left as it was. Prefer this over get_workflow_code + "
+                "save_workflow whenever the change is confined to node data: it "
+                "is the only way to edit a workflow whose full source is too "
+                "large to return or to rewrite in one response. Use save_workflow "
+                "only when the structure changes — adding or removing nodes, or "
+                "rewiring edges."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "workflow_id": {"type": "integer"},
+                    "node_id": {
+                        "type": "string",
+                        "description": "Node id, or its unique display name.",
+                    },
+                    "fields": {
+                        "type": "object",
+                        "description": "Node data fields to change, e.g. {\"prompt\": \"...\"}.",
+                    },
+                },
+                "required": ["workflow_id", "node_id", "fields"],
             },
         },
     },
@@ -564,6 +638,57 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                     },
                 },
                 "required": ["event"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_env_vars",
+            "description": (
+                "List the organization's Code Editor environment variables — "
+                "keys and a short hint only. A stored value is never returned; "
+                "there is no way to read one back, by design."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_env_var",
+            "description": (
+                "Store or replace one environment variable for the Code Editor "
+                "workspace, encrypted at rest. Read it back in Python with "
+                "os.environ — never write a secret into a .py or .json file "
+                "directly. Requires user confirmation before it is saved, same "
+                "as a file write, since it carries a value the user just typed."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "key": {
+                        "type": "string",
+                        "description": (
+                            "Letters, digits and underscores only, e.g. "
+                            "ORDERS_API_KEY. Setting an existing key replaces it."
+                        ),
+                    },
+                    "value": {"type": "string", "description": "The secret value."},
+                },
+                "required": ["key", "value"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_env_var",
+            "description": "Remove one environment variable from the workspace.",
+            "parameters": {
+                "type": "object",
+                "properties": {"key": {"type": "string"}},
+                "required": ["key"],
             },
         },
     },

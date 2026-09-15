@@ -1,7 +1,7 @@
 "use client";
 
 import { MessagePrimitive, type TextMessagePartProps, ThreadPrimitive, type ToolCallMessagePartProps } from "@assistant-ui/react";
-import { ArrowRight, CheckCircle2, ChevronDown, Sparkles, Wand2, Workflow, Wrench, XCircle } from "lucide-react";
+import { ArrowRight, CheckCircle2, ChevronDown, FileCode, KeyRound, Sparkles, Trash2, Wand2, Workflow, Wrench, XCircle } from "lucide-react";
 import { createContext, useContext } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -132,6 +132,38 @@ function summarizeDefinition(actionType: string, preview: Record<string, unknown
             icon: Wrench,
             title: (toolDefinition?.name as string) || "New tool",
             chips: definition?.type ? [String(definition.type)] : [],
+        };
+    }
+    // The Code Editor family falls through to a card with no node/edge
+    // counts to show — a plain "workflow update" title here would be
+    // actively wrong for a file or a secret, not just generic.
+    if (actionType === "write_code_file" || actionType === "delete_code_file") {
+        const path = (preview.path as string) || "a file";
+        return {
+            icon: actionType === "delete_code_file" ? Trash2 : FileCode,
+            title: path,
+            chips: [] as string[],
+        };
+    }
+    if (actionType === "update_node") {
+        // Names the node and the fields, not node/edge counts. A targeted edit
+        // touches one node, so "12 nodes, 14 edges" would describe the
+        // workflow it sits in rather than the change being approved.
+        const fields = preview.fields;
+        return {
+            icon: Wand2,
+            title: (preview.node_id as string) || "a node",
+            chips:
+                fields && typeof fields === "object"
+                    ? Object.keys(fields as Record<string, unknown>).sort()
+                    : ([] as string[]),
+        };
+    }
+    if (actionType === "set_env_var" || actionType === "delete_env_var") {
+        return {
+            icon: actionType === "delete_env_var" ? Trash2 : KeyRound,
+            title: (preview.key as string) || "Environment variable",
+            chips: [] as string[],
         };
     }
     // Counts come from the server having already parsed the proposed source,

@@ -46,7 +46,18 @@ The guide tool is the authoritative source for prompt-authoring craft (global gu
 2. `read_doc` — fetch the full page once one result looks likely. Prefer this over reasoning from search summaries alone.
 3. `list_docs` — use when the user wants to browse a topic area or when search terms are too vague. Call it with no arguments for the top-level sections; returned section paths feed back into `list_docs`, returned page paths feed into `read_doc`.
 
-### Editing an existing workflow
+### Changing what a node says (prefer this)
+Most edits — rewriting a prompt, renaming a node, changing a node's settings — touch one node's data and nothing else. Do those without fetching the whole workflow:
+1. `list_workflows` — locate the target workflow.
+2. `list_nodes` — see the nodes, with each prompt's real length.
+3. `get_node` — read the one you intend to change. Its prompt comes back complete.
+4. (optional) `get_voice_prompting_guide` — as in the editing flow below, before revising any prompt.
+5. `update_node` — pass only the fields that change; anything you omit is left as it was. Saves as a draft, validated exactly as a full save is.
+
+This path has no size limit. The whole-source flow below does: a large workflow's source may come back to you shortened, and re-emitting all of it may exceed one response. **Never call `save_workflow` with source you suspect is incomplete** — it replaces the entire workflow, so the parts you did not see would be deleted. If the source looks truncated, use `update_node`, or tell the user rather than saving.
+
+### Editing an existing workflow's structure
+Use this when nodes or edges are added, removed or rewired — not to change what a node says.
 1. `list_workflows` — locate the target workflow.
 2. `get_workflow_code` — fetch the current source for that workflow.
 3. (optional) `list_node_types` / `get_node_type` — consult before adding or editing a node type whose fields aren't already visible in the current code.
@@ -101,7 +112,7 @@ Example:
 
 ## Iterating on errors
 
-A failed `save_workflow` / `create_workflow` returns a result with `saved`/`created` set to false, a machine-readable `error_code`, and a human-readable `error` message — carrying `line` and `column` when the problem is locatable in your source. The full set of `error_code` values and their meanings is documented on each tool (visible in its description). Read the `error` message, fix at the reported location, and resubmit the **complete source** — these tools do not accept patches. If a failure looks internal or transient rather than a problem with your code, retry once before surfacing it to the user.
+A failed `save_workflow` / `create_workflow` returns a result with `saved`/`created` set to false, a machine-readable `error_code`, and a human-readable `error` message — carrying `line` and `column` when the problem is locatable in your source. The full set of `error_code` values and their meanings is documented on each tool (visible in its description). Read the `error` message, fix at the reported location, and resubmit the **complete source** — these two tools do not accept patches. (`update_node` does: it takes only the fields that change.) If a failure looks internal or transient rather than a problem with your code, retry once before surfacing it to the user.
 
 ## Field conventions
 

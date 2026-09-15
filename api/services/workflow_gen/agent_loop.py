@@ -54,6 +54,8 @@ _STATUS_BEFORE_TOOL = {
     "get_node_type": "Checking available node types…",
     "list_workflows": "Looking up existing workflows…",
     "get_workflow": "Looking up existing workflows…",
+    "list_nodes": "Reading the agent's nodes…",
+    "get_node": "Reading that node…",
     "get_voice_prompting_guide": "Reviewing prompting guidance…",
     "search_docs": "Searching the docs…",
     "read_doc": "Searching the docs…",
@@ -486,6 +488,12 @@ def _summarize_mutating_call(
         return f'Ready to create "{shape.get("name") or "a new workflow"}" — {counts}.'
     if tool_name == "save_workflow":
         return f"Ready to save changes as a draft — {counts}."
+    if tool_name == "update_node":
+        # Named fields, not counts: the value of a targeted edit is that the
+        # user can see it touches one node and exactly which parts of it.
+        fields = ", ".join(sorted(arguments.get("fields") or {})) or "nothing"
+        node = arguments.get("node_id") or "a node"
+        return f'Ready to update {fields} on "{node}", saved as a draft.'
     if tool_name == "create_tool":
         name = (arguments.get("tool_definition") or {}).get("name")
         return f'Ready to create the tool "{name}".' if name else "Ready to create a new reusable tool."
@@ -508,6 +516,11 @@ def _summarize_mutating_call(
         )
     if tool_name == "delete_code_file":
         return f'Ready to delete "{arguments.get("path")}".'
+    if tool_name == "set_env_var":
+        key = arguments.get("key") or "an environment variable"
+        return f'Ready to set "{key}" (value hidden) for the Code Editor workspace.'
+    if tool_name == "delete_env_var":
+        return f'Ready to delete the environment variable "{arguments.get("key")}".'
     return f"Ready to run {tool_name}."
 
 
@@ -580,7 +593,15 @@ def _system_prompt(workflow_id: int | None, surface: str = "standalone") -> str:
 
 This conversation is open inside workflow **{workflow_id}**'s editor. The user is looking at it right now, so "this workflow", "the flow", "this agent", or a bare node name always means workflow {workflow_id}.
 
-Never ask which workflow to change, and never list workflows to choose from — you already know. Call `get_workflow_code({workflow_id})` to see its current state, including the real node names, instead of asking the user to confirm them. Only touch a different workflow if the user names one explicitly.
+Never ask which workflow to change, and never list workflows to choose from — you already know. Call `list_nodes({workflow_id})` to see its real node names, instead of asking the user to confirm them. Only touch a different workflow if the user names one explicitly.
+
+### Changing node content vs. changing structure
+
+Most requests — rewriting a prompt, renaming a node, adjusting a node's settings — change **one node's data**. For those, use `list_nodes` → `get_node` → `update_node`. Pass only the fields that change; anything you omit is left as it was.
+
+Do **not** reach for `get_workflow_code` + `save_workflow` to do that. Those replace the entire workflow, which means re-emitting every node verbatim. On a large workflow — one with a long prompt or an embedded data table — the source may come back to you shortened, and rewriting it all in one response may not finish. Saving from source you were only shown part of would delete the parts you never saw.
+
+Use `save_workflow` only when the **structure** changes: adding or removing nodes, or rewiring edges. If you ever find yourself about to save source you suspect is incomplete, stop and say so instead.
 """
 
     if surface == "code_editor":
@@ -648,6 +669,28 @@ async def _persist_mutating_action(
         }
         return
 
+    if tool_name == "update_node":
+        yield {"event": _status("Updating the node…")}
+        try:
+            result = await toolbox.update_node(
+                arguments.get("workflow_id"),
+                arguments.get("node_id", ""),
+                arguments.get("fields") or {},
+            )
+        except WorkflowGenToolboxError as e:
+            yield {"event": None, "result": None, "errors": e.errors}
+            return
+        # Reports failure as data, like the other shared cores, so a rejected
+        # edit goes to the repair loop rather than to the user as a red card.
+        if not result.get("saved"):
+            yield {"event": None, "result": None, "errors": _mcp_result_errors(result)}
+            return
+        yield {
+            "event": _status("Node updated."),
+            "result": {"kind": "update_node", **result},
+        }
+        return
+
     if tool_name == "delete_code_file":
         yield {"event": _status("Deleting the file…")}
         try:
@@ -658,6 +701,34 @@ async def _persist_mutating_action(
         yield {
             "event": _status("File deleted."),
             "result": {"kind": "delete_code_file", **result},
+        }
+        return
+
+    if tool_name == "set_env_var":
+        yield {"event": _status("Saving the environment variable…")}
+        try:
+            result = await toolbox.set_env_var(
+                arguments.get("key", ""), arguments.get("value", "")
+            )
+        except WorkflowGenToolboxError as e:
+            yield {"event": None, "result": None, "errors": e.errors}
+            return
+        yield {
+            "event": _status("Environment variable saved."),
+            "result": {"kind": "set_env_var", **result},
+        }
+        return
+
+    if tool_name == "delete_env_var":
+        yield {"event": _status("Deleting the environment variable…")}
+        try:
+            result = await toolbox.delete_env_var(arguments.get("key", ""))
+        except WorkflowGenToolboxError as e:
+            yield {"event": None, "result": None, "errors": e.errors}
+            return
+        yield {
+            "event": _status("Environment variable deleted."),
+            "result": {"kind": "delete_env_var", **result},
         }
         return
 

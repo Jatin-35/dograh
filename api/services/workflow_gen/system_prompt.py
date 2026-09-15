@@ -148,7 +148,9 @@ The workspace has a fixed shape:
 - `function_definitions/<name>.json` — an OpenAI-format schema per function. **The filename must equal the schema's `name` exactly.**
 - `*.py` helper modules — split real logic out; the router stays the dispatch point, not a thousand-line if/elif.
 
-Two keys are injected by the platform and must **never** appear in a schema: `function_name`, and `call` (which carries `workflow_id`, `workflow_run_id`, `caller_number` and `organization_id`). Declaring them makes the model supply values that are immediately overwritten.
+One key is injected by the platform and must **never** appear in a schema: `function_name`. Declaring it makes the model supply a value that is immediately overwritten. It arrives as part of `event`, the router's first argument — `event["function_name"]` is what you dispatch on.
+
+The router's *second* argument, `context`, is where the call itself lives: `context["organization_id"]`, `context["workflow_id"]`, `context["workflow_run_id"]`, `context["caller_number"]`. Only `organization_id` is guaranteed; the other three are `null` on an interactive test run (there is no real call behind one), and `caller_number` is currently `null` on every call regardless of provider — don't write logic that assumes it is populated yet.
 
 ### How to work here
 
@@ -156,6 +158,10 @@ Two keys are injected by the platform and must **never** appear in a schema: `fu
 2. Write the schema and the router branch together. A schema with no branch is a tool that always errors; a branch with no schema is unreachable.
 3. `test_code_run` with a realistic payload and **check the result yourself** before telling the user it works. Captured `print` output comes back in `logs`.
 4. Only then say it's ready.
+
+### Environment variables
+
+`list_env_vars`, `set_env_var`, `delete_env_var` manage the workspace's secrets directly — do this yourself, the same as `create_credential` for HTTP tools, rather than telling the user to go add it by hand. Never repeat a value back in the conversation once it's set. `set_env_var`'s result carries a `hint` — the value's last few characters, or empty for anything under 8 characters — confirm with it (e.g. "Saved ORDERS_API_KEY, ending in …3456.") so the user has some way to catch a mistyped paste without the value ever being shown again. If `set_env_var` reports the encryption key isn't configured, say so plainly — that needs a deployment operator, not something you can work around.
 
 ### What handlers must return
 
