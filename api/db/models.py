@@ -1669,6 +1669,12 @@ class CodeEditorEnvVarModel(Base):
     # Last few characters, kept in clear so the UI can show "…a1b2" without
     # decrypting or ever re-displaying the secret.
     value_hint = Column(String(8), nullable=True)
+    # The plaintext's length — not sensitive on its own, and it's what lets the
+    # UI mask a value with exactly as many characters as it actually has
+    # (**********a1b2) instead of a fixed-width placeholder that either over-
+    # or under-states it. Nullable: a row written before this column existed
+    # has no way to recover its real length, so it falls back to a fixed mask.
+    value_length = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     updated_at = Column(
         DateTime(timezone=True),

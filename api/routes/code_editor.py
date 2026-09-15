@@ -8,6 +8,7 @@
   PUT    /code-editor/env/{key}
   DELETE /code-editor/env/{key}
   POST   /code-editor/test-run              run the DRAFT against a payload
+  POST   /code-editor/test-run-deployed     run whatever is currently DEPLOYED
   GET    /code-editor/versions
   POST   /code-editor/versions              snapshot the draft
   POST   /code-editor/versions/{n}/deploy   reconcile tools, stamp deployed
@@ -20,6 +21,7 @@ import os
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from loguru import logger
 from pydantic import BaseModel, Field
 
 from api.db import db_client
@@ -54,6 +56,9 @@ class SaveFileResponse(BaseModel):
 class EnvVarResponse(BaseModel):
     key: str
     hint: Optional[str] = None
+    # None for a row saved before this was tracked — no plaintext left to
+    # measure. The UI falls back to a fixed-width mask in that case.
+    length: Optional[int] = None
 
 
 class SetEnvVarRequest(BaseModel):
@@ -150,7 +155,9 @@ async def list_env(
     user: UserModel = Depends(get_user_with_selected_organization),
 ) -> list[EnvVarResponse]:
     rows = await workspace.list_env_vars(_org(user))
-    return [EnvVarResponse(key=r["key"], hint=r["hint"]) for r in rows]
+    return [
+        EnvVarResponse(key=r["key"], hint=r["hint"], length=r["length"]) for r in rows
+    ]
 
 
 @router.put("/env/{key}", response_model=EnvVarResponse)
@@ -171,7 +178,9 @@ async def set_env(
         await workspace.set_env_var(_org(user), key, request.value)
     except WorkspaceError as exc:
         raise _bad_request(exc) from exc
-    return EnvVarResponse(key=key, hint=secrets.hint(request.value))
+    return EnvVarResponse(
+        key=key, hint=secrets.hint(request.value), length=len(request.value)
+    )
 
 
 @router.delete("/env/{key}")
@@ -198,6 +207,42 @@ async def test_run(
     try:
         return await workspace.run_test(
             _org(user), request.event, timeout_seconds=request.timeout_seconds
+        )
+    except WorkspaceError as exc:
+        raise _bad_request(exc) from exc
+
+
+@router.post("/test-run-deployed")
+async def test_run_deployed(
+    request: TestRunRequest,
+    user: UserModel = Depends(get_user_with_selected_organization),
+) -> dict[str, Any]:
+    """Run whatever is currently LIVE, untouched by unsaved draft edits.
+
+    A sibling of `/test-run`, not a variant of `/run/{function_name}`: this is
+    a developer checking their own deployed code from the editor, so it is
+    session-authenticated like every other editor route and returns the full
+    execution envelope (statusCode/result/logs/error/traceback) — unlike the
+    runtime route, which collapses failures into a speakable message for the
+    model and is never what a human debugging a run wants to see.
+
+    No workflow_id/workflow_run_id/caller_number: there is no real call behind
+    an interactive test, so the context an org's code sees here is honestly
+    org-only, same as `/test-run`.
+    """
+    organization_id = _org(user)
+    version = await db_client.get_deployed_code_editor_version(organization_id)
+    if version is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Nothing has been deployed yet for this organization.",
+        )
+    try:
+        return await workspace.run_test(
+            organization_id,
+            request.event,
+            files=version.files or {},
+            timeout_seconds=request.timeout_seconds,
         )
     except WorkspaceError as exc:
         raise _bad_request(exc) from exc
@@ -289,10 +334,60 @@ async def run_deployed_function(
             detail="No Code Editor version has been deployed for this organization.",
         )
 
+    # These two travel in the request body because that's the only channel a
+    # live call's tool invocation actually crosses — see
+    # `_inject_code_editor_context` in `services/workflow/tools/custom_tool.py`.
+    # Popped out before the rest becomes `event`, so they land in `context`
+    # (as the router's own docstring promises) instead of being mistaken for
+    # one of the model's declared parameters.
+    workflow_id = payload.pop("_dograh_workflow_id", None)
+    workflow_run_id = payload.pop("_dograh_workflow_run_id", None)
+
+    # The platform injects these, but this route is reachable by anyone holding
+    # the organization's runtime key, so the body is not a trusted channel. The
+    # generated router's docstring invites customers to branch on
+    # `context["workflow_id"]`, which makes an unvalidated value here a way to
+    # drive someone's own code down a branch reserved for a different agent —
+    # or to stamp a record with a workflow_run_id belonging to another
+    # organization's call. Anything that doesn't belong to the caller is
+    # dropped rather than rejected: a 4xx here would fail a live call over a
+    # field the customer's code is free to ignore.
+    if workflow_id is not None:
+        owner = await db_client.get_workflow_organization_id(workflow_id)
+        if owner != organization_id:
+            logger.warning(
+                f"Dropping _dograh_workflow_id={workflow_id} on a run for "
+                f"organization {organization_id}: it belongs to {owner}."
+            )
+            workflow_id = None
+            workflow_run_id = None
+    elif workflow_run_id is not None:
+        # A run id without the workflow it belongs to cannot be checked, and an
+        # unverifiable identity is worth less than no identity.
+        workflow_run_id = None
+
+    if workflow_run_id is not None:
+        # Owning the workflow does not imply owning the run — this is the
+        # second half of the same check, not a repeat of it.
+        run = await db_client.get_workflow_run(
+            workflow_run_id, organization_id=organization_id
+        )
+        if run is None or run.workflow_id != workflow_id:
+            logger.warning(
+                f"Dropping _dograh_workflow_run_id={workflow_run_id} on a run "
+                f"for organization {organization_id}: it is not a run of "
+                f"workflow {workflow_id}."
+            )
+            workflow_run_id = None
+
     event = {**payload, "function_name": function_name}
     try:
         outcome = await workspace.run_test(
-            organization_id, event, files=version.files or {}
+            organization_id,
+            event,
+            files=version.files or {},
+            workflow_id=workflow_id,
+            workflow_run_id=workflow_run_id,
         )
     except WorkspaceError as exc:
         raise HTTPException(status_code=502, detail=exc.message) from exc

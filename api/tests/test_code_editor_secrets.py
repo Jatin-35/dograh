@@ -132,10 +132,14 @@ async def test_one_stale_variable_does_not_lose_the_others(key, monkeypatch):
 @pytest.mark.parametrize(
     "value,expected",
     [
+        # 14+ characters: six trailing characters.
+        ("abcdefghijklmn", "ijklmn"),
+        ("sk-abcdefghijklmnop", "klmnop"),
+        # 8-13 characters: four.
         ("abcdefghijkl", "ijkl"),
         ("12345678", "5678"),
-        # Below 8 characters, four trailing characters would give away half of
-        # a short secret, so nothing is shown at all.
+        # Below 8 characters, even four trailing characters would give away
+        # half of a short secret, so nothing is shown at all.
         ("1234567", ""),
         ("short", ""),
         ("", ""),
@@ -143,3 +147,10 @@ async def test_one_stale_variable_does_not_lose_the_others(key, monkeypatch):
 )
 def test_the_hint_never_reveals_a_short_secret(value, expected):
     assert secrets.hint(value) == expected
+
+
+def test_the_hint_widens_at_the_length_boundary():
+    """13 characters gets 4; 14 gets 6 — the tier actually changes something,
+    rather than both branches accidentally producing the same slice."""
+    assert secrets.hint("a" * 13) == "aaaa"
+    assert secrets.hint("a" * 14) == "aaaaaa"

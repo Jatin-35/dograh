@@ -135,6 +135,58 @@ async def test_the_call_context_reaches_the_handler(wired, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_workflow_id_and_run_id_reach_the_handler(wired, monkeypatch):
+    """The gap this closes: `build_context` always documented workflow_id and
+    workflow_run_id, but nothing on the real call path ever supplied them —
+    every live invocation saw them as null. This is the seam that now carries
+    real values, so it is what has to prove they actually arrive."""
+    monkeypatch.setattr(wired, "resolve_env", _async_return({}))
+
+    files = {
+        ROUTER: (
+            "def all_events_handler(event, context):\n"
+            "    return {\n"
+            "        'workflow_id': context.get('workflow_id'),\n"
+            "        'workflow_run_id': context.get('workflow_run_id'),\n"
+            "    }\n"
+        )
+    }
+
+    outcome = await wired.run_test(
+        organization_id=1,
+        event={"function_name": "echo_context"},
+        files=files,
+        workflow_id=7,
+        workflow_run_id=99,
+    )
+
+    assert outcome["result"] == {"workflow_id": 7, "workflow_run_id": 99}
+
+
+@pytest.mark.asyncio
+async def test_an_interactive_test_run_has_no_workflow_context(wired, monkeypatch):
+    """Test Latest / Test Deployed have no real call behind them — the honest
+    answer is null, not a stale or guessed value from some other run."""
+    monkeypatch.setattr(wired, "resolve_env", _async_return({}))
+
+    files = {
+        ROUTER: (
+            "def all_events_handler(event, context):\n"
+            "    return {\n"
+            "        'workflow_id': context.get('workflow_id'),\n"
+            "        'workflow_run_id': context.get('workflow_run_id'),\n"
+            "    }\n"
+        )
+    }
+
+    outcome = await wired.run_test(
+        organization_id=1, event={"function_name": "echo_context"}, files=files
+    )
+
+    assert outcome["result"] == {"workflow_id": None, "workflow_run_id": None}
+
+
+@pytest.mark.asyncio
 async def test_org_environment_variables_reach_user_code(wired, monkeypatch):
     monkeypatch.setattr(wired, "resolve_env", _async_return({"ORDERS_API_KEY": "sk-123"}))
 

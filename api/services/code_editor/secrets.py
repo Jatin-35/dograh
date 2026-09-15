@@ -77,5 +77,16 @@ def decrypt(key: str, token: str) -> str:
 
 def hint(value: str) -> str:
     """A few trailing characters, so the UI can identify a stored secret without
-    ever showing it again. Short values reveal nothing at all."""
-    return value[-4:] if len(value) >= 8 else ""
+    ever showing it again. Short values reveal nothing at all.
+
+    Scales with length rather than a flat 4: a 40-character API key showing
+    only its last 4 characters is barely more identifying than showing none,
+    while a 4-character reveal against a 9-character value gives away nearly
+    half of it. Neither number is precise about where the line should sit —
+    this just widens the reveal a little as there is more value to spare.
+    """
+    if len(value) >= 14:
+        return value[-6:]
+    if len(value) >= 8:
+        return value[-4:]
+    return ""

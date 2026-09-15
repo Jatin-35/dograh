@@ -247,6 +247,7 @@ class CodeEditorClient(BaseDBClient):
         key: str,
         value_encrypted: str,
         value_hint: Optional[str] = None,
+        value_length: Optional[int] = None,
     ) -> CodeEditorEnvVarModel:
         async with self.async_session() as session:
             result = await session.execute(
@@ -261,6 +262,7 @@ class CodeEditorClient(BaseDBClient):
             if var:
                 var.value_encrypted = value_encrypted
                 var.value_hint = value_hint
+                var.value_length = value_length
                 var.updated_at = datetime.now(UTC)
             else:
                 var = CodeEditorEnvVarModel(
@@ -268,6 +270,7 @@ class CodeEditorClient(BaseDBClient):
                     key=key,
                     value_encrypted=value_encrypted,
                     value_hint=value_hint,
+                    value_length=value_length,
                 )
                 session.add(var)
             try:

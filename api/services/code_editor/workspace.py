@@ -151,10 +151,21 @@ async def delete_file(organization_id: int, path: str) -> bool:
 
 
 async def list_env_vars(organization_id: int) -> list[dict[str, Any]]:
-    """Keys and hints only — a stored value is never returned again."""
+    """Keys and hints only — a stored value is never returned again.
+
+    `length` lets a caller mask a value with exactly as many placeholder
+    characters as it actually has, instead of a fixed, made-up width. It is
+    `None` for a row saved before this was tracked — there is no plaintext
+    left to recover it from.
+    """
     rows = await db_client.list_code_editor_env_vars(organization_id)
     return [
-        {"key": row.key, "hint": row.value_hint, "updated_at": row.updated_at}
+        {
+            "key": row.key,
+            "hint": row.value_hint,
+            "length": row.value_length,
+            "updated_at": row.updated_at,
+        }
         for row in rows
     ]
 
@@ -169,6 +180,7 @@ async def set_env_var(organization_id: int, key: str, value: str) -> None:
         key,
         secrets.encrypt(value),
         secrets.hint(value),
+        len(value),
     )
 
 
@@ -224,12 +236,23 @@ async def run_test(
     *,
     files: Optional[dict[str, str]] = None,
     timeout_seconds: float = 10.0,
+    workflow_id: Optional[int] = None,
+    workflow_run_id: Optional[int] = None,
+    caller_number: Optional[str] = None,
 ) -> dict[str, Any]:
-    """Execute the draft against a test payload.
+    """Execute a workspace snapshot against a test payload.
 
-    Always the draft, never the deployed version — the point of Test Run is to
-    iterate before deploying, and silently running the deployed code would make
-    every edit appear to have no effect.
+    `files=None` means the draft — the point of Test Run is to iterate before
+    deploying, and silently running the deployed code would make every edit
+    appear to have no effect. Callers testing a specific snapshot (the
+    deployed version, or a real live call replaying it) pass `files`
+    explicitly instead.
+
+    `workflow_id`/`workflow_run_id`/`caller_number` are the real call this
+    invocation belongs to. None from every caller except the actual runtime
+    route (`run_deployed_function`), which is the only place a real call's
+    identity exists — an interactive Test Latest/Test Deployed run has no call
+    behind it, so its context is honestly org-only.
     """
     workspace = files if files is not None else await ensure_workspace(organization_id)
     if ENTRY_POINT_PATH not in workspace:
@@ -238,7 +261,12 @@ async def run_test(
     payload = {
         "files": workspace,
         "event": {**event, "function_name": event.get("function_name")},
-        "context": build_context(organization_id),
+        "context": build_context(
+            organization_id,
+            workflow_id=workflow_id,
+            workflow_run_id=workflow_run_id,
+            caller_number=caller_number,
+        ),
         "env": await resolve_env(organization_id),
         "timeout_seconds": timeout_seconds,
     }
