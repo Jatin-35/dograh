@@ -144,7 +144,7 @@ These context variables are only used during test calls from the workflow editor
 A simple Node.js endpoint that looks up a customer by phone number:
 
 ```javascript
-app.post("/dograh/pre-call", async (req, res) => {
+app.post("/botrixai/pre-call", async (req, res) => {
   const { call_inbound } = req.body;
 
   const customer = await db.customers.findOne({

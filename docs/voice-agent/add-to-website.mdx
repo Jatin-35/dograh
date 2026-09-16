@@ -30,7 +30,7 @@ Step 4: Copy the generated embed code and paste it into your web page to test yo
 | --------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | **Floating Widget**   | A pill-shaped CTA button anchored to a corner of the page.                                         | You want a turn-key chat-bubble experience that doesn't disturb your existing layout.                |
 | **Inline Component**  | A panel rendered inside a `<div id="botrixai-inline-container">` that you place in your page.        | You want the agent embedded in a specific section (landing-page hero, support tab, etc.).            |
-| **Headless**          | No UI. Only the audio pipeline plus a JavaScript API on `window.DograhWidget`.                     | You want full control over the UI — your own buttons, design system, framework state, animations.    |
+| **Headless**          | No UI. Only the audio pipeline, driven from your own code.                                         | You want full control over the UI — your own buttons, design system, framework state, animations.    |
 
 ## Prerequisites
 
@@ -38,7 +38,7 @@ These apply to all three modes:
 
 - Serve your page over **HTTPS** or from `http://localhost`. Browsers refuse microphone access on plain HTTP origins or `file://`.
 - If you set **Allowed Domains** in the dashboard, include your test origin (e.g. `localhost`) — otherwise the widget's config and signaling requests are rejected. Leave the list empty to allow all domains.
-- The embed snippet you copy from the dashboard is a single `<script>` tag that loads `botrixai-widget.js` **asynchronously**. The widget auto-initializes once it loads and exposes `window.DograhWidget`. Code that registers callbacks must wait for the widget to be available.
+- The embed snippet you copy from the dashboard is a single `<script>` tag that loads **asynchronously**. The widget initializes itself once the script arrives.
 
 ## Floating Widget
 
@@ -48,7 +48,7 @@ Renders a pill-shaped button (microphone icon + text) anchored to a corner of th
 
 Configure **Button Text**, **Button Color**, and **Position** (top/bottom + left/right) from the dashboard.
 
-The host page writes no JavaScript — pasting the embed snippet is the entire integration. If you want to subscribe to call lifecycle events (e.g. analytics), see [Lifecycle callbacks](#lifecycle-callbacks-all-modes) below
+The host page writes no JavaScript — pasting the embed snippet is the entire integration.
 
 ## Inline Component
 
@@ -63,20 +63,20 @@ Configure **Button Text**, **Button Color**, and **Call to Action Text** from th
 Place a container `<div>` where you want the widget to render. The widget auto-attaches to it.
 
 ```html
-<!-- Paste the botrixai embed snippet from the dashboard somewhere on the page -->
+<!-- Paste the BotrixAI embed snippet from the dashboard somewhere on the page -->
 <div id="botrixai-inline-container"></div>
 ```
 
 ### React
 
-Because React mounts after the widget script may have already loaded, integrate via `initInline` on first mount and `refresh` on remount. Poll for `window.DograhWidget` to handle the async script load.
+React mounts after the widget script may already have loaded, so initialize via `initInline` on first mount and `refresh` on remount. Poll for `window.BotrixAIWidget` to handle the async script load.
 
 ```tsx
 import { useEffect } from 'react';
 
 declare global {
   interface Window {
-    DograhWidget?: {
+    BotrixAIWidget?: {
       initInline: (options: { container: HTMLElement }) => void;
       refresh: () => void;
       getState: () => { isInitialized: boolean };
@@ -89,10 +89,10 @@ export function Assistant() {
     let retries = 0;
     const tryInit = () => {
       const container = document.getElementById('botrixai-inline-container');
-      if (window.DograhWidget && container) {
-        const { isInitialized } = window.DograhWidget.getState();
-        if (isInitialized) window.DograhWidget.refresh();
-        else window.DograhWidget.initInline({ container });
+      if (window.BotrixAIWidget && container) {
+        const { isInitialized } = window.BotrixAIWidget.getState();
+        if (isInitialized) window.BotrixAIWidget.refresh();
+        else window.BotrixAIWidget.initInline({ container });
       } else if (retries++ < 50) {
         setTimeout(tryInit, 100);
       }
@@ -108,62 +108,50 @@ export function Assistant() {
 
 ![Headless widget driven by host-page UI](../images/headless-widget-example.png)
 
-In Headless mode the widget injects no UI of its own. You render whatever buttons, banners, or in-call indicators you want, and call the JavaScript API to start and end calls.
+In Headless mode the widget injects no UI of its own. You render whatever buttons, banners or in-call indicators you want, and call the JavaScript API to start and end calls.
 
 ### JavaScript API
 
-| Method / Callback                              | Description                                                                                                                                                  |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `window.DograhWidget.start()`                  | Begin a voice call. Must be called from inside a user-gesture handler (e.g. `click`) so the browser grants microphone access.                                |
-| `window.DograhWidget.end()`                    | End the active call.                                                                                                                                         |
-| `window.DograhWidget.onCallStart(cb)`          | Fires when `start()` is invoked (status `connecting`). No payload.                                                                                           |
-| `window.DograhWidget.onCallConnected(cb)`      | Fires when the WebRTC connection is established. Payload: `{ agentId, workflowRunId, token }`.                                                               |
-| `window.DograhWidget.onCallDisconnected(cb)`   | Fires only if the call had connected, when teardown runs. Payload: `{ agentId, workflowRunId, token, durationSeconds }`.                                     |
-| `window.DograhWidget.onCallEnd(cb)`            | Fires whenever the call session is torn down (including failed-to-connect attempts). No payload.                                                             |
-| `window.DograhWidget.onStatusChange(cb)`       | Fires on every status change. Callback receives `(status, text, subtext)`. Status values: `idle`, `connecting`, `connected`, `failed`.                       |
-| `window.DograhWidget.onError(cb)`              | Fires on errors (mic permission denied, server error, etc.). Callback receives an `Error` object.                                                            |
+The widget exposes `window.BotrixAIWidget` once its script has loaded.
 
-All `on*` setters are single-listener — calling the same one again replaces the previous handler.
+| Method | What it does |
+| --- | --- |
+| `start()` | Begin a call. |
+| `end()` / `stop()` | End the current call. |
+| `retry()` | Retry after a failed connection. |
+| `getState()` | Current widget state, including `isInitialized`. |
+| `isInlineMode()` | `true` when the widget is in Inline mode. |
+| `refresh()` | Re-render the inline panel — useful when a component remounts. |
+| `initInline({ container })` | Attach the inline widget to an element yourself. |
+
+Call status moves through `idle` → `connecting` → `connected` → `failed`.
 
 <Note>
-**About timing.** The widget script loads asynchronously, so `window.DograhWidget` may not exist at the moment your inline `<script>` first runs. The examples below assume `window.DograhWidget` is already available when registration runs. To guarantee that:
-
-- **Vanilla JS:** wrap your registration code in `window.addEventListener('load', () => { /* register here */ })`.
-- **React:** inside `useEffect`, register immediately if `document.readyState === 'complete'`, otherwise add a one-time `window.load` listener that registers on fire.
-- **Click handlers** that call `start()` / `end()` don't need a guard — by the time a user clicks, the widget has long since loaded.
+The embed script loads **asynchronously**, so `window.BotrixAIWidget` may not
+exist yet when your own code runs. Use optional chaining (`?.`) when
+registering callbacks, or poll for it as the React example above does.
 </Note>
 
 ### Vanilla JS
 
+Mirror the call status into a variable you control, then render whatever UI you like from it.
+
 ```html
-<button id="talk-btn">Talk to AI</button>
+<button id="talk-btn">Talk to us</button>
 
 <script>
   let callStatus = 'idle';
-  const btn = document.getElementById('talk-btn');
 
-  function render() {
-    btn.textContent =
-      callStatus === 'connected' ? 'End Call'
-      : callStatus === 'connecting' ? 'Connecting…'
-      : callStatus === 'failed' ? 'Retry'
-      : 'Talk to AI';
-  }
-
-  window.DograhWidget.onStatusChange((status) => {
+  window.BotrixAIWidget?.onStatusChange((status) => {
     callStatus = status;
-    render();
+    // ...trigger your render here (re-paint DOM, dispatch an event, etc.)
   });
 
-  window.DograhWidget.onError((err) => {
-    console.error('BotrixAI error:', err.message);
-  });
-
-  btn.addEventListener('click', () => {
+  document.getElementById('talk-btn').addEventListener('click', () => {
     if (callStatus === 'connected' || callStatus === 'connecting') {
-      window.DograhWidget.end();
+      window.BotrixAIWidget.end();
     } else {
-      window.DograhWidget.start();
+      window.BotrixAIWidget.start();
     }
   });
 </script>
@@ -178,11 +166,10 @@ type CallStatus = 'idle' | 'connecting' | 'connected' | 'failed';
 
 declare global {
   interface Window {
-    DograhWidget: {
+    BotrixAIWidget?: {
       start: () => void;
       end: () => void;
-      onStatusChange: (cb: (status: CallStatus, text?: string, subtext?: string) => void) => void;
-      onError: (cb: (err: Error) => void) => void;
+      onStatusChange: (cb: (status: CallStatus) => void) => void;
     };
   }
 }
@@ -191,37 +178,33 @@ export function TalkButton() {
   const [status, setStatus] = useState<CallStatus>('idle');
 
   useEffect(() => {
-    window.DograhWidget.onStatusChange((s) => setStatus(s));
-    window.DograhWidget.onError((err) => console.error('BotrixAI error:', err.message));
+    window.BotrixAIWidget?.onStatusChange(setStatus);
   }, []);
 
   const isLive = status === 'connected' || status === 'connecting';
-  const label = { idle: 'Talk to AI', connecting: 'Connecting…', connected: 'End Call', failed: 'Retry' }[status];
 
   return (
-    <button onClick={() => (isLive ? window.DograhWidget.end() : window.DograhWidget.start())}>
-      {label}
+    <button
+      onClick={() => (isLive ? window.BotrixAIWidget?.end() : window.BotrixAIWidget?.start())}
+    >
+      {isLive ? 'End call' : 'Talk to us'}
     </button>
   );
 }
 ```
 
-<Note>
-`start()` must run inside a real user-gesture handler (`click`, `touchend`, etc.). Browsers refuse to grant microphone access to scripts that request it outside of one — calling `start()` from a `setTimeout` or on page load will fail with a permission error.
-</Note>
-
 ## Lifecycle callbacks (all modes)
 
-The `on*` callbacks in the [Headless JavaScript API](#javascript-api) work in **all three embed modes**, not just Headless. Use them for analytics or to trigger UI in the host page even when the widget is rendering its own UI (Floating or Inline).
+These work in Floating and Inline mode too, not just Headless — useful for analytics without changing how the widget looks.
 
 ```js
-window.DograhWidget.onCallConnected(({ agentId, workflowRunId }) => {
-  analytics.track('voice_call_started', { agentId, workflowRunId });
-});
-
-window.DograhWidget.onCallDisconnected(({ workflowRunId, durationSeconds }) => {
-  analytics.track('voice_call_ended', { workflowRunId, durationSeconds });
-});
+window.BotrixAIWidget?.onReady(() => {/* widget loaded and configured */});
+window.BotrixAIWidget?.onCallStart(() => {/* user started a call */});
+window.BotrixAIWidget?.onCallConnected(() => {/* audio is flowing */});
+window.BotrixAIWidget?.onCallDisconnected(() => {/* connection dropped */});
+window.BotrixAIWidget?.onCallEnd(() => {/* call finished */});
+window.BotrixAIWidget?.onStatusChange((status) => {/* any status change */});
+window.BotrixAIWidget?.onError((error) => {/* something went wrong */});
 ```
 
-`onCallConnected` and `onCallDisconnected` only fire when the call actually establishes a media connection — failed-to-connect attempts (e.g. denied mic, network failure) don't trigger them, so analytics stay clean.
+Each callback holds one handler — registering a second replaces the first.

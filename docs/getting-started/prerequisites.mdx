@@ -1,94 +1,35 @@
 ---
 title: "Prerequisites"
-description: "System requirements and setup needed to run BotrixAI AI locally"
+description: "What you need before building your first BotrixAI voice agent."
 ---
 
-## System Requirements (Local Setup)
+BotrixAI runs in your browser — there is nothing to install.
 
-### Minimum Requirements
-- **RAM**: 8 GB (4 GB available for Docker)
-- **Storage**: 10 GB free disk space
-- **CPU**: 2 cores (x86_64 or ARM64)
-- **OS**:
-  - macOS 10.15+ (Catalina or newer)
-  - Windows 10/11 with WSL2
-  - Linux with kernel 3.10+
+## What you need
 
-## Software Requirements
+- A **BotrixAI workspace**. Sign in at [voice-app.botrixai.com](https://voice-app.botrixai.com).
+- A **modern browser** — the current version of Chrome, Edge, Firefox or Safari.
+- A **microphone**, and permission to use it, if you want to talk to your agent from the browser with Web Calls.
 
-To run BotrixAI AI locally, make sure you have the following installed:
+## For browser calls
 
-- [Docker](https://docs.docker.com/get-docker/) (version 20.10 or later)
-- [curl](https://curl.se/download.html) - usually preinstalled on macOS/Linux
+Web Calls stream audio over WebRTC, so:
 
-<Note>
-Docker Compose is included with Docker Desktop. Make sure Docker is running before you begin.
-</Note>
+- The page must be served over **HTTPS**. Browsers refuse microphone access on plain HTTP origins.
+- Allow the **microphone permission** prompt when it appears. If you dismissed it earlier, re-enable it in your browser's site settings.
+- Corporate networks that block UDP can prevent the audio connection from establishing. If a call connects but you hear nothing, try a different network first.
 
-### Docker Resource Allocation
+## For phone calls
 
-For Docker Desktop users, ensure Docker has adequate resources:
+To place or receive real calls you also need:
 
-1. Open Docker Desktop settings
-2. Navigate to Resources
-3. Allocate at least:
-   - Memory: 4 GB (8 GB recommended)
-   - CPUs: 2 (4 recommended)
-   - Disk: 10 GB
+- An account with a **telephony provider** — see [Telephony](/integrations/telephony/overview) for the supported ones.
+- A **phone number** on that provider.
 
-## Required Ports
+## For your own models
 
-Ensure these ports are available:
+BotrixAI ships with a managed inference pipeline. To bring your own models instead, you need an API key from each provider you want to use — see [Model Configurations](/configurations/inference-providers).
 
-- `3010` - Web UI
-- `8000` - API Server
-- `5432` - PostgreSQL
-- `6379` - Redis
-- `9000` - MinIO (S3-compatible storage)
-- `9001` - MinIO Console
+## Next steps
 
-## Checking Port Availability
-
-Check if a port is in use (replace 3010 with the port number):
-
-<CodeGroup>
-
-```bash macOS/Linux
-lsof -i :3010
-```
-
-```bash Linux (alternative)
-netstat -tulpn | grep 3010
-```
-
-```bash Windows (PowerShell)
-netstat -ano | findstr :3010
-```
-
-</CodeGroup>
-
-## Docker Registry Options
-
-BotrixAI images are available from two registries:
-
-- **GitHub Container Registry (Default)**: `ghcr.io/jatin-35` - Recommended for most users
-- **Docker Hub**: `dograhai` - Alternative registry
-
-To use a specific registry, set the `REGISTRY` environment variable when running the startup script:
-
-<CodeGroup>
-```bash
-# Using GitHub Container Registry (recommended)
-REGISTRY=ghcr.io/jatin-35 ./start_docker.sh
-
-# Using Docker Hub
-REGISTRY=dograhai ./start_docker.sh
-```
-```powershell Windows
-# Using GitHub Container Registry (recommended)
-$env:REGISTRY = 'ghcr.io/jatin-35'; .\start_docker.ps1
-
-# Using Docker Hub
-$env:REGISTRY = 'dograhai'; .\start_docker.ps1
-```
-</CodeGroup>
+Build your first agent in [Your First Agent in 5 Minutes](/getting-started/first-agent), or see [Troubleshooting](/getting-started/troubleshooting) if something is not working.

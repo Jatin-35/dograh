@@ -3,11 +3,11 @@
   "theme": "mint",
   "name": "BotrixAI",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#177462",
+    "light": "#00D563",
+    "dark": "#0F5245"
   },
-  "favicon": "/favicon.ico",
+  "favicon": "/favicon.png",
   "navigation": {
     "tabs": [
       {
@@ -115,6 +115,7 @@
               "integrations/telephony/telnyx",
               "integrations/telephony/cloudonix",
               "integrations/telephony/vobiz",
+              "integrations/telephony/voicelink",
               "integrations/telephony/asterisk-ari",
               "integrations/telephony/webhooks",
               "integrations/telephony/agent-stream",
@@ -137,39 +138,10 @@
         "icon": "code",
         "groups": [
           {
-            "group": "Contribution",
-            "pages": [
-              "contribution/setup",
-              "contribution/reference"
-            ]
-          },
-          {
             "group": "Guides",
             "pages": [
               "developer/workflow-schema",
-              "developer/webhooks",
-              "developer/environment-variables"
-            ]
-          },
-          {
-            "group": "SDKs",
-            "tag": "NEW",
-            "pages": [
-              "sdks/introduction",
-              "sdks/build-an-agent",
-              "sdks/outbound-calls"
-            ]
-          },
-          {
-            "group": "Deployment",
-            "pages": [
-              "deployment/introduction",
-              "deployment/docker",
-              "deployment/authentication",
-              "deployment/custom-domain",
-              "deployment/scaling",
-              "deployment/update",
-              "deployment/heroku"
+              "developer/webhooks"
             ]
           }
         ]
@@ -280,8 +252,8 @@
     ]
   },
   "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg",
+    "light": "/logo/light.png",
+    "dark": "/logo/dark.png",
     "href": "https://docs.botrixai.com"
   },
   "navbar": {
@@ -298,7 +270,7 @@
     }
   },
   "banner": {
-    "content": "🎉 **New: MCP Server & SDKs Released** — Drive BotrixAI from Claude, Cursor, or your own Python/TypeScript code. [MCP →](/integrations/mcp) · [SDKs →](/sdks/introduction)",
+    "content": "🎉 **New: MCP Server** — Drive BotrixAI from Claude, Cursor or your own tooling. [Learn more →](/integrations/mcp)",
     "dismissible": true
   },
   "search": {

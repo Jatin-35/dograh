@@ -24,14 +24,6 @@ Before setting up Cloudonix integration, you'll need:
 
 Watch this step-by-step guide to set up Cloudonix with BotrixAI AI:
 
-<iframe
-  className="w-full aspect-video rounded-xl"
-  src="https://www.youtube.com/embed/qLKX0F99jpU?si=tA3zwCsNRKe-WCI1"
-  title="Dograh Cloudonix Setup"
-  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-  allowFullScreen
-></iframe>
-
 ## Configuration
 
 ### Step 1: Get Cloudonix Credentials
@@ -100,9 +92,7 @@ Cloudonix routes inbound calls per **Voice Application** — the webhook URL is 
    <Note>
      The Application URL is what BotrixAI's auto-push updates in Step 3 — you
      can leave it blank during creation and let the auto-push fill it in,
-     or paste the URL above so the application is usable immediately.
-     Either works. Self-hosted BotrixAI deployments use their backend domain
-     in place of `voice-app.botrixai.com`.
+     or paste the URL above so the application is usable immediately. Either works.
    </Note>
 
    <img
@@ -139,8 +129,7 @@ Cloudonix routes inbound calls per **Voice Application** — the webhook URL is 
      empty, shows a different URL, or BotrixAI surfaced a sync warning on
      save, the auto-push failed — most often because the Bearer Token,
      Domain ID, or Application Name in BotrixAI is incorrect. Paste the URL
-     into the field yourself, set the method to `POST`, and save. On
-     self-hosted BotrixAI, replace `voice-app.botrixai.com` with your backend domain.
+     into the field yourself, set the method to `POST`, and save.
    </Note>
 
    <img

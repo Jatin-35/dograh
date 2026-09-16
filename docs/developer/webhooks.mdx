@@ -77,8 +77,8 @@ from fastapi import FastAPI, Request
 
 app = FastAPI()
 
-@app.post("/webhook/dograh")
-async def handle_dograh_webhook(request: Request):
+@app.post("/webhook/botrixai")
+async def handle_botrixai_webhook(request: Request):
     payload = await request.json()
     run_id = payload.get("run_id")
     outcome = payload.get("outcome")
@@ -101,7 +101,7 @@ See [Workflow Definition Schema](/developer/workflow-schema#webhook-node) for th
     "name": "Notify CRM",
     "enabled": true,
     "http_method": "POST",
-    "endpoint_url": "https://your-service.com/webhook/dograh",
+    "endpoint_url": "https://your-service.com/webhook/botrixai",
     "payload_template": {
       "run_id": "{{workflow_run_id}}",
       "customer": "{{initial_context.customer_name}}",

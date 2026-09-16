@@ -1,56 +1,44 @@
 ---
 title: "Troubleshooting"
-description: "Common issues and solutions for running BotrixAI AI"
+description: "Common issues and how to resolve them."
 ---
 
-# Troubleshooting
+## The agent can't hear me on a Web Call
 
-## Freeing Up Ports
+Almost always a microphone permission or transport problem.
 
-### When a port is already in use:
-##### Check what's using the port first and then kill the process (may require sudo on Linux)
-<CodeGroup>
-```bash macOS/Linux
-lsof -i :3010
-kill -9 $(lsof -t -i :3010)
-```
-```powershell Windows
-netstat -ano | findstr :3010
-# Find the PID in the last column, then:
-Stop-Process -Id <PID> -Force
-```
-</CodeGroup>
+- Check the browser has **microphone permission** for the page. If you dismissed the prompt, re-enable it in your browser's site settings and reload.
+- Confirm the page is on **HTTPS**. Browsers block microphone access on plain HTTP.
+- If another app holds the microphone exclusively, close it and reload.
+- If the call connects but no audio flows in either direction, try a different network — some corporate firewalls block the UDP traffic WebRTC needs.
 
-### When Docker containers are using the ports (with auto-restart enabled):
+## The agent answers, but says the wrong thing
 
-**Step 1:** Stop all running containers
-```bash
-docker stop $(docker ps -q)
-```
+Open the run in [Tracing](/configurations/tracing). It shows the exact prompt sent to the model, which tools it could see, and what came back — which is usually enough to tell a prompt problem from a tool problem.
 
-**Step 2:** Disable restart policy for all containers
-This prevents containers from automatically restarting:
-```bash
-docker update --restart=no $(docker ps -a -q)
-```
+- If the agent invented a value, check [Template Variables](/voice-agent/template-variables) — a variable that was never set renders empty.
+- If it failed to move on, check the pathway conditions on the node in [Editing a Workflow](/voice-agent/editing-a-workflow).
 
-**Step 3:** Verify
+## A tool call fails during the call
 
-Check that no containers are running:
-```bash
-docker ps
-```
+- Check the tool's URL and method in the tool definition, and that any credentials it needs are attached.
+- Tools have a timeout. If your endpoint is slow, the call moves on without the result — see [HTTP API tools](/voice-agent/tools/http-api).
+- The trace shows the request body and the response, including the error.
 
-Check restart policies (should show 'no' for each container):
-```bash
-docker inspect -f '{{.Name}} - {{.HostConfig.RestartPolicy.Name}}' $(docker ps -a -q)
-```
+## Inbound calls don't reach my agent
 
+- Confirm the webhook URL is set on the provider's number, exactly as shown on the provider's page under [Telephony](/integrations/telephony/inbound).
+- Confirm the number is mapped to a **published** agent. A draft is not served to live calls.
+- Check the provider's own call logs — if the call never reached BotrixAI, the problem is on the provider side.
 
-## Stopping BotrixAI Services
-##### Stop services or Stop and remove all data (full cleanup)
-```bash
-docker compose down
+## My changes aren't taking effect on calls
 
-docker compose down -v
-```
+Live calls use the **published** version of an agent, not your draft. Publish the agent after editing.
+
+## An API request returns 401
+
+The API key is missing, wrong or archived. Generate a fresh one at [`/api-keys`](https://voice-app.botrixai.com/api-keys) — see [API Keys](/configurations/api-keys). Keys are shown once at creation.
+
+## Still stuck?
+
+Collect the **run id** of a failing call from the dashboard and [get in touch](https://www.botrixai.com/contact) — the run id lets us look at the same trace you are seeing.

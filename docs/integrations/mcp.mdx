@@ -9,33 +9,21 @@ BotrixAI exposes an [MCP (Model Context Protocol)](https://modelcontextprotocol.
 
 ## Prerequisites
 
-- A BotrixAI API key. Generate one at [`/api-keys`](https://voice-app.botrixai.com/api-keys) (or `http://localhost:3010/api-keys` for self-hosted). See [API Keys](/configurations/api-keys).
-- Your BotrixAI MCP endpoint:
-  - Hosted: `https://voice-app.botrixai.com/api/v1/mcp/`
-  - Self-hosted: `<YOUR_BACKEND_URL>/api/v1/mcp/`
+- A BotrixAI API key. Generate one at [`/api-keys`](https://voice-app.botrixai.com/api-keys). See [API Keys](/configurations/api-keys).
+- Your BotrixAI MCP endpoint: `https://voice-app.botrixai.com/api/v1/mcp/`
 
 The endpoint is also shown in **Platform Settings → MCP Server** inside the BotrixAI UI.
-
-<Note>
-If you deployed BotrixAI to a remote server using [`setup_remote.sh`](/deployment/docker#option-2%3A-remote-server-deployment), your endpoint is served with a self-signed SSL certificate. Claude Code will refuse MCP connections to it unless you start the CLI with TLS verification disabled:
-
-```bash
-NODE_TLS_REJECT_UNAUTHORIZED=0 claude
-```
-
-This is only required for self-signed certificates. If you have set up a [custom domain](/deployment/custom-domain) with Let's Encrypt certificates via Certbot, no extra flag is needed.
-</Note>
 
 ## Claude Code
 
 Register BotrixAI as an MCP server with the Claude Code CLI:
 
 ```bash
-claude mcp add --transport http dograh https://voice-app.botrixai.com/api/v1/mcp/ \
+claude mcp add --transport http botrixai https://voice-app.botrixai.com/api/v1/mcp/ \
   --header "X-API-Key: YOUR_API_KEY"
 ```
 
-Replace `YOUR_API_KEY` with the key you generated. For self-hosted deployments, swap the URL for your backend.
+Replace `YOUR_API_KEY` with the key you generated.
 
 Verify the server is connected:
 
@@ -53,20 +41,20 @@ url = "https://voice-app.botrixai.com/api/v1/mcp/"
 http_headers = { "X-API-Key" = "YOUR_API_KEY" }
 ```
 
-Replace `YOUR_API_KEY` with the key you generated. For self-hosted deployments, replace the URL with your backend MCP endpoint.
+Replace `YOUR_API_KEY` with the key you generated.
 
 If you prefer to keep the API key out of `config.toml`, store it in an environment variable instead:
 
 ```toml
 [mcp_servers.botrixai]
 url = "https://voice-app.botrixai.com/api/v1/mcp/"
-env_http_headers = { "X-API-Key" = "DOGRAH_API_KEY" }
+env_http_headers = { "X-API-Key" = "BOTRIXAI_API_KEY" }
 ```
 
 Then set the API key before starting Codex:
 
 ```bash
-export DOGRAH_API_KEY="YOUR_API_KEY"
+export BOTRIXAI_API_KEY="YOUR_API_KEY"
 codex
 ```
 
@@ -84,7 +72,7 @@ Open Claude Desktop's config file (`claude_desktop_config.json`) and add the `bo
 ```json
 {
   "mcpServers": {
-    "dograh": {
+    "botrixai": {
       "url": "https://voice-app.botrixai.com/api/v1/mcp/",
       "headers": {
         "X-API-Key": "YOUR_API_KEY"
