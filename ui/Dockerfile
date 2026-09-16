@@ -61,6 +61,17 @@ ENV NEXT_PUBLIC_SUPPORT_EMAIL="${NEXT_PUBLIC_SUPPORT_EMAIL}"
 ENV NEXT_PUBLIC_SUPPORT_PHONE="${NEXT_PUBLIC_SUPPORT_PHONE}"
 ENV NEXT_PUBLIC_SUPPORT_WHATSAPP="${NEXT_PUBLIC_SUPPORT_WHATSAPP}"
 
+# Where the product's own "Learn more" and legal links point. A self-hosted
+# deployment serving its own customers needs these on its own domains — a
+# Terms of Service link that lands on someone else's terms is not a branding
+# detail. Defaults live in ui/src/constants/brand.ts, so leaving these unset
+# is valid; setting them here is what lets a deployment override them without
+# editing code that still merges from upstream.
+ARG NEXT_PUBLIC_DOCS_URL=""
+ARG NEXT_PUBLIC_COMPANY_URL=""
+ENV NEXT_PUBLIC_DOCS_URL="${NEXT_PUBLIC_DOCS_URL}"
+ENV NEXT_PUBLIC_COMPANY_URL="${NEXT_PUBLIC_COMPANY_URL}"
+
 # Domain-separated deployments only: baked into the client bundle at build
 # time so browser-side redirects (impersonation, post-login routing) can
 # target a different domain than the one currently loaded. Passed through

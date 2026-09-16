@@ -6,11 +6,11 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PRE_RECORDED_AUDIO_DOC_URL } from "@/constants/documentation";
 import { useAuth } from "@/lib/auth";
 
 import RecordingsList from "./RecordingsList";
 import { RecordingsUploadDialog } from "./RecordingsUploadDialog";
-
 export default function RecordingsPage() {
     const { user, redirectToLogin, loading } = useAuth();
     const [isUploadOpen, setIsUploadOpen] = useState(false);
@@ -41,7 +41,7 @@ export default function RecordingsPage() {
                     Manage audio recordings for your organization. Use{" "}
                     <code className="rounded bg-muted px-1 text-xs">@</code> in prompt fields to insert them,
                     or as transition messages in tool calls.{" "}
-                    <a href="https://docs.dograh.com/voice-agent/pre-recorded-audio" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 underline">
+                    <a href={PRE_RECORDED_AUDIO_DOC_URL} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 underline">
                         Learn more <ExternalLink className="h-3 w-3" />
                     </a>
                 </p>

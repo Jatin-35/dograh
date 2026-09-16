@@ -398,10 +398,20 @@ services:
     build:
       context: .
       dockerfile: ui/Dockerfile
+      # NEXT_PUBLIC_* are inlined by `next build`, so they have to arrive as
+      # build args — passing them as `environment:` does nothing for anything
+      # the browser runs. Every such arg the Dockerfile accepts belongs here:
+      # one the Dockerfile declares but this file omits can never be set on a
+      # source build, which is how the support contact details stayed empty.
       args:
         NEXT_PUBLIC_APP_URL: "${NEXT_PUBLIC_APP_URL:-}"
         NEXT_PUBLIC_ADMIN_URL: "${NEXT_PUBLIC_ADMIN_URL:-}"
         NEXT_PUBLIC_CLIENT_URL: "${NEXT_PUBLIC_CLIENT_URL:-}"
+        NEXT_PUBLIC_DOCS_URL: "${NEXT_PUBLIC_DOCS_URL:-}"
+        NEXT_PUBLIC_COMPANY_URL: "${NEXT_PUBLIC_COMPANY_URL:-}"
+        NEXT_PUBLIC_SUPPORT_EMAIL: "${NEXT_PUBLIC_SUPPORT_EMAIL:-}"
+        NEXT_PUBLIC_SUPPORT_PHONE: "${NEXT_PUBLIC_SUPPORT_PHONE:-}"
+        NEXT_PUBLIC_SUPPORT_WHATSAPP: "${NEXT_PUBLIC_SUPPORT_WHATSAPP:-}"
     image: dograh-local/dograh-ui:local
     pull_policy: never
 OVERRIDE_EOF

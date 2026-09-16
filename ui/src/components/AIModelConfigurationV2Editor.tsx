@@ -21,9 +21,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { VoiceSelectorModal } from "@/components/VoiceSelectorModal";
+import { CONTACT_URL } from "@/constants/brand";
 import { LANGUAGE_DISPLAY_NAMES } from "@/constants/languages";
 import { formatRoundingPolicy } from "@/lib/billingDisplay";
-
 type ModelMode = "realtime" | "dograh" | "byok";
 
 // Sentinel language value for "Multilingual (Auto-detect)".
@@ -486,7 +486,7 @@ export function AIModelConfigurationV2Editor({
                         BotrixAI provides a managed transcriber, LLM, and voice pipeline. Select a voice and language while BotrixAI manages the underlying model providers.{" "}
                         We offer custom pricing and a 15-second pulse with a monthly commitment.{" "}
                         <a
-                            href="https://www.dograh.com/contact"
+                            href={CONTACT_URL}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="underline"

@@ -6,9 +6,9 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { MCP_DOC_URL } from "@/constants/documentation";
 import { useAppConfig } from "@/context/AppConfigContext";
 import { resolveBrowserBackendUrl } from "@/lib/apiClient";
-
 const MCP_PATH = "/api/v1/mcp/";
 
 export function MCPSection() {
@@ -98,7 +98,7 @@ export function MCPSection() {
         For step-by-step setup with Claude Code, Claude Desktop, Cursor, and
         other clients, see the{" "}
         <Link
-          href="https://docs.dograh.com/integrations/mcp"
+          href={MCP_DOC_URL}
           target="_blank"
           rel="noopener noreferrer"
           className="text-primary underline hover:no-underline"

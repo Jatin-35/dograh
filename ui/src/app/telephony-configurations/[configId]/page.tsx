@@ -55,11 +55,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TELEPHONY_INBOUND_DOC_URL } from "@/constants/documentation";
 import { useAppConfig } from "@/context/AppConfigContext";
 import { detailFromError } from "@/lib/apiError";
 import { useAuth } from "@/lib/auth";
 import { resolveWebhookBaseUrl } from "@/lib/webhookUrl";
-
 const INBOUND_WEBHOOK_PATH = "/api/v1/telephony/inbound/run";
 
 export default function TelephonyConfigurationDetailPage() {
@@ -287,7 +287,7 @@ export default function TelephonyConfigurationDetailPage() {
               Numbers used as caller ID for outbound and accepted for inbound matching.
               SIP URIs and extensions are supported alongside PSTN numbers.{" "}
               <a
-                href="https://docs.dograh.com/integrations/telephony/inbound"
+                href={TELEPHONY_INBOUND_DOC_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-0.5 underline"

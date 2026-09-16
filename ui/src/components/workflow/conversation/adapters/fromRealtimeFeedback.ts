@@ -1,3 +1,5 @@
+import { INTERRUPTION_DOC_URL } from "@/constants/documentation";
+
 import type {
     ConversationItem,
     RealtimeFeedbackEvent,
@@ -78,7 +80,7 @@ function liveFeedbackItem(message: RealtimeFeedbackMessage, reasoningDurationMs?
             tone: "warning",
             title: "Interruption Disabled",
             text: message.text,
-            linkHref: "https://docs.dograh.com/configurations/interruption",
+            linkHref: INTERRUPTION_DOC_URL,
             linkLabel: "Learn more",
         };
     }
@@ -260,7 +262,7 @@ export function conversationItemsFromRealtimeFeedbackEvents(events: RealtimeFeed
                 tone: "warning",
                 title: "Interruption Disabled",
                 text: feedbackEventText(event),
-                linkHref: "https://docs.dograh.com/configurations/interruption",
+                linkHref: INTERRUPTION_DOC_URL,
                 linkLabel: "Learn more",
             });
             return;
