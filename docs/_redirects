@@ -1,10 +1,128 @@
-# Netlify redirects for the static Mintlify export.
+# Netlify routing for the static Mintlify export.
 #
-# Mintlify's own hosting resolves a bare section path to its index page; a
-# static export carries no such rule, and Netlify only serves index.html from a
-# directory that has one. `getting-started/index` is written to
-# getting-started/index/index.html, so the bare /getting-started 404s even
-# though every in-site link works — only a hand-typed or shared bare URL misses.
+# Mintlify emits sidebar links WITHOUT a trailing slash (/getting-started/
+# prerequisites), but the export writes each page to <route>/index.html. On
+# Netlify a directory-style path without the slash is answered with a 301 to
+# the slashed form, and that redirect breaks the client-side transition -- so
+# every sidebar click looked like a full page reload.
 #
-# Generated from docs.json: one line per nav page named ".../index".
-/getting-started   /getting-started/index   301
+# These are rewrites (status 200), not redirects: the page is served directly
+# at the URL Mintlify linked to, so no navigation is interrupted.
+#
+# Generated from docs.json's navigation -- one line per page. Regenerate this
+# file when the navigation changes, or new pages start 301ing again.
+
+/api-reference/agents   /api-reference/agents/index.html   200
+/api-reference/agents/archive   /api-reference/agents/archive/index.html   200
+/api-reference/agents/count   /api-reference/agents/count/index.html   200
+/api-reference/agents/create-from-definition   /api-reference/agents/create-from-definition/index.html   200
+/api-reference/agents/create-from-template   /api-reference/agents/create-from-template/index.html   200
+/api-reference/agents/get   /api-reference/agents/get/index.html   200
+/api-reference/agents/list   /api-reference/agents/list/index.html   200
+/api-reference/agents/runs/create   /api-reference/agents/runs/create/index.html   200
+/api-reference/agents/runs/get   /api-reference/agents/runs/get/index.html   200
+/api-reference/agents/runs/list   /api-reference/agents/runs/list/index.html   200
+/api-reference/agents/update   /api-reference/agents/update/index.html   200
+/api-reference/agents/validate   /api-reference/agents/validate/index.html   200
+/api-reference/api-keys   /api-reference/api-keys/index.html   200
+/api-reference/api-keys/archive   /api-reference/api-keys/archive/index.html   200
+/api-reference/api-keys/create   /api-reference/api-keys/create/index.html   200
+/api-reference/api-keys/list   /api-reference/api-keys/list/index.html   200
+/api-reference/api-keys/reactivate   /api-reference/api-keys/reactivate/index.html   200
+/api-reference/authentication   /api-reference/authentication/index.html   200
+/api-reference/campaigns   /api-reference/campaigns/index.html   200
+/api-reference/campaigns/create   /api-reference/campaigns/create/index.html   200
+/api-reference/campaigns/get   /api-reference/campaigns/get/index.html   200
+/api-reference/campaigns/list   /api-reference/campaigns/list/index.html   200
+/api-reference/campaigns/pause   /api-reference/campaigns/pause/index.html   200
+/api-reference/campaigns/progress   /api-reference/campaigns/progress/index.html   200
+/api-reference/campaigns/resume   /api-reference/campaigns/resume/index.html   200
+/api-reference/campaigns/runs   /api-reference/campaigns/runs/index.html   200
+/api-reference/campaigns/start   /api-reference/campaigns/start/index.html   200
+/api-reference/campaigns/update   /api-reference/campaigns/update/index.html   200
+/api-reference/campaigns/upload-contacts   /api-reference/campaigns/upload-contacts/index.html   200
+/api-reference/errors   /api-reference/errors/index.html   200
+/api-reference/overview   /api-reference/overview/index.html   200
+/api-reference/runs   /api-reference/runs/index.html   200
+/api-reference/runs/download   /api-reference/runs/download/index.html   200
+/api-reference/runs/get-run   /api-reference/runs/get-run/index.html   200
+/api-reference/runs/inbound   /api-reference/runs/inbound/index.html   200
+/api-reference/runs/list-runs   /api-reference/runs/list-runs/index.html   200
+/api-reference/runs/trigger   /api-reference/runs/trigger/index.html   200
+/api-reference/runs/trigger-workflow   /api-reference/runs/trigger-workflow/index.html   200
+/api-reference/telephony-configs   /api-reference/telephony-configs/index.html   200
+/api-reference/telephony-configs/create   /api-reference/telephony-configs/create/index.html   200
+/api-reference/telephony-configs/delete   /api-reference/telephony-configs/delete/index.html   200
+/api-reference/telephony-configs/get   /api-reference/telephony-configs/get/index.html   200
+/api-reference/telephony-configs/list   /api-reference/telephony-configs/list/index.html   200
+/api-reference/telephony-configs/phone-numbers/create   /api-reference/telephony-configs/phone-numbers/create/index.html   200
+/api-reference/telephony-configs/phone-numbers/delete   /api-reference/telephony-configs/phone-numbers/delete/index.html   200
+/api-reference/telephony-configs/phone-numbers/get   /api-reference/telephony-configs/phone-numbers/get/index.html   200
+/api-reference/telephony-configs/phone-numbers/list   /api-reference/telephony-configs/phone-numbers/list/index.html   200
+/api-reference/telephony-configs/phone-numbers/set-default-caller   /api-reference/telephony-configs/phone-numbers/set-default-caller/index.html   200
+/api-reference/telephony-configs/phone-numbers/update   /api-reference/telephony-configs/phone-numbers/update/index.html   200
+/api-reference/telephony-configs/providers   /api-reference/telephony-configs/providers/index.html   200
+/api-reference/telephony-configs/set-default-outbound   /api-reference/telephony-configs/set-default-outbound/index.html   200
+/api-reference/telephony-configs/update   /api-reference/telephony-configs/update/index.html   200
+/configurations/agent-uuid   /configurations/agent-uuid/index.html   200
+/configurations/api-keys   /configurations/api-keys/index.html   200
+/configurations/inference-providers   /configurations/inference-providers/index.html   200
+/configurations/interruption   /configurations/interruption/index.html   200
+/configurations/llm   /configurations/llm/index.html   200
+/configurations/tracing   /configurations/tracing/index.html   200
+/configurations/transcriber   /configurations/transcriber/index.html   200
+/configurations/voice   /configurations/voice/index.html   200
+/core-concepts/calls-and-runs   /core-concepts/calls-and-runs/index.html   200
+/core-concepts/campaigns   /core-concepts/campaigns/index.html   200
+/core-concepts/context-and-variables   /core-concepts/context-and-variables/index.html   200
+/core-concepts/how-botrixai-works   /core-concepts/how-botrixai-works/index.html   200
+/core-concepts/workflows-and-agents   /core-concepts/workflows-and-agents/index.html   200
+/developer/webhooks   /developer/webhooks/index.html   200
+/developer/workflow-schema   /developer/workflow-schema/index.html   200
+/getting-started/add-tools-and-knowledge-base   /getting-started/add-tools-and-knowledge-base/index.html   200
+/getting-started/connect-telephony   /getting-started/connect-telephony/index.html   200
+/getting-started/first-agent   /getting-started/first-agent/index.html   200
+/getting-started/index   /getting-started/index/index.html   200
+/getting-started/prerequisites   /getting-started/prerequisites/index.html   200
+/getting-started/send-call-data-with-webhooks   /getting-started/send-call-data-with-webhooks/index.html   200
+/getting-started/trigger-calls-from-your-backend   /getting-started/trigger-calls-from-your-backend/index.html   200
+/getting-started/troubleshooting   /getting-started/troubleshooting/index.html   200
+/integrations/mcp   /integrations/mcp/index.html   200
+/integrations/paygent   /integrations/paygent/index.html   200
+/integrations/telephony/agent-stream   /integrations/telephony/agent-stream/index.html   200
+/integrations/telephony/asterisk-ari   /integrations/telephony/asterisk-ari/index.html   200
+/integrations/telephony/cloudonix   /integrations/telephony/cloudonix/index.html   200
+/integrations/telephony/custom   /integrations/telephony/custom/index.html   200
+/integrations/telephony/inbound   /integrations/telephony/inbound/index.html   200
+/integrations/telephony/overview   /integrations/telephony/overview/index.html   200
+/integrations/telephony/plivo   /integrations/telephony/plivo/index.html   200
+/integrations/telephony/telnyx   /integrations/telephony/telnyx/index.html   200
+/integrations/telephony/twilio   /integrations/telephony/twilio/index.html   200
+/integrations/telephony/vobiz   /integrations/telephony/vobiz/index.html   200
+/integrations/telephony/voicelink   /integrations/telephony/voicelink/index.html   200
+/integrations/telephony/vonage   /integrations/telephony/vonage/index.html   200
+/integrations/telephony/webhooks   /integrations/telephony/webhooks/index.html   200
+/integrations/tuner   /integrations/tuner/index.html   200
+/voice-agent/add-to-website   /voice-agent/add-to-website/index.html   200
+/voice-agent/agent   /voice-agent/agent/index.html   200
+/voice-agent/api-trigger   /voice-agent/api-trigger/index.html   200
+/voice-agent/editing-a-workflow   /voice-agent/editing-a-workflow/index.html   200
+/voice-agent/end-call   /voice-agent/end-call/index.html   200
+/voice-agent/global   /voice-agent/global/index.html   200
+/voice-agent/introduction   /voice-agent/introduction/index.html   200
+/voice-agent/knowledge-base   /voice-agent/knowledge-base/index.html   200
+/voice-agent/pre-call-data-fetch   /voice-agent/pre-call-data-fetch/index.html   200
+/voice-agent/pre-recorded-audio   /voice-agent/pre-recorded-audio/index.html   200
+/voice-agent/qa   /voice-agent/qa/index.html   200
+/voice-agent/start-call   /voice-agent/start-call/index.html   200
+/voice-agent/template-variables   /voice-agent/template-variables/index.html   200
+/voice-agent/tools/call-transfer   /voice-agent/tools/call-transfer/index.html   200
+/voice-agent/tools/end-call   /voice-agent/tools/end-call/index.html   200
+/voice-agent/tools/http-api   /voice-agent/tools/http-api/index.html   200
+/voice-agent/tools/introduction   /voice-agent/tools/introduction/index.html   200
+/voice-agent/tools/mcp-tool   /voice-agent/tools/mcp-tool/index.html   200
+/voice-agent/webhook   /voice-agent/webhook/index.html   200
+
+# A bare section path has no page of its own; Mintlify's hosting resolves it
+# to the section's index, a static export does not.
+/getting-started   /getting-started/index/index.html   200
