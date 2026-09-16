@@ -1087,6 +1087,108 @@ class TestCodeEditorContextInjection:
         assert body["_dograh_workflow_run_id"] is None
 
 
+class TestCodeEditorContextIsActuallyWiredUp:
+    """The engine really passes the call identity to `execute_http_tool`.
+
+    `TestCodeEditorContextInjection` above calls `execute_http_tool` directly
+    with `workflow_id=7`, so it proves the *injection* works given a value. It
+    cannot see whether anything supplies one.
+
+    Nothing did. `execute_http_tool` took `workflow_id`/`workflow_run_id` from
+    the day the route landed, but `CustomToolManager` passed neither, so every
+    live call reached a customer's function with `context["workflow_id"] =
+    None` while all of the above stayed green. Deleting the two forwarding
+    lines today still left the entire suite at its exact baseline — 1698
+    passed — which is how the gap survived unnoticed.
+
+    So this starts one step earlier: at the handler the engine actually
+    invokes, with the ids only on the engine.
+    """
+
+    RUNTIME_URL = "http://api:8000/api/v1/code-editor/run/check_order_status"
+
+    @staticmethod
+    def _engine(*, workflow_id, workflow_run_id):
+        """An engine stub holding the two ids and nothing else the HTTP path
+        touches — no custom message, so the handler goes straight to the call."""
+        engine = Mock()
+        engine._workflow_id = workflow_id
+        engine._workflow_run_id = workflow_run_id
+        engine._call_context_vars = {}
+        engine._gathered_context = {}
+        engine._get_organization_id = AsyncMock(return_value=1)
+        return engine
+
+    async def _body_sent_by_the_engine(self, *, workflow_id, workflow_run_id):
+        from api.services.workflow.pipecat_engine_custom_tools import (
+            CustomToolManager,
+        )
+
+        tool = MockToolModel(
+            tool_uuid="test-uuid",
+            name="check_order_status",
+            description="",
+            category="http_api",
+            definition={
+                "schema_version": 1,
+                "managed_by": "code_editor",
+                "config": {
+                    "method": "POST",
+                    "url": self.RUNTIME_URL,
+                    "timeout_ms": 5000,
+                },
+            },
+        )
+        manager = CustomToolManager(
+            self._engine(
+                workflow_id=workflow_id, workflow_run_id=workflow_run_id
+            )
+        )
+        handler, _timeout = manager._create_handler(tool, "check_order_status")
+
+        with patch(
+            "api.services.workflow.tools.custom_tool.httpx.AsyncClient"
+        ) as mock_client_class:
+            mock_client = AsyncMock()
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {}
+            mock_client.request.return_value = mock_response
+            mock_client_class.return_value.__aenter__.return_value = mock_client
+
+            await handler(
+                SimpleNamespace(
+                    arguments={"order_id": "ORD-1"},
+                    result_callback=AsyncMock(),
+                )
+            )
+            return mock_client.request.call_args.kwargs["json"]
+
+    @pytest.mark.asyncio
+    async def test_the_engines_workflow_id_reaches_the_request_body(self):
+        """Delete `workflow_id=self._engine._workflow_id` from
+        `_create_http_tool_handler` and this is the test that fails."""
+        body = await self._body_sent_by_the_engine(
+            workflow_id=7, workflow_run_id=42
+        )
+
+        assert body["_dograh_workflow_id"] == 7
+        assert body["_dograh_workflow_run_id"] == 42
+        assert body["order_id"] == "ORD-1"
+
+    @pytest.mark.asyncio
+    async def test_an_engine_without_a_workflow_still_sends_both_keys(self):
+        """A run with no workflow behind it must still send null rather than
+        drop the keys — same contract the direct tests assert, but reached
+        through the engine, so 'always None' cannot pass for correct."""
+        body = await self._body_sent_by_the_engine(
+            workflow_id=None, workflow_run_id=None
+        )
+
+        assert body["_dograh_workflow_id"] is None
+        assert body["_dograh_workflow_run_id"] is None
+
+
 class TestCoerceParameterValue:
     """Tests for _coerce_parameter_value function."""
 
