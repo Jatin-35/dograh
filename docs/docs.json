@@ -252,8 +252,8 @@
     ]
   },
   "logo": {
-    "light": "/logo/light.png",
-    "dark": "/logo/dark.png",
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg",
     "href": "https://docs.botrixai.com"
   },
   "navbar": {
@@ -270,7 +270,7 @@
     }
   },
   "banner": {
-    "content": "🎉 **New: MCP Server** — Drive BotrixAI from Claude, Cursor or your own tooling. [Learn more →](/integrations/mcp)",
+    "content": "👋 **Welcome to BotrixAI helper docs** [Official website →](https://www.botrixai.com)",
     "dismissible": true
   },
   "search": {
