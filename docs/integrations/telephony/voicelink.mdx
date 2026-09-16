@@ -1,0 +1,164 @@
+---
+title: "VoiceLink Integration"
+description: "Configure VoiceLink for inbound, outbound and transfer calling in BotrixAI"
+---
+
+## Overview
+
+VoiceLink is a cloud telephony provider. BotrixAI's VoiceLink integration supports **outbound calls**, **inbound calls** and **call transfer**.
+
+VoiceLink works differently from most providers here: rather than BotrixAI dialling directly, BotrixAI queues the call with VoiceLink and VoiceLink connects back to BotrixAI over a **single WebSocket** that carries audio in both directions.
+
+## Prerequisites
+
+Before setting up VoiceLink, you'll need:
+
+- A VoiceLink account
+- Either your **username and password**, or a **bearer token**
+- At least one **DID** (phone number) registered with VoiceLink
+
+<Note>
+Prefer username and password over a static bearer token. Tokens expire — with
+username and password saved, BotrixAI re-authenticates automatically when that
+happens. With only a bearer token, calls start failing once it expires and you
+must paste a new one in by hand.
+</Note>
+
+## Configuration
+
+### Step 1: Gather your VoiceLink details
+
+From your VoiceLink account, collect:
+
+1. Your **username** and **password** (or a **bearer token**)
+2. Your **DID number**, in the registered form VoiceLink shows — digits only, with country code and **no** `+` or spaces, for example `919484959244`
+3. Any additional DIDs you want to use, in the same form
+
+<Warning>
+VoiceLink DIDs are entered in registered form (`919484959244`), **not** E.164
+(`+919484959244`). This differs from the other telephony providers in BotrixAI.
+A leading `+` will not match.
+</Warning>
+
+### Step 2: Configure in BotrixAI
+
+1. Navigate to **/telephony-configurations** and click **Add configuration**
+2. Select **VoiceLink** as your provider
+3. Enter:
+   - **API base URL** — leave the default (`https://app.voicelink.co.in/api`) unless VoiceLink gave you a different one
+   - **Username** and **Password**, or a **Bearer token**
+   - **DID number** — the default caller ID used for outbound calls
+   - **From numbers** — any further DIDs you want available
+   - **Client ID** — *optional*, only needed if you are a reseller scoping KYC calls to a specific client
+4. Click **Save Configuration**
+
+Saving fails unless you supply either a bearer token or **both** username and password.
+
+### Step 3: Test your configuration
+
+1. Create a test agent
+2. Click **Call** to place a test outbound call
+3. Check the run in the dashboard for a successful connection
+
+## How outbound calls work
+
+When an agent places a call, BotrixAI posts to VoiceLink's `add_lead` endpoint with the destination number, your DID as caller ID, and two callback URLs of its own. VoiceLink queues the dial and, once the call is answered, connects back to BotrixAI's WebSocket to stream audio.
+
+You do not need to configure either callback URL — BotrixAI generates and sends them with each call.
+
+## Inbound Calling Setup
+
+Inbound is **not** configured automatically. Unlike providers where BotrixAI pushes a webhook URL for you, you point VoiceLink at BotrixAI yourself, once.
+
+### Step 1: Give VoiceLink the bot URL
+
+In your VoiceLink account, set the media WebSocket URL for your DID to:
+
+```
+wss://voice-app.botrixai.com/api/v1/telephony/ws
+```
+
+This single URL serves every inbound number on your account — BotrixAI reads the called DID from VoiceLink's opening event and routes the call from there. You do not need a different URL per agent.
+
+### Step 2: Assign an inbound agent to the number in BotrixAI
+
+1. Go to **/telephony-configurations** and open your VoiceLink configuration
+2. In the **Phone numbers** section, edit the DID that should receive inbound calls
+3. Set its **Inbound workflow** to the agent that should answer
+4. Save
+
+<Note>
+The DID here must match the form VoiceLink sends in its call events
+(`919484959244`). If inbound calls connect but no agent answers, a mismatch
+between this number and VoiceLink's registered form is the first thing to check.
+</Note>
+
+### Step 3: Test inbound calling
+
+1. Call your VoiceLink DID from another phone
+2. Verify your BotrixAI agent answers and responds
+3. Check the run in the BotrixAI dashboard
+
+## Call Transfer
+
+VoiceLink supports **blind transfer**. When your agent triggers a transfer, BotrixAI sends the transfer instruction over the live call's WebSocket and VoiceLink hands the call to the destination number.
+
+<Note>
+VoiceLink provides no callback for transfer completion, so BotrixAI cannot
+report whether an individual transfer was answered — the run shows that the
+transfer was requested, not its outcome. Check VoiceLink's own call logs when
+you need to confirm a specific transfer connected.
+</Note>
+
+See [Call Transfer](/voice-agent/tools/call-transfer) for configuring the transfer tool on an agent.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Configuration won't save">
+    VoiceLink requires either a bearer token, or both a username and a
+    password. Supplying only a username, or only a password, is rejected.
+  </Accordion>
+
+  <Accordion title="Calls worked, then started failing with an auth error">
+    A static bearer token has expired. Save your username and password on the
+    configuration instead — BotrixAI then re-authenticates on its own when a
+    token expires.
+  </Accordion>
+
+  <Accordion title="Outbound call is never placed">
+    - Confirm the **DID number** is in registered form (`919484959244`), with
+      no `+` and no spaces
+    - Confirm the DID is active on your VoiceLink account
+    - Check the **API base URL** matches the one VoiceLink gave you
+  </Accordion>
+
+  <Accordion title="Inbound call connects but no agent answers">
+    - Confirm the DID exists in your BotrixAI telephony configuration and has
+      an **Inbound workflow** assigned
+    - Confirm the number is written in the same form VoiceLink uses
+    - Confirm the WebSocket URL on the VoiceLink side is the bare bot URL
+      (`wss://voice-app.botrixai.com/api/v1/telephony/ws`) with nothing
+      appended
+    - Confirm the assigned agent is **published** — drafts are not served to
+      live calls
+  </Accordion>
+
+  <Accordion title="No audio on calls">
+    VoiceLink carries both directions over one WebSocket. If the call connects
+    but is silent, check that WebSocket traffic is not being blocked between
+    VoiceLink and BotrixAI.
+  </Accordion>
+
+  <Accordion title="Transfer doesn't appear to complete">
+    BotrixAI cannot observe transfer completion on VoiceLink — no callback
+    exists for it. Confirm the outcome in VoiceLink's own call logs.
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+- Save username and password rather than a bearer token, so token expiry never interrupts calling
+- Test with a single call before running a campaign
+- Keep DIDs in VoiceLink's registered form everywhere in BotrixAI
+- Monitor VoiceLink's dashboard for usage and billing
