@@ -1,5 +1,13 @@
 # Netlify routing for the static Mintlify export.
 #
+# IMPORTANT: this file only takes effect if it is copied into the publish
+# directory. The Netlify build unzips the export into `_site` and publishes
+# that, so a file sitting here in the source tree is never served -- which is
+# why the single rule this file carried before was never applied. The build
+# command has to end with:
+#
+#     cp -f _headers _redirects _site/ 2>/dev/null || true
+#
 # Mintlify emits sidebar links WITHOUT a trailing slash (/getting-started/
 # prerequisites), but the export writes each page to <route>/index.html. On
 # Netlify a directory-style path without the slash is answered with a 301 to

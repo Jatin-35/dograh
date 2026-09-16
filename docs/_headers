@@ -1,0 +1,32 @@
+# Netlify headers for the static Mintlify export.
+#
+# IMPORTANT: this file only takes effect if it is copied into the publish
+# directory. The Netlify build unzips the export into `_site` and publishes
+# that, so a file sitting here in the source tree is never served. The build
+# command has to end with:
+#
+#     cp -f _headers _redirects _site/ 2>/dev/null || true
+#
+# `_redirects` in this directory was added long before this note and never
+# applied, for exactly that reason.
+
+# Next.js content-hashed bundles. The hash in the filename changes whenever the
+# contents change, so these can never go stale -- but the export ships them with
+# `max-age=0,must-revalidate`, which makes the browser revalidate the entire
+# JavaScript bundle on every navigation.
+#
+# That matters more here than on a normal site: the export has no working RSC
+# payloads, so Next falls back to a full document load on every sidebar click.
+# Each of those re-checks every chunk. Caching them immutably does not stop the
+# reload -- only real Mintlify hosting does -- but it stops the reload costing a
+# full bundle round trip.
+/_next/static/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Fonts and images are likewise fingerprinted or stable.
+/_next/image/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# HTML must not be cached: it is what changes on every docs deploy.
+/*.html
+  Cache-Control: public, max-age=0, must-revalidate
