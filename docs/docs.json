@@ -3,9 +3,9 @@
   "theme": "mint",
   "name": "BotrixAI",
   "colors": {
-    "primary": "#177462",
-    "light": "#00D563",
-    "dark": "#0F5245"
+    "primary": "#1B7FA2",
+    "light": "#3BB4DE",
+    "dark": "#145F7A"
   },
   "favicon": "/favicon.png",
   "navigation": {

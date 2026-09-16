@@ -7,9 +7,9 @@
 button[data-testid*="search"],
 .mintlify-search,
 .DocSearch-Button {
-  background: rgba(22, 163, 74, 0.05) !important;
-  border: 3px solid #16A34A !important;
-  box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.2), 0 4px 12px rgba(22, 163, 74, 0.15) !important;
+  background: rgba(27, 127, 162, 0.05) !important;
+  border: 3px solid #1B7FA2 !important;
+  box-shadow: 0 0 0 2px rgba(27, 127, 162, 0.2), 0 4px 12px rgba(27, 127, 162, 0.15) !important;
   border-radius: 10px !important;
   transition: all 0.3s ease !important;
   min-width: 280px !important;
@@ -24,7 +24,7 @@ button[data-testid*="search"]:hover,
 .mintlify-search:hover,
 .DocSearch-Button:hover {
   transform: translateY(-2px) !important;
-  box-shadow: 0 6px 20px rgba(22, 163, 74, 0.4) !important;
+  box-shadow: 0 6px 20px rgba(27, 127, 162, 0.4) !important;
 }
 
 /* Search text and icon styling - Better visibility */
@@ -35,15 +35,15 @@ button[data-testid*="search"]:hover,
 button[data-testid*="search"] *,
 .mintlify-search *,
 .DocSearch-Button * {
-  color: #16A34A !important;
+  color: #1B7FA2 !important;
   font-weight: 500 !important;
 }
 
 /* Pulse animation */
 @keyframes search-pulse {
-  0% { box-shadow: 0 4px 12px rgba(22, 163, 74, 0.3); }
-  50% { box-shadow: 0 4px 12px rgba(22, 163, 74, 0.6); }
-  100% { box-shadow: 0 4px 12px rgba(22, 163, 74, 0.3); }
+  0% { box-shadow: 0 4px 12px rgba(27, 127, 162, 0.3); }
+  50% { box-shadow: 0 4px 12px rgba(27, 127, 162, 0.6); }
+  100% { box-shadow: 0 4px 12px rgba(27, 127, 162, 0.3); }
 }
 
 /* Apply animation to all search elements */
@@ -63,7 +63,7 @@ button[data-testid*="search"],
 /* Firefox */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #16A34A transparent;
+  scrollbar-color: #1B7FA2 transparent;
 }
 
 /* WebKit: Chrome, Edge, Safari, mobile */
@@ -75,9 +75,33 @@ button[data-testid*="search"],
   background: transparent;
 }
 *::-webkit-scrollbar-thumb {
-  background: #16A34A;
+  background: #1B7FA2;
   border-radius: 4px;
 }
 *::-webkit-scrollbar-thumb:hover {
   background: #15803D;
+}
+
+/* ---------------------------------------------------------------------------
+   Header logo
+
+   Mintlify sizes the navbar logo to its own default height, which renders the
+   lockup smaller than the same mark appears in the app sidebar (`h-12`, 48px).
+   Pin it so the two match.
+
+   Scoped to `/logo/` so it can only ever hit the brand lockup -- a bare
+   `header img` would also catch avatars and inline images.
+--------------------------------------------------------------------------- */
+img[src*="/logo/"] {
+  height: 48px !important;
+  max-height: 48px !important;
+  width: auto !important;
+}
+
+@media (max-width: 640px) {
+  /* A 252px-wide lockup crowds out the search and menu controls on a phone. */
+  img[src*="/logo/"] {
+    height: 36px !important;
+    max-height: 36px !important;
+  }
 }
