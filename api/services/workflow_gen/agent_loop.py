@@ -538,6 +538,15 @@ def _summarize_mutating_call(
             f'Ready to rewrite "{path}" '
             f"({existing} → {len(arguments.get('content') or '')} characters)."
         )
+    if tool_name == "replace_in_code_file":
+        path = arguments.get("path") or "a file"
+        removed = len(arguments.get("old_text") or "")
+        added = len(arguments.get("new_text") or "")
+        what = "Removing" if added == 0 else "Replacing"
+        return (
+            f'{what} {removed} characters in "{path}"'
+            + (f", replaced by {added}." if added else ", deleting it.")
+        )
     if tool_name == "delete_code_file":
         return f'Ready to delete "{arguments.get("path")}".'
     if tool_name == "set_env_var":
@@ -724,6 +733,24 @@ async def _persist_mutating_action(
         yield {
             "event": _status("Node updated."),
             "result": {"kind": tool_name, **result},
+        }
+        return
+
+    if tool_name == "replace_in_code_file":
+        yield {"event": _status("Editing the file…")}
+        try:
+            result = await toolbox.replace_in_code_file(
+                arguments.get("path", ""),
+                arguments.get("old_text", ""),
+                arguments.get("new_text", ""),
+                bool(arguments.get("replace_all")),
+            )
+        except WorkflowGenToolboxError as e:
+            yield {"event": None, "result": None, "errors": e.errors}
+            return
+        yield {
+            "event": _status("File updated."),
+            "result": {"kind": "replace_in_code_file", **result},
         }
         return
 

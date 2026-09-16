@@ -137,6 +137,15 @@ function summarizeDefinition(actionType: string, preview: Record<string, unknown
     // The Code Editor family falls through to a card with no node/edge
     // counts to show — a plain "workflow update" title here would be
     // actively wrong for a file or a secret, not just generic.
+    if (actionType === "replace_in_code_file") {
+        const removed = String(preview.old_text ?? "").length;
+        const added = String(preview.new_text ?? "").length;
+        return {
+            icon: FileCode,
+            title: (preview.path as string) || "a file",
+            chips: [added === 0 ? `−${removed} chars` : `${removed} → ${added} chars`],
+        };
+    }
     if (actionType === "write_code_file" || actionType === "delete_code_file") {
         const path = (preview.path as string) || "a file";
         return {

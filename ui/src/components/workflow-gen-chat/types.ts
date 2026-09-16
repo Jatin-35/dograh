@@ -52,6 +52,7 @@ export type WorkflowGenThreadItem =
             | "test_tool"
             | "create_credential"
             | "write_code_file"
+            | "replace_in_code_file"
             | "delete_code_file"
             | "set_env_var"
             | "delete_env_var";

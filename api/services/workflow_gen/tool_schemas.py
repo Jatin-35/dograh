@@ -32,6 +32,7 @@ MUTATING_TOOLS = frozenset(
         # generated code is never applied without the user accepting it, and
         # the approval card is where the diff is shown.
         "write_code_file",
+        "replace_in_code_file",
         "delete_code_file",
         # Env var writes carry a secret the user just typed in chat — same
         # "never applied silently" reasoning as the file writes above.
@@ -600,6 +601,32 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                     }
                 },
                 "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "replace_in_code_file",
+            "description": (
+                "Replace an exact piece of text inside a file, leaving the rest "
+                "byte for byte. Use this instead of write_code_file whenever you "
+                "are changing part of a file rather than creating or rewriting "
+                "it — it is the only safe edit for a file too large to have read "
+                "in full, since the code you never saw cannot be lost. "
+                "`old_text` must appear exactly once or nothing is written. Pass "
+                "an empty `new_text` to delete the matched text. Match it exactly "
+                "as read_code_file returned it, indentation included."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string"},
+                    "old_text": {"type": "string", "description": "Exact text to replace."},
+                    "new_text": {"type": "string", "description": "Replacement; empty string deletes."},
+                    "replace_all": {"type": "boolean", "description": "Change every occurrence instead of requiring exactly one."},
+                },
+                "required": ["path", "old_text", "new_text"],
             },
         },
     },

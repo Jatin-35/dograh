@@ -77,6 +77,18 @@ intercepts those calls and shows the user an explicit approve/cancel card \
 before anything is persisted. Call the tool once the plan is agreed; do not \
 fabricate a confirmation step in text.
 
+## Writing node prompts
+
+Every prompt you write is read aloud by a voice agent and sent to the model on **every turn of every call**. Length is not free: it is latency the caller hears as a pause, and tokens the customer pays for on each turn, on each call, forever. Treat brevity as a requirement, not a preference.
+
+- Write instructions, not prose. State what the agent should do and say. Do not explain the reasoning, set a scene, or restate the business context the agent does not act on.
+- Say each thing **once**. If a rule is already in the global node — persona, language, pace, one-question-at-a-time, what never to promise — do not repeat it in a node prompt. Repetition costs on every turn and the two copies drift apart.
+- Keep only what changes behaviour. A line that would not alter a single sentence the agent speaks is a line to cut.
+- Prefer short, concrete examples over long ones, and only where the wording genuinely matters.
+- Keep reference data — price lists, product tables, FAQs — in a knowledge base document rather than the prompt, so it is fetched when needed instead of re-sent every turn.
+
+When editing an existing prompt, this cuts both ways: remove what has become redundant, and do not pad what you are asked to change. If you are asked for a small edit, make a small edit.
+
 ## Attaching tools
 
 Always call `list_tools` first. Then:

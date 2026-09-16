@@ -281,3 +281,118 @@ async def test_a_validation_failure_is_repaired_rather_than_shown_as_an_error(mo
     assert [e for e in events if e["type"] == "error"] == []
     # The corrected write is not re-confirmed — the user already approved it.
     assert [e for e in events if e["type"] == "approval"] == []
+
+
+# ---------------------------------------------------------------------------
+# Editing part of a code file
+# ---------------------------------------------------------------------------
+
+
+class TestReplaceInCodeFile:
+    """Reported from production: `all_events_entry_point.py` had grown to 24k
+    characters, came back truncated, and the assistant refused to save —
+    `write_code_file` replaces the whole file, so saving from a partial read
+    would have deleted every function it never saw.
+
+    Refusing was right. This is the edit that makes the work possible instead:
+    swap an exact piece of text, leave the rest byte for byte.
+    """
+
+    ROUTER = (
+        "def all_events_handler(event, context):\n"
+        "    fn = event.get('function_name')\n"
+        "    if fn == 'create_complaint2':\n"
+        "        return create_complaint2(event, context)\n"
+        "    if fn == 'close_complaint':\n"
+        "        return close_complaint(event, context)\n"
+        "    return {'status': 'error'}\n"
+    )
+
+    def _toolbox(self, monkeypatch, content: str):
+        from types import SimpleNamespace
+
+        from api.services.workflow_gen import toolbox as tb
+
+        saved: dict[str, str] = {}
+
+        async def _get_file(org, path):
+            return SimpleNamespace(path=path, content=content)
+
+        async def _save_file(org, path, new_content, user_id):
+            saved["path"] = path
+            saved["content"] = new_content
+            return SimpleNamespace(warnings=[])
+
+        monkeypatch.setattr(tb.db_client, "get_code_editor_file", _get_file)
+        monkeypatch.setattr(tb.code_workspace, "save_file", _save_file)
+        return tb.WorkflowGenToolbox(organization_id=5, user_id=1), saved
+
+    @pytest.mark.asyncio
+    async def test_one_function_is_changed_and_the_others_survive(self, monkeypatch):
+        box, saved = self._toolbox(monkeypatch, self.ROUTER)
+
+        result = await box.replace_in_code_file(
+            "all_events_entry_point.py",
+            "        return create_complaint2(event, context)",
+            "        return create_complaint2(event, context, retry=True)",
+        )
+
+        assert result["saved"] is True
+        assert result["replacements"] == 1
+        assert "retry=True" in saved["content"]
+        # The function the model never needed to see is untouched.
+        assert "close_complaint(event, context)" in saved["content"]
+        assert saved["content"].count("def all_events_handler") == 1
+
+    @pytest.mark.asyncio
+    async def test_ambiguous_text_is_refused_and_nothing_is_written(self, monkeypatch):
+        from api.services.workflow_gen.toolbox import WorkflowGenToolboxError
+
+        box, saved = self._toolbox(monkeypatch, self.ROUTER)
+
+        with pytest.raises(WorkflowGenToolboxError) as exc:
+            await box.replace_in_code_file(
+                "all_events_entry_point.py", "(event, context)", "(event)"
+            )
+
+        assert "appears" in str(exc.value)
+        assert saved == {}
+
+    @pytest.mark.asyncio
+    async def test_absent_text_is_refused_and_nothing_is_written(self, monkeypatch):
+        from api.services.workflow_gen.toolbox import WorkflowGenToolboxError
+
+        box, saved = self._toolbox(monkeypatch, self.ROUTER)
+
+        with pytest.raises(WorkflowGenToolboxError):
+            await box.replace_in_code_file(
+                "all_events_entry_point.py", "def not_in_this_file():", "x"
+            )
+        assert saved == {}
+
+    @pytest.mark.asyncio
+    async def test_a_result_that_fails_validation_is_rejected(self, monkeypatch):
+        """Stored by the same validated path a full write uses — a replacement
+        that breaks the file must not reach the workspace."""
+        from types import SimpleNamespace
+
+        from api.services.workflow_gen import toolbox as tb
+        from api.services.workflow_gen.toolbox import WorkflowGenToolboxError
+
+        async def _get_file(org, path):
+            return SimpleNamespace(path=path, content=self.ROUTER)
+
+        async def _save_file(org, path, new_content, user_id):
+            raise tb.code_workspace.WorkspaceError(
+                "Invalid Python", errors=["line 3: invalid syntax"]
+            )
+
+        monkeypatch.setattr(tb.db_client, "get_code_editor_file", _get_file)
+        monkeypatch.setattr(tb.code_workspace, "save_file", _save_file)
+        box = tb.WorkflowGenToolbox(organization_id=5, user_id=1)
+
+        with pytest.raises(WorkflowGenToolboxError) as exc:
+            await box.replace_in_code_file(
+                "all_events_entry_point.py", "    fn = event.get('function_name')", "    fn ="
+            )
+        assert "line 3: invalid syntax" in exc.value.errors

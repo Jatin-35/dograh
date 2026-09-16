@@ -531,6 +531,60 @@ class WorkflowGenToolbox:
             raise WorkflowGenToolboxError(e.message, errors=e.errors) from e
         return {"saved": True, "path": path, "warnings": result.warnings}
 
+    async def replace_in_code_file(
+        self, path: str, old_text: str, new_text: str, replace_all: bool = False
+    ) -> dict[str, Any]:
+        """Change part of a file without rewriting the whole thing.
+
+        `write_code_file` replaces the file entirely, which is unsafe on a file
+        too large to have read in full — the functions the model never saw
+        would be deleted. This edits in place: everything outside `old_text` is
+        left byte for byte, and an `old_text` that isn't unique is refused
+        rather than applied to a guess. Validated and stored by the same path a
+        full write uses, so a broken result is rejected identically.
+        """
+        if not old_text:
+            raise WorkflowGenToolboxError("`old_text` must not be empty.")
+
+        file = await db_client.get_code_editor_file(self.organization_id, path)
+        if file is None:
+            raise WorkflowGenToolboxError(
+                f"{path} does not exist. Call list_code_files to see the workspace."
+            )
+
+        occurrences = file.content.count(old_text)
+        if occurrences == 0:
+            raise WorkflowGenToolboxError(
+                f"That text does not appear in {path}. Match it exactly as "
+                "read_code_file returned it, whitespace and indentation included."
+            )
+        if occurrences > 1 and not replace_all:
+            raise WorkflowGenToolboxError(
+                f"That text appears {occurrences} times in {path}. Include "
+                "enough surrounding lines to make it unique, or pass "
+                "replace_all to change every occurrence."
+            )
+
+        updated = (
+            file.content.replace(old_text, new_text)
+            if replace_all
+            else file.content.replace(old_text, new_text, 1)
+        )
+        try:
+            result = await code_workspace.save_file(
+                self.organization_id, path, updated, self.user_id
+            )
+        except code_workspace.WorkspaceError as e:
+            raise WorkflowGenToolboxError(e.message, errors=e.errors) from e
+        return {
+            "saved": True,
+            "path": path,
+            "replacements": occurrences if replace_all else 1,
+            "chars_before": len(file.content),
+            "chars_after": len(updated),
+            "warnings": result.warnings,
+        }
+
     async def delete_code_file(self, path: str) -> dict[str, Any]:
         try:
             deleted = await code_workspace.delete_file(self.organization_id, path)
