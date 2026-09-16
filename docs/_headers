@@ -30,3 +30,10 @@
 # HTML must not be cached: it is what changes on every docs deploy.
 /*.html
   Cache-Control: public, max-age=0, must-revalidate
+
+# A self-test. Netlify consumes this file rather than serving it, so a 404 on
+# /_headers proves nothing either way. This header appears on every response
+# only if the file actually reached the publish directory -- making
+# `curl -I https://docs.botrixai.com/` a one-line answer to "did the cp run?".
+/*
+  X-Botrix-Docs-Headers: applied
