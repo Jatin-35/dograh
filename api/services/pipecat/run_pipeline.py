@@ -820,6 +820,7 @@ async def _run_pipeline_impl(
         inference_llm=inference_llm,
         workflow=workflow_graph,
         call_context_vars=merged_call_context_vars,
+        workflow_id=workflow_id,
         workflow_run_id=workflow_run_id,
         node_transition_callback=node_transition_callback,
         embeddings_api_key=embeddings_api_key,

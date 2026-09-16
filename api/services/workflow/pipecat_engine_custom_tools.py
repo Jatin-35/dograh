@@ -437,6 +437,8 @@ class CustomToolManager:
                     call_context_vars=self._engine._call_context_vars,
                     gathered_context_vars=self._engine._gathered_context,
                     organization_id=await self.get_organization_id(),
+                    workflow_id=self._engine._workflow_id,
+                    workflow_run_id=self._engine._workflow_run_id,
                 )
 
                 await function_call_params.result_callback(result)

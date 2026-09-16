@@ -66,6 +66,7 @@ class PipecatEngine:
         context: Optional[LLMContext] = None,
         workflow: WorkflowGraph,
         call_context_vars: dict,
+        workflow_id: Optional[int] = None,
         workflow_run_id: Optional[int] = None,
         node_transition_callback: Optional[
             Callable[[str, str, Optional[str], Optional[str], bool], Awaitable[None]]
@@ -90,6 +91,7 @@ class PipecatEngine:
         self.context = context
         self.workflow = workflow
         self._call_context_vars = call_context_vars
+        self._workflow_id = workflow_id
         self._workflow_run_id = workflow_run_id
         self._node_transition_callback = node_transition_callback
         self._initialized = False
