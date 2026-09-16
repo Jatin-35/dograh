@@ -28,9 +28,14 @@ from api.db.models import UserModel
 from api.enums import WebhookCredentialType
 from api.mcp_server.tools._workflow_projection import project_workflow_to_sdk_view
 from api.mcp_server.tools.create_workflow import create_workflow_for_user
-from api.mcp_server.tools.docs_search import list_docs as _list_docs
-from api.mcp_server.tools.docs_search import read_doc as _read_doc
-from api.mcp_server.tools.docs_search import search_docs as _search_docs
+# The auth-free cores, not the MCP entry points. Those call
+# `authenticate_mcp_request()`, which reads an API key off an HTTP request that
+# does not exist for an in-process caller — so importing them here made every
+# docs lookup fail with "Missing API key", silently, as a tool result the model
+# read as "docs unavailable" and worked around by guessing.
+from api.mcp_server.tools.docs_search import list_docs_unauthenticated as _list_docs
+from api.mcp_server.tools.docs_search import read_doc_unauthenticated as _read_doc
+from api.mcp_server.tools.docs_search import search_docs_unauthenticated as _search_docs
 from api.mcp_server.tools.node_edit import (
     get_node_for_user,
     list_nodes_for_user,

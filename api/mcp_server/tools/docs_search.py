@@ -625,6 +625,18 @@ async def list_docs(path: str | None = None, depth: int = 1) -> list[dict]:
     instead, for example ``voice-agent/tools/mcp-tool``.
     """
     await authenticate_mcp_request()
+    return await list_docs_unauthenticated(path, depth)
+
+
+async def list_docs_unauthenticated(path: str | None = None, depth: int = 1) -> list[dict]:
+    """Browse the docs hierarchy.
+
+    Auth-free core, called in-process by the in-product assistant
+    (`services/workflow_gen/toolbox.py`). The docs are public content
+    with nothing org-scoped in them, so there is no tenant check to
+    lose here — only the MCP handshake, which an in-process caller
+    has no way to satisfy.
+    """
 
     if depth < 1 or depth > DOCS_LIST_MAX_DEPTH:
         raise ValueError(f"`depth` must be between 1 and {DOCS_LIST_MAX_DEPTH}.")
@@ -649,6 +661,18 @@ async def list_docs(path: str | None = None, depth: int = 1) -> list[dict]:
 async def read_doc(path: str, section: str | None = None) -> dict:
     """Read one docs page after you have narrowed to a likely match."""
     await authenticate_mcp_request()
+    return await read_doc_unauthenticated(path, section)
+
+
+async def read_doc_unauthenticated(path: str, section: str | None = None) -> dict:
+    """Read one docs page.
+
+    Auth-free core, called in-process by the in-product assistant
+    (`services/workflow_gen/toolbox.py`). The docs are public content
+    with nothing org-scoped in them, so there is no tenant check to
+    lose here — only the MCP handshake, which an in-process caller
+    has no way to satisfy.
+    """
 
     if not isinstance(path, str) or not path.strip():
         raise ValueError("`path` must be a non-empty string.")
@@ -673,6 +697,18 @@ async def search_docs(query: str, limit: int = 5) -> list[dict]:
     likely, call ``read_doc(path)`` instead of reasoning from summaries alone.
     """
     await authenticate_mcp_request()
+    return await search_docs_unauthenticated(query, limit)
+
+
+async def search_docs_unauthenticated(query: str, limit: int = 5) -> list[dict]:
+    """Search the documentation.
+
+    Auth-free core, called in-process by the in-product assistant
+    (`services/workflow_gen/toolbox.py`). The docs are public content
+    with nothing org-scoped in them, so there is no tenant check to
+    lose here — only the MCP handshake, which an in-process caller
+    has no way to satisfy.
+    """
 
     if not isinstance(query, str) or not query.strip():
         raise ValueError("`query` must be a non-empty string.")
