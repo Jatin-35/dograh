@@ -955,3 +955,159 @@ class TestALongNodePromptReachesTheModel:
             m for m in seen[-1] if m.get("role") == "tool" and m.get("tool_call_id") == "call-1"
         )
         assert len(reply["content"]) <= MAX_TOOL_RESULT_CHARS * 1.1
+
+
+class TestReplacementToolsAreWiredEndToEnd:
+    """The approval → confirm → toolbox path for the two find/replace tools.
+
+    Every other test of these calls the toolbox method directly, which proves
+    the logic and nothing about whether the agent loop can actually reach it.
+    That gap is not theoretical: the `replace_in_code_file` dispatch block was
+    first written into `_summarize_mutating_call` instead of the dispatcher,
+    and only a SyntaxError caught it. Had it been valid Python in the wrong
+    place, every unit test would still have passed and the tool would simply
+    never have run.
+    """
+
+    BIG_OLD = "# a large block that is being removed\n" * 400  # ~15k chars
+
+    def _fakes(self, monkeypatch, tool_name: str, arguments: dict[str, Any]):
+        calls: list[tuple[str, tuple]] = []
+
+        class _FakeToolbox:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def replace_in_code_file(self, path, old_text, new_text, replace_all=False):
+                calls.append(("code", (path, old_text, new_text, replace_all)))
+                return {"saved": True, "path": path, "replacements": 1,
+                        "chars_before": 100, "chars_after": 50, "warnings": []}
+
+            async def replace_in_node(self, workflow_id, node_id, field, old_text, new_text, replace_all=False):
+                calls.append(("node", (workflow_id, node_id, field, old_text, new_text, replace_all)))
+                return {"saved": True, "workflow_id": workflow_id, "node_id": node_id,
+                        "field": field, "replacements": 1, "version_number": 3,
+                        "status": "draft", "length_before": 100, "length_after": 50}
+
+        completions = [_FakeCompletion(_FakeMessage(content="Done."))]
+
+        async def _fake_complete(messages, tools, **kwargs):
+            return completions.pop(0) if completions else _FakeCompletion(
+                _FakeMessage(content="Done.")
+            )
+
+        monkeypatch.setattr(agent_loop, "WorkflowGenToolbox", _FakeToolbox)
+        monkeypatch.setattr(agent_loop.llm_client, "complete", _fake_complete)
+        return calls
+
+    @pytest.mark.asyncio
+    async def test_confirming_a_code_file_edit_actually_calls_the_tool(self, monkeypatch):
+        arguments = {
+            "path": "all_events_entry_point.py",
+            "old_text": "def old():\n    pass",
+            "new_text": "def new():\n    return 1",
+        }
+        calls = self._fakes(monkeypatch, "replace_in_code_file", arguments)
+
+        events = [
+            step.event
+            async for step in agent_loop.execute_confirmed_action(
+                organization_id=1,
+                user_id=1,
+                prior_messages=[],
+                pending_action={
+                    "action_id": "a1",
+                    "tool_call_id": "call-1",
+                    "action_type": "replace_in_code_file",
+                    "arguments": arguments,
+                    "sibling_call_ids": [],
+                },
+                approve=True,
+            )
+        ]
+
+        assert calls == [
+            ("code", ("all_events_entry_point.py", arguments["old_text"], arguments["new_text"], False))
+        ], "the confirmed edit never reached the toolbox"
+        assert [e for e in events if e["type"] == "error"] == []
+
+    @pytest.mark.asyncio
+    async def test_confirming_a_node_edit_actually_calls_the_tool(self, monkeypatch):
+        arguments = {
+            "workflow_id": 7,
+            "node_id": "Main Agenda",
+            "field": "prompt",
+            "old_text": "remove me",
+            "new_text": "",
+        }
+        calls = self._fakes(monkeypatch, "replace_in_node", arguments)
+
+        events = [
+            step.event
+            async for step in agent_loop.execute_confirmed_action(
+                organization_id=1,
+                user_id=1,
+                prior_messages=[],
+                pending_action={
+                    "action_id": "a1",
+                    "tool_call_id": "call-1",
+                    "action_type": "replace_in_node",
+                    "arguments": arguments,
+                    "sibling_call_ids": [],
+                },
+                approve=True,
+            )
+        ]
+
+        assert calls == [("node", (7, "Main Agenda", "prompt", "remove me", "", False))]
+        assert [e for e in events if e["type"] == "error"] == []
+
+    @pytest.mark.asyncio
+    async def test_the_approval_card_carries_sizes_not_the_replacement_text(
+        self, monkeypatch
+    ):
+        """The card is persisted with the session and re-sent every time the
+        thread is reopened. A 15,000-character removal must not be stored there
+        — the card only ever renders the sizes, and an oversized persisted
+        message is what kills a thread permanently."""
+        arguments = {
+            "path": "all_events_entry_point.py",
+            "old_text": self.BIG_OLD,
+            "new_text": "",
+        }
+
+        class _FakeToolbox:
+            def __init__(self, *args, **kwargs):
+                pass
+
+        async def _fake_complete(messages, tools, **kwargs):
+            return _FakeCompletion(
+                _FakeMessage(
+                    tool_calls=[
+                        _FakeToolCall("call-1", "replace_in_code_file", arguments)
+                    ]
+                )
+            )
+
+        monkeypatch.setattr(agent_loop, "WorkflowGenToolbox", _FakeToolbox)
+        monkeypatch.setattr(agent_loop.llm_client, "complete", _fake_complete)
+
+        steps = [
+            step
+            async for step in agent_loop.run_turn(
+                organization_id=1, user_id=1, prior_messages=[],
+                user_message="remove that block",
+            )
+        ]
+        approval = next(s for s in steps if s.event["type"] == "approval")
+        card = approval.event["data"]["definition_preview"]
+
+        assert self.BIG_OLD not in json.dumps(card), "the card carried the full text"
+        assert card["old_text_chars"] == len(self.BIG_OLD)
+        assert card["new_text_chars"] == 0
+        assert "old_text" not in card and "new_text" not in card
+        assert len(json.dumps(card)) < 1_000
+
+        # But the text is still there to execute with — that is the whole
+        # point of keeping `arguments` separate from what is displayed.
+        assert approval.pending_action["arguments"]["old_text"] == self.BIG_OLD

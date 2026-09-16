@@ -138,8 +138,10 @@ function summarizeDefinition(actionType: string, preview: Record<string, unknown
     // counts to show — a plain "workflow update" title here would be
     // actively wrong for a file or a secret, not just generic.
     if (actionType === "replace_in_code_file") {
-        const removed = String(preview.old_text ?? "").length;
-        const added = String(preview.new_text ?? "").length;
+        // Sizes, not text: the backend deliberately keeps the replacement
+        // out of this payload, since it is persisted and replayed.
+        const removed = Number(preview.old_text_chars ?? 0);
+        const added = Number(preview.new_text_chars ?? 0);
         return {
             icon: FileCode,
             title: (preview.path as string) || "a file",
@@ -157,8 +159,10 @@ function summarizeDefinition(actionType: string, preview: Record<string, unknown
     if (actionType === "replace_in_node") {
         // The lengths are the review surface here: the user is approving the
         // removal of a specific piece of a prompt they cannot see in full.
-        const removed = String(preview.old_text ?? "").length;
-        const added = String(preview.new_text ?? "").length;
+        // Sizes, not text: the backend deliberately keeps the replacement
+        // out of this payload, since it is persisted and replayed.
+        const removed = Number(preview.old_text_chars ?? 0);
+        const added = Number(preview.new_text_chars ?? 0);
         return {
             icon: Wand2,
             title: (preview.node_id as string) || "a node",

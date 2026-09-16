@@ -50,6 +50,10 @@ MAX_REPAIR_TOOL_HOPS = 3
 
 _WORKFLOW_SOURCE_TOOLS = ("create_workflow", "save_workflow")
 
+# Tools whose arguments carry a chunk of a document. Their approval card is
+# built from sizes, never the text — see where shown_arguments is assembled.
+_REPLACEMENT_TOOLS = ("replace_in_node", "replace_in_code_file")
+
 _STATUS_BEFORE_TOOL = {
     "list_node_types": "Checking available node types…",
     "get_node_type": "Checking available node types…",
@@ -434,6 +438,23 @@ async def _run_loop(
                 # would only bloat the card and the persisted transcript.
                 shown_arguments = {
                     k: v for k, v in shown_arguments.items() if k != "content"
+                }
+            elif call.function.name in _REPLACEMENT_TOOLS:
+                # Same reasoning, and the card never showed these anyway — it
+                # renders their *sizes*. A replacement can be thousands of
+                # characters, and this payload is persisted with the session
+                # and re-sent every time the thread is reopened, so carrying
+                # the text itself would grow the transcript for nothing. The
+                # unmasked arguments stay in `pending_action`, which is what
+                # actually executes.
+                shown_arguments = {
+                    **{
+                        k: v
+                        for k, v in shown_arguments.items()
+                        if k not in ("old_text", "new_text")
+                    },
+                    "old_text_chars": len(arguments.get("old_text") or ""),
+                    "new_text_chars": len(arguments.get("new_text") or ""),
                 }
             display_preview = {**shown_arguments, **(preview or {})}
             pending_action = {
