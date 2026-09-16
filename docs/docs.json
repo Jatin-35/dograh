@@ -30,17 +30,17 @@
           {
             "group": "Build your First Agent",
             "pages": [
-                  "getting-started/first-agent",
-                  "getting-started/trigger-calls-from-your-backend",
-                  "getting-started/send-call-data-with-webhooks",
-                  "getting-started/connect-telephony",
-                  "getting-started/add-tools-and-knowledge-base"
+              "getting-started/first-agent",
+              "getting-started/trigger-calls-from-your-backend",
+              "getting-started/send-call-data-with-webhooks",
+              "getting-started/connect-telephony",
+              "getting-started/add-tools-and-knowledge-base"
             ]
           },
           {
             "group": "Core Concepts",
             "pages": [
-              "core-concepts/how-dograh-works",
+              "core-concepts/how-botrixai-works",
               "core-concepts/workflows-and-agents",
               "core-concepts/calls-and-runs",
               "core-concepts/context-and-variables",
@@ -282,23 +282,23 @@
   "logo": {
     "light": "/logo/light.svg",
     "dark": "/logo/dark.svg",
-    "href": "https://docs.dograh.com"
+    "href": "https://docs.botrixai.com"
   },
   "navbar": {
     "links": [
       {
         "label": "Support",
-        "href": "https://github.com/dograh-hq/dograh/issues/new/choose"
+        "href": "https://www.botrixai.com/contact"
       }
     ],
     "primary": {
       "type": "button",
       "label": "Dashboard",
-      "href": "https://app.dograh.com"
+      "href": "https://voice-app.botrixai.com"
     }
   },
   "banner": {
-    "content": "🎉 **New: MCP Server & SDKs Released** — Drive Dograh from Claude, Cursor, or your own Python/TypeScript code. [MCP →](/integrations/mcp) · [SDKs →](/sdks/introduction)",
+    "content": "🎉 **New: MCP Server & SDKs Released** — Drive BotrixAI from Claude, Cursor, or your own Python/TypeScript code. [MCP →](/integrations/mcp) · [SDKs →](/sdks/introduction)",
     "dismissible": true
   },
   "search": {
@@ -316,12 +316,6 @@
       "cursor",
       "vscode"
     ]
-  },
-  "footer": {
-    "socials": {
-      "github": "https://github.com/dograh-hq",
-      "linkedin": "https://linkedin.com/company/dograh"
-    }
   },
   "api": {
     "openapi": "api-reference/openapi.json"

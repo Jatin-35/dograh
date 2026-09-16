@@ -1,0 +1,10 @@
+# Netlify redirects for the static Mintlify export.
+#
+# Mintlify's own hosting resolves a bare section path to its index page; a
+# static export carries no such rule, and Netlify only serves index.html from a
+# directory that has one. `getting-started/index` is written to
+# getting-started/index/index.html, so the bare /getting-started 404s even
+# though every in-site link works — only a hand-typed or shared bare URL misses.
+#
+# Generated from docs.json: one line per nav page named ".../index".
+/getting-started   /getting-started/index   301
