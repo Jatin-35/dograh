@@ -105,3 +105,41 @@ img[src*="/logo/"] {
     max-height: 36px !important;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Banner
+
+   Mintlify paints the banner with `primary`, which has to stay dark enough to
+   serve as link text on white (#1B7FA2 is 4.56:1 — barely over AA). That makes
+   a heavy, muted bar across the top.
+
+   Lightening `primary` itself is not an option: every step brighter drops link
+   text below AA (#3BB4DE is 2.39:1). So the banner gets its own treatment —
+   a pale cyan tint with dark text, 7.68:1, which reads lighter *and* clearer
+   than white-on-teal did.
+
+   Several selectors because Mintlify does not publish a stable banner hook;
+   they are narrow enough not to match anything else.
+--------------------------------------------------------------------------- */
+#banner,
+[id*="banner"],
+div[class*="banner"]:not([class*="bannerless"]) {
+  background: #E8F6FB !important;
+  background-image: none !important;
+  color: #12536B !important;
+  border-bottom: 1px solid #C6E6F2 !important;
+}
+
+#banner a,
+[id*="banner"] a,
+div[class*="banner"] a {
+  color: #0F4257 !important;
+  text-decoration: underline !important;
+  text-underline-offset: 2px !important;
+}
+
+#banner button,
+[id*="banner"] button,
+div[class*="banner"] button {
+  color: #12536B !important;
+}
