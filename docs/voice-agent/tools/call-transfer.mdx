@@ -17,18 +17,18 @@ Web calls do not support call transfer.
 
 ## How call transfer works
 
-When the LLM decides a transfer is needed, it calls the Call Transfer tool. Dograh resolves the destination, validates the transfer setup, and then starts the provider transfer.
+When the LLM decides a transfer is needed, it calls the Call Transfer tool. BotrixAI resolves the destination, validates the transfer setup, and then starts the provider transfer.
 
 For a successful transfer:
 
 1. The agent calls the Call Transfer tool.
-2. Dograh resolves the destination from either static configuration or a dynamic HTTP resolver.
-3. Dograh optionally plays a pre-transfer message.
-4. Dograh starts dialing the destination through the telephony provider.
+2. BotrixAI resolves the destination from either static configuration or a dynamic HTTP resolver.
+3. BotrixAI optionally plays a pre-transfer message.
+4. BotrixAI starts dialing the destination through the telephony provider.
 5. The caller hears hold music while the destination leg is connecting.
-6. When the destination answers, Dograh connects the caller and ends the AI agent's involvement.
+6. When the destination answers, BotrixAI connects the caller and ends the AI agent's involvement.
 
-The transfer is a blind transfer. Dograh does not currently pass conversation context to the receiving human as part of the transfer.
+The transfer is a blind transfer. BotrixAI does not currently pass conversation context to the receiving human as part of the transfer.
 
 ## Destination source
 
@@ -50,7 +50,7 @@ This is the simplest option for fixed support lines, fixed departments, or cases
 
 Use this when the destination must be decided during the conversation.
 
-Dograh sends a `POST` request to your resolver endpoint before starting the transfer. Your endpoint returns the destination and may return a custom message to play before dialing.
+BotrixAI sends a `POST` request to your resolver endpoint before starting the transfer. Your endpoint returns the destination and may return a custom message to play before dialing.
 
 Common use cases:
 
@@ -58,16 +58,16 @@ Common use cases:
 - Look up the right account team in your customer system
 - Route by customer tier or account status
 - Route by issue type, language, or department
-- Use business logic from your backend instead of hardcoding numbers in Dograh
+- Use business logic from your backend instead of hardcoding numbers in BotrixAI
 
 ## Dynamic resolver request
 
 The resolver request body is a flat JSON object.
 
-Dograh builds it from:
+BotrixAI builds it from:
 
 - **LLM parameters**: values the agent extracts from the conversation when it calls the transfer tool
-- **Preset parameters**: values Dograh injects from fixed values or templates such as `{{initial_context.account_id}}` or `{{gathered_context.billing_issue_type}}`
+- **Preset parameters**: values BotrixAI injects from fixed values or templates such as `{{initial_context.account_id}}` or `{{gathered_context.billing_issue_type}}`
 
 If both define the same key, preset parameters take precedence.
 
@@ -82,7 +82,7 @@ Example request body:
 ```
 
 <Note>
-Dograh does not send the full conversation transcript to the resolver. Add the specific values you need as LLM parameters or preset parameters.
+BotrixAI does not send the full conversation transcript to the resolver. Add the specific values you need as LLM parameters or preset parameters.
 </Note>
 
 ## Dynamic resolver response
@@ -101,7 +101,7 @@ Your resolver must return a JSON object with `transfer_context.destination`.
 ```
 
 <Warning>
-Follow this response shape exactly. Dograh reads specific keys from the resolver response. For dynamic transfer resolution, an invalid response does not fall back silently: the transfer fails before dialing.
+Follow this response shape exactly. BotrixAI reads specific keys from the resolver response. For dynamic transfer resolution, an invalid response does not fall back silently: the transfer fails before dialing.
 </Warning>
 
 Field behavior:
@@ -115,11 +115,11 @@ If the resolver fails, times out, returns invalid JSON, or omits `transfer_conte
 
 When using a dynamic resolver, configure:
 
-- **Resolver URL**: HTTPS or HTTP endpoint Dograh calls with `POST`
-- **Resolver Timeout**: How long Dograh waits for the resolver response
-- **Resolver Wait Message**: Optional message spoken while Dograh waits, such as "One moment while I find the right team."
+- **Resolver URL**: HTTPS or HTTP endpoint BotrixAI calls with `POST`
+- **Resolver Timeout**: How long BotrixAI waits for the resolver response
+- **Resolver Wait Message**: Optional message spoken while BotrixAI waits, such as "One moment while I find the right team."
 - **LLM Parameters**: Values the agent should extract from the conversation, such as `billing_issue_type` or `requested_department`
-- **Preset Parameters**: Values injected by Dograh from context or fixed values
+- **Preset Parameters**: Values injected by BotrixAI from context or fixed values
 - **Custom Headers**: Static headers sent to your resolver endpoint
 - **Credential**: Optional saved credential used to authenticate the resolver request
 
@@ -133,26 +133,26 @@ Call Transfer supports a common pre-transfer message setting for both static and
 
 For static transfers:
 
-1. Dograh resolves the static or template destination.
-2. Dograh plays the configured pre-transfer message, if any.
-3. Dograh starts the provider transfer.
+1. BotrixAI resolves the static or template destination.
+2. BotrixAI plays the configured pre-transfer message, if any.
+3. BotrixAI starts the provider transfer.
 
 For dynamic transfers:
 
-1. Dograh may play the resolver wait message while calling your resolver.
-2. If the resolver returns `custom_message`, Dograh plays that message.
-3. If the resolver does not return `custom_message`, Dograh uses the configured pre-transfer message.
-4. Dograh starts the provider transfer.
+1. BotrixAI may play the resolver wait message while calling your resolver.
+2. If the resolver returns `custom_message`, BotrixAI plays that message.
+3. If the resolver does not return `custom_message`, BotrixAI uses the configured pre-transfer message.
+4. BotrixAI starts the provider transfer.
 
 Resolver `custom_message` overrides the configured pre-transfer message for that transfer attempt.
 
 ## Transfer timeout
 
-Transfer timeout is the maximum time Dograh waits for the destination to answer after the provider transfer starts.
+Transfer timeout is the maximum time BotrixAI waits for the destination to answer after the provider transfer starts.
 
 This timeout applies to both static and dynamic transfers.
 
-The resolver timeout is separate. It controls only how long Dograh waits for your HTTP resolver before dialing starts.
+The resolver timeout is separate. It controls only how long BotrixAI waits for your HTTP resolver before dialing starts.
 
 ## Destination formats
 
@@ -282,7 +282,7 @@ Also verify the resolver URL, authentication headers, credential, and timeout.
 Confirm the parameter is configured as either:
 
 - an LLM parameter, if the agent should extract it from the conversation
-- a preset parameter, if Dograh should inject it from context
+- a preset parameter, if BotrixAI should inject it from context
 
 For known context values, prefer preset parameters like `{{initial_context.account_id}}` or `{{gathered_context.billing_issue_type}}`.
 

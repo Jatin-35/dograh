@@ -1,12 +1,12 @@
 ---
 title: Setup
-description: Get a Dograh dev environment running and learn the daily commands.
+description: Get a BotrixAI dev environment running and learn the daily commands.
 ---
 
-Dograh is a Next.js UI (`ui/`), a FastAPI backend (`api/`), and a [Pipecat](https://github.com/pipecat-ai/pipecat)-based voice pipeline (`pipecat/`, a git submodule), backed by Postgres, Redis, and MinIO.
+BotrixAI is a Next.js UI (`ui/`), a FastAPI backend (`api/`), and a [Pipecat](https://github.com/pipecat-ai/pipecat)-based voice pipeline (`pipecat/`, a git submodule), backed by Postgres, Redis, and MinIO.
 
 <Tip>
-**Using Claude Code or Codex?** Install the [Dograh setup skill](https://github.com/dograh-hq/dograh-plugins) (`/plugin marketplace add dograh-hq/dograh-plugins`, then `/plugin install dograh@dograh`) and ask your agent to *"set up Dograh for development"* — it runs the steps below for you and verifies the stack is healthy.
+**Using Claude Code or Codex?** Install the [BotrixAI setup skill](https://github.com/dograh-hq/dograh-plugins) (`/plugin marketplace add dograh-hq/dograh-plugins`, then `/plugin install botrixai@botrixai`) and ask your agent to *"set up BotrixAI for development"* — it runs the steps below for you and verifies the stack is healthy.
 </Tip>
 
 ## Set up
@@ -87,7 +87,7 @@ All configurations load `api/.env` (test configs use `api/.env.test`) and set `j
 | `api/` | FastAPI backend — REST API, campaign orchestration, telephony, ARQ background workers |
 | `pipecat/` | Git submodule for the voice pipeline (STT → LLM → TTS) |
 | `docs/` | This documentation site, written in MDX, previewed with `mint dev` |
-| `sdk/` | Python/TypeScript SDKs for driving Dograh programmatically |
+| `sdk/` | Python/TypeScript SDKs for driving BotrixAI programmatically |
 | `scripts/` | Setup, deployment, and update scripts |
 | `deploy/` | nginx and coturn config templates used by remote deployment |
 
@@ -97,6 +97,6 @@ All configurations load `api/.env` (test configs use `api/.env.test`) and set `j
 2. Push to your fork (`origin`) and open a pull request against `dograh-hq/dograh:main`.
 3. A maintainer reviews and merges.
 
-Bug reports and feature ideas go through [GitHub Issues](https://github.com/dograh-hq/dograh/issues) and [Ideas](https://github.com/orgs/dograh-hq/discussions/categories/ideas). Issues tagged `good first issue` are a good place to start. For questions while you're working, use the [Dograh Community Slack](https://join.slack.com/t/dograh-community/shared_invite/zt-3zjb5vwvl-j7hRz3_F1SOn5cH~jm5f5g).
+Bug reports and feature ideas go through [GitHub Issues](https://github.com/dograh-hq/dograh/issues) and [Ideas](https://github.com/orgs/dograh-hq/discussions/categories/ideas). Issues tagged `good first issue` are a good place to start. For questions while you're working, use the [BotrixAI Community Slack](https://join.slack.com/t/dograh-community/shared_invite/zt-3zjb5vwvl-j7hRz3_F1SOn5cH~jm5f5g).
 
 Deploying your own build instead of contributing upstream? See [Deployments](/deployment/introduction) instead.

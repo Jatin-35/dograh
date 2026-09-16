@@ -1,9 +1,9 @@
 ---
 title: "Update"
-description: "Update your self-hosted Dograh stack to a newer image version"
+description: "Update your self-hosted BotrixAI stack to a newer image version"
 ---
 
-This guide covers updating a Dograh stack you've already deployed with [Docker](/deployment/docker) or a [custom domain](/deployment/custom-domain). You run commands from the same directory that contains your `docker-compose.yaml` (this is the `dograh/` directory if you used `setup_remote.sh`).
+This guide covers updating a BotrixAI stack you've already deployed with [Docker](/deployment/docker) or a [custom domain](/deployment/custom-domain). You run commands from the same directory that contains your `docker-compose.yaml` (this is the `dograh/` directory if you used `setup_remote.sh`).
 
 There are three update flows depending on how you deployed:
 
@@ -13,7 +13,7 @@ There are three update flows depending on how you deployed:
 
 ## Find an image version
 
-Dograh publishes two images — `dograh-api` and `dograh-ui` — to both container registries:
+BotrixAI publishes two images — `botrixai-api` and `botrixai-ui` — to both container registries:
 
 - **GitHub Container Registry** — [github.com/orgs/dograh-hq/packages](https://github.com/orgs/dograh-hq/packages)
 - **Docker Hub** — [hub.docker.com/u/dograhai](https://hub.docker.com/u/dograhai)
@@ -22,12 +22,12 @@ Each release is published under release tags. Note the formats differ between Gi
 
 | Where | Tag format | Example | When to use |
 |-------|-----------|---------|-------------|
-| GitHub release tag | `dograh-vX.Y.Z` | `dograh-v1.28.0` | Use when copying the version from a GitHub release |
+| GitHub release tag | `botrixai-vX.Y.Z` | `botrixai-v1.28.0` | Use when copying the version from a GitHub release |
 | Docker image tag (semver) | `X.Y.Z` | `1.28.0` | Stable, recommended for production |
 | Docker image tag (`latest`) | `latest` | `latest` | Tracks the most recent release tag |
 
 <Warning>
-Always update **`dograh-api`** and **`dograh-ui`** to the **same tag**. The two images are built from the same commit and the UI expects API responses in a matching shape — mixing versions will break the app. `update_remote.sh` handles this for you automatically.
+Always update **`botrixai-api`** and **`botrixai-ui`** to the **same tag**. The two images are built from the same commit and the UI expects API responses in a matching shape — mixing versions will break the app. `update_remote.sh` handles this for you automatically.
 </Warning>
 
 ## Remote, prebuilt mode (recommended)
@@ -37,18 +37,18 @@ Always update **`dograh-api`** and **`dograh-ui`** to the **same tag**. The two 
 - Asks for a target version (defaults to the latest release tag on GitHub).
 - Pulls `docker-compose.yaml` at that version and pins both `api` and `ui` images to it.
 - Refreshes the remote helper bundle (`remote_up.sh` plus shared templates/helpers).
-- Synchronizes the canonical remote keys in `.env` and validates the runtime config that `dograh-init` will render from it.
+- Synchronizes the canonical remote keys in `.env` and validates the runtime config that `botrixai-init` will render from it.
 - Backs up every file it changes with a `.bak.<timestamp>` suffix.
 
 From your install directory:
 
 ```bash
-cd dograh
+cd botrixai
 curl -o update_remote.sh https://raw.githubusercontent.com/dograh-hq/dograh/main/scripts/update_remote.sh
 bash update_remote.sh
 ```
 
-You'll be prompted for the target version, defaulting to the most recent release. Accepted forms: bare semver (`1.28.0`), v-prefixed (`v1.28.0`), the full GitHub tag (`dograh-v1.28.0`), or `main` to refresh deployment files from the default branch — the script normalizes them. Non-interactive callers can set it via environment variable and skip the confirmation prompt:
+You'll be prompted for the target version, defaulting to the most recent release. Accepted forms: bare semver (`1.28.0`), v-prefixed (`v1.28.0`), the full GitHub tag (`botrixai-v1.28.0`), or `main` to refresh deployment files from the default branch — the script normalizes them. Non-interactive callers can set it via environment variable and skip the confirmation prompt:
 
 ```bash
 TARGET_VERSION=1.28.0 DOGRAH_UPDATE_YES=1 bash update_remote.sh
@@ -104,7 +104,7 @@ curl http://localhost:8000/api/v1/health           # local
 `update_remote.sh` saves backups of every file it touched. To roll back, restore them and recreate the stack — the exact commands (including the timestamp it used) are printed at the end of the script's output. The generic form:
 
 ```bash
-cd dograh
+cd botrixai
 for f in docker-compose.yaml nginx.conf turnserver.conf .env remote_up.sh scripts/run_dograh_init.sh scripts/lib/setup_common.sh deploy/templates/nginx.remote.conf.template deploy/templates/turnserver.remote.conf.template; do
     [[ -f "$f.bak.<timestamp>" ]] && cp "$f.bak.<timestamp>" "$f"
 done
@@ -122,13 +122,13 @@ Rolling back across a database migration is not always safe — if the newer rel
 If you deployed in **build mode** (you'll have a `docker-compose.override.yaml` in your install directory), `update_remote.sh` deliberately refuses to run — you already have the full repo locally and update via git:
 
 ```bash
-cd dograh
+cd botrixai
 git fetch
 
 # Track latest main:
 git pull
-# Or pin to a specific release (git tag format is dograh-vX.Y.Z):
-git checkout dograh-v1.28.0
+# Or pin to a specific release (git tag format is botrixai-vX.Y.Z):
+git checkout botrixai-v1.28.0
 
 # Pick up pipecat and other submodule bumps
 git submodule update --init --recursive

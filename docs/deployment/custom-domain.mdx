@@ -1,9 +1,9 @@
 ---
 title: "Custom Domain"
-description: "Deploy Dograh AI with custom domain names and SSL certificates"
+description: "Deploy BotrixAI AI with custom domain names and SSL certificates"
 ---
 
-Deploy Dograh AI with your own custom domain name for a professional production setup. By now, you should be able to create and test a voice agent by following the previous guide to setup the platform on a remote server using [Docker](docker#option-2%3A-remote-server-deployment)
+Deploy BotrixAI AI with your own custom domain name for a professional production setup. By now, you should be able to create and test a voice agent by following the previous guide to setup the platform on a remote server using [Docker](docker#option-2%3A-remote-server-deployment)
 
 <Tip>
 **You don't need to own a domain just to remove the browser warning.** If your server has a public IP, the [remote setup](docker#option-2%3A-remote-server-deployment) already issues a free, auto-renewing Let's Encrypt certificate via [sslip.io](https://sslip.io) (e.g. `https://203-0-113-10.sslip.io`) — no DNS configuration required. Follow this Custom Domain guide only when you want your **own** domain name (e.g. `voice.yourcompany.com`).
@@ -11,7 +11,7 @@ Deploy Dograh AI with your own custom domain name for a professional production 
 
 ## What is Custom Domain Deployment?
 
-Custom domain deployment allows you to run Dograh AI with a personalized domain name (like `voice.yourcompany.com`) instead of using IP addresses. This setup includes:
+Custom domain deployment allows you to run BotrixAI AI with a personalized domain name (like `voice.yourcompany.com`) instead of using IP addresses. This setup includes:
 
 - **Custom Domain**: Access your application via a memorable domain name
 - **Automatic SSL**: Proper SSL certificates from Let's Encrypt or similar providers
@@ -24,7 +24,7 @@ Before starting, ensure you have:
 
 - A domain name you own (e.g., `yourcompany.com`)
 - Access to your domain's DNS settings (usually through your domain registrar)
-- Dograh AI already running on your server via the [remote deployment](docker#option-2%3A-remote-server-deployment) guide
+- BotrixAI AI already running on your server via the [remote deployment](docker#option-2%3A-remote-server-deployment) guide
 - Your server's public IP address
 
 ## Step 1: Configure DNS Records
@@ -80,9 +80,9 @@ It will automatically:
 - Install Certbot
 - Generate Let's Encrypt SSL certificates
 - Update the canonical public host/base URL settings in `.env`
-- Validate the runtime config that `dograh-init` will render from `.env`
+- Validate the runtime config that `botrixai-init` will render from `.env`
 - Configure automatic certificate renewal
-- Restart Dograh services through the validated startup wrapper
+- Restart BotrixAI services through the validated startup wrapper
 
 Once complete, your application will be available at `https://voice.yourcompany.com`.
 
@@ -115,10 +115,10 @@ sudo yum install certbot -y
 
 ### Point `.env` at your domain
 
-Update `.env` so the canonical remote settings use your domain — `dograh-init` reads these to render nginx's `server_name`. Replace `voice.yourcompany.com` with your actual domain throughout:
+Update `.env` so the canonical remote settings use your domain — `botrixai-init` reads these to render nginx's `server_name`. Replace `voice.yourcompany.com` with your actual domain throughout:
 
 ```bash
-cd dograh
+cd botrixai
 sed -i "s/^PUBLIC_HOST=.*/PUBLIC_HOST=voice.yourcompany.com/" .env
 sed -i "s|^PUBLIC_BASE_URL=.*|PUBLIC_BASE_URL=https://voice.yourcompany.com|" .env
 ```
@@ -183,7 +183,7 @@ Add the following content (replace paths as needed):
 
 ```bash
 #!/bin/bash
-# Copy renewed certificates to dograh certs directory
+# Copy renewed certificates to botrixai certs directory
 cp /etc/letsencrypt/live/voice.yourcompany.com/fullchain.pem /home/ubuntu/dograh/certs/local.crt
 cp /etc/letsencrypt/live/voice.yourcompany.com/privkey.pem /home/ubuntu/dograh/certs/local.key
 chmod 644 /home/ubuntu/dograh/certs/local.crt /home/ubuntu/dograh/certs/local.key

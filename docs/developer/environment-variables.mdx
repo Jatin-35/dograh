@@ -1,16 +1,16 @@
 ---
 title: "Environment Variables"
-description: "Complete reference for all environment variables used by the Dograh backend"
+description: "Complete reference for all environment variables used by the BotrixAI backend"
 ---
 
 Core environment variables are centralized in `api/constants.py`. Variables marked **Required** in the description must be explicitly set — the application will either fail to boot or behave insecurely without them.
 
 ## Deployment Modes
 
-Dograh supports two deployment modes, set via `DEPLOYMENT_MODE`:
+BotrixAI supports two deployment modes, set via `DEPLOYMENT_MODE`:
 
-- **OSS**: The default mode. Designed for self-hosted deployments using [Docker Compose](/deployment/docker) — the fastest way to get Dograh running. Uses local JWT authentication and MinIO for storage.
-- **SaaS**: Intended for customised deployments outside of Docker. Authentication and API key management are handled through Dograh Managed Platform Services (MPS), allowing greater flexibility in how the platform is hosted and integrated.
+- **OSS**: The default mode. Designed for self-hosted deployments using [Docker Compose](/deployment/docker) — the fastest way to get BotrixAI running. Uses local JWT authentication and MinIO for storage.
+- **SaaS**: Intended for customised deployments outside of Docker. Authentication and API key management are handled through BotrixAI Managed Platform Services (MPS), allowing greater flexibility in how the platform is hosted and integrated.
 
 The relevant required variables for each mode are noted in the descriptions below.
 
@@ -78,7 +78,7 @@ Set these when `AUTH_PROVIDER=stack` to delegate sign-in to [Stack Auth](https:/
 
 ## Storage
 
-Dograh uses **MinIO by default**, which is bundled with the self-hosted deployment and requires no external setup. Set `ENABLE_AWS_S3=true` to switch to AWS S3 — typically used for cloud or managed deployments where S3 is already part of the infrastructure.
+BotrixAI uses **MinIO by default**, which is bundled with the self-hosted deployment and requires no external setup. Set `ENABLE_AWS_S3=true` to switch to AWS S3 — typically used for cloud or managed deployments where S3 is already part of the infrastructure.
 
 ### MinIO (OSS default)
 
@@ -122,7 +122,7 @@ AWS_SECRET_ACCESS_KEY=...
 ```
 
 <Note>
-Presigned URLs point at `S3_ENDPOINT_URL`, so that host must be reachable from the browser. Because browsers fetch transcripts cross-origin, the bucket also needs a CORS rule allowing your app's origin for `GET`/`HEAD` — configure this on the storage server (e.g. via `PutBucketCors`), not in Dograh.
+Presigned URLs point at `S3_ENDPOINT_URL`, so that host must be reachable from the browser. Because browsers fetch transcripts cross-origin, the bucket also needs a CORS rule allowing your app's origin for `GET`/`HEAD` — configure this on the storage server (e.g. via `PutBucketCors`), not in BotrixAI.
 </Note>
 
 ---
@@ -176,7 +176,7 @@ Tracing activates automatically as soon as credentials are available — either 
 
 ## Campaigns
 
-Controls concurrency for [Campaigns](/core-concepts/campaigns), Dograh's bulk outbound calling feature.
+Controls concurrency for [Campaigns](/core-concepts/campaigns), BotrixAI's bulk outbound calling feature.
 
 | Variable | Default | Description |
 |---|---|---|

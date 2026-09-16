@@ -3,7 +3,7 @@ title: "API Trigger"
 description: "Trigger outbound calls from external systems like n8n, Zapier, or your own backend"
 ---
 
-The API Trigger node lets you initiate outbound calls to your voice agent programmatically. When you add an API Trigger node to your workflow, Dograh generates a unique endpoint URL that external systems can call to start a conversation.
+The API Trigger node lets you initiate outbound calls to your voice agent programmatically. When you add an API Trigger node to your workflow, BotrixAI generates a unique endpoint URL that external systems can call to start a conversation.
 
 This is useful when you want to trigger calls from your own backend, a CRM, or workflow tools like n8n and Zapier.
 
@@ -14,7 +14,7 @@ This is useful when you want to trigger calls from your own backend, a CRM, or w
 
 ## Finding your trigger URL
 
-When you add an API Trigger node to your workflow, Dograh assigns it a unique UUID. The trigger node exposes two URLs that share this UUID:
+When you add an API Trigger node to your workflow, BotrixAI assigns it a unique UUID. The trigger node exposes two URLs that share this UUID:
 
 - A **production URL** for the published workflow
 - A **test URL** for the latest draft
@@ -22,11 +22,11 @@ When you add an API Trigger node to your workflow, Dograh assigns it a unique UU
 You can copy either URL from the trigger node's settings dialog.
 
 ```
-POST https://your-dograh-instance/api/v1/public/agent/{uuid}        # Production
-POST https://your-dograh-instance/api/v1/public/agent/test/{uuid}   # Test
+POST https://your-botrixai-instance/api/v1/public/agent/{uuid}        # Production
+POST https://your-botrixai-instance/api/v1/public/agent/test/{uuid}   # Test
 ```
 
-If you are using the hosted version, replace `your-dograh-instance` with `api.dograh.com`.
+If you are using the hosted version, replace `your-botrixai-instance` with `api.dograh.com`.
 
 ### Test vs production
 
@@ -53,7 +53,7 @@ Authenticate by passing your API key in the `X-API-Key` header. The request body
 
 <CodeGroup>
 ```bash Production URL
-curl -X POST https://your-dograh-instance/api/v1/public/agent/{uuid} \
+curl -X POST https://your-botrixai-instance/api/v1/public/agent/{uuid} \
   -H "Content-Type: application/json" \
   -H "X-API-Key: dg_your_api_key" \
   -d '{
@@ -66,7 +66,7 @@ curl -X POST https://your-dograh-instance/api/v1/public/agent/{uuid} \
 ```
 
 ```bash Test URL
-curl -X POST https://your-dograh-instance/api/v1/public/agent/test/{uuid} \
+curl -X POST https://your-botrixai-instance/api/v1/public/agent/test/{uuid} \
   -H "Content-Type: application/json" \
   -H "X-API-Key: dg_your_api_key" \
   -d '{
