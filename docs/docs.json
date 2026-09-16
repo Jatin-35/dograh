@@ -337,5 +337,11 @@
       "source": "/contribution/fork-workflow",
       "destination": "/contribution/reference"
     }
-  ]
+  ],
+  "footer": {
+    "socials": {
+      "linkedin": "https://www.linkedin.com/company/botrix-ai/",
+      "website": "https://www.botrixai.com/"
+    }
+  }
 }

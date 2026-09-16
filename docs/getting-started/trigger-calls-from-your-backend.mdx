@@ -46,7 +46,7 @@ If you change the agent and want the production URL to reflect it, publish first
 Trigger the call from Postman, or wherever your backend lives. In the body, send `phone_number` and `initial_context`:
 
 ```bash
-curl -X POST https://api.dograh.com/api/v1/public/agent/test/{uuid} \
+curl -X POST https://voice-app.botrixai.com/api/v1/public/agent/test/{uuid} \
   -H "Content-Type: application/json" \
   -H "X-API-Key: dg_your_api_key" \
   -d '{

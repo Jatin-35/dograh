@@ -15,7 +15,7 @@ There are three update flows depending on how you deployed:
 
 BotrixAI publishes two images — `botrixai-api` and `botrixai-ui` — to both container registries:
 
-- **GitHub Container Registry** — [github.com/orgs/dograh-hq/packages](https://github.com/orgs/dograh-hq/packages)
+- **GitHub Container Registry** — [github.com/Jatin-35?tab=packages](https://github.com/Jatin-35?tab=packages)
 - **Docker Hub** — [hub.docker.com/u/dograhai](https://hub.docker.com/u/dograhai)
 
 Each release is published under release tags. Note the formats differ between GitHub releases and Docker image tags — `update_remote.sh` understands both and normalizes for you.
@@ -44,7 +44,7 @@ From your install directory:
 
 ```bash
 cd botrixai
-curl -o update_remote.sh https://raw.githubusercontent.com/dograh-hq/dograh/main/scripts/update_remote.sh
+curl -o update_remote.sh https://raw.githubusercontent.com/Jatin-35/dograh/main/scripts/update_remote.sh
 bash update_remote.sh
 ```
 
@@ -70,13 +70,13 @@ For local Docker installs (the [Quick Start](/deployment/docker#quick-start) flo
 
 <CodeGroup>
 ```bash macOS/Linux
-curl -o docker-compose.yaml https://raw.githubusercontent.com/dograh-hq/dograh/main/docker-compose.yaml
-curl -o start_docker.sh https://raw.githubusercontent.com/dograh-hq/dograh/main/scripts/start_docker.sh && chmod +x start_docker.sh
+curl -o docker-compose.yaml https://raw.githubusercontent.com/Jatin-35/dograh/main/docker-compose.yaml
+curl -o start_docker.sh https://raw.githubusercontent.com/Jatin-35/dograh/main/scripts/start_docker.sh && chmod +x start_docker.sh
 docker compose down
 ./start_docker.sh
 ```
 ```powershell Windows
-Invoke-WebRequest -OutFile docker-compose.yaml https://raw.githubusercontent.com/dograh-hq/dograh/main/docker-compose.yaml; Invoke-WebRequest -OutFile start_docker.ps1 https://raw.githubusercontent.com/dograh-hq/dograh/main/scripts/start_docker.ps1; docker compose down; .\start_docker.ps1
+Invoke-WebRequest -OutFile docker-compose.yaml https://raw.githubusercontent.com/Jatin-35/dograh/main/docker-compose.yaml; Invoke-WebRequest -OutFile start_docker.ps1 https://raw.githubusercontent.com/Jatin-35/dograh/main/scripts/start_docker.ps1; docker compose down; .\start_docker.ps1
 ```
 </CodeGroup>
 
@@ -114,7 +114,7 @@ done
 Your Postgres data volume persists across `down`/`up` cycles, so agents and call history are preserved.
 
 <Warning>
-Rolling back across a database migration is not always safe — if the newer release ran a schema migration, downgrading may leave the DB in a state the older API doesn't understand. If in doubt, [open an issue](https://github.com/dograh-hq/dograh/issues) before rolling back.
+Rolling back across a database migration is not always safe — if the newer release ran a schema migration, downgrading may leave the DB in a state the older API doesn't understand. If in doubt, [open an issue](https://www.botrixai.com/contact) before rolling back.
 </Warning>
 
 ## Updating a source build

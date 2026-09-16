@@ -9,7 +9,7 @@ Everything on this page is optional reading — [Setup](/contribution/setup) cov
 
 Run everything directly on your host instead of inside the devcontainer. You need Git, Node.js 24, Python 3.13, and Docker (for Postgres, Redis, and MinIO).
 
-1. Run the contributor bootstrap. It configures `origin` as your fork and `upstream` as `dograh-hq/dograh`, initializes the pipecat submodule, creates the Python venv, and copies the `.env` templates:
+1. Run the contributor bootstrap. It configures `origin` as your fork and `upstream` as `Jatin-35/dograh`, initializes the pipecat submodule, creates the Python venv, and copies the `.env` templates:
 
 <CodeGroup>
 ```bash macOS/Linux
@@ -73,7 +73,7 @@ cd ui && npm run dev
 
 ## Devcontainer internals
 
-The checked-in `.devcontainer/` follows the Dev Containers specification, so it should also work in Cursor, JetBrains IDEs, and other compatible editors. Only the VS Code path is actively tested — if something breaks elsewhere, please open a [GitHub issue](https://github.com/dograh-hq/dograh/issues).
+The checked-in `.devcontainer/` follows the Dev Containers specification, so it should also work in Cursor, JetBrains IDEs, and other compatible editors. Only the VS Code path is actively tested — if something breaks elsewhere, please open a [GitHub issue](https://www.botrixai.com/contact).
 
 ### What the bootstrap does
 
@@ -156,9 +156,9 @@ devcontainer exec --workspace-folder . bash -lc 'cd ui && npm run dev -- --hostn
 The contributor bootstrap (`scripts/setup_fork.sh`) configures two remotes:
 
 - `origin`: your fork, where you push
-- `upstream`: `dograh-hq/dograh`, where new commits land
+- `upstream`: `Jatin-35/dograh`, where new commits land
 
-If you cloned `dograh-hq/dograh` directly instead of your fork, run it once (inside the devcontainer is fine):
+If you cloned `Jatin-35/dograh` directly instead of your fork, run it once (inside the devcontainer is fine):
 
 ```bash
 bash scripts/setup_fork.sh
@@ -177,9 +177,9 @@ Check your remotes any time with `git remote -v`. You should see:
 
 ```bash
 origin    https://github.com/<YOUR_HANDLE>/dograh.git (fetch/push)
-upstream  https://github.com/dograh-hq/dograh.git    (fetch/push)
+upstream  https://github.com/Jatin-35/dograh.git    (fetch/push)
 ```
 
 <Note>
-Always push feature branches to **`origin`** (your fork), then open a pull request against `dograh-hq/dograh:main`. Never push directly to `upstream`.
+Always push feature branches to **`origin`** (your fork), then open a pull request against `Jatin-35/dograh:main`. Never push directly to `upstream`.
 </Note>

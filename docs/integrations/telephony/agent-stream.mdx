@@ -16,17 +16,17 @@ This is useful when:
   Agent Stream currently supports the **Cloudonix** provider only. Other providers
   return `NotImplementedError` until a per-provider implementation lands. If you
   need Twilio, Plivo, Telnyx, Vonage, ARI, or another provider, please open a
-  request on [GitHub Discussions](https://github.com/dograh-hq/dograh/discussions)
+  request on [GitHub Discussions](https://www.botrixai.com/contact)
   with your use case.
 </Warning>
 
 ## Endpoint
 
 ```
-wss://api.dograh.com/api/v1/agent-stream/{provider}/{agent_uuid}
+wss://voice-app.botrixai.com/api/v1/agent-stream/{provider}/{agent_uuid}
 ```
 
-`{provider}` is the registered provider name, currently `cloudonix`. `{agent_uuid}` is the agent's stable UUID (see [Get the Agent UUID](#get-the-agent-uuid) below). On self-hosted deployments, replace `api.dograh.com` with your backend host.
+`{provider}` is the registered provider name, currently `cloudonix`. `{agent_uuid}` is the agent's stable UUID (see [Get the Agent UUID](#get-the-agent-uuid) below). On self-hosted deployments, replace `voice-app.botrixai.com` with your backend host.
 
 ## Prerequisites
 
@@ -51,7 +51,7 @@ To find and copy it in the UI, see [Agent UUID](/configurations/agent-uuid).
 ### Cloudonix example
 
 ```
-wss://api.dograh.com/api/v1/agent-stream/cloudonix/{agent_uuid}
+wss://voice-app.botrixai.com/api/v1/agent-stream/cloudonix/{agent_uuid}
 ```
 
 Use this URL inside the CXML `<Stream>` your Cloudonix Voice Application returns when the call needs to be bridged to the BotrixAI agent:
@@ -60,7 +60,7 @@ Use this URL inside the CXML `<Stream>` your Cloudonix Voice Application returns
 <?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Connect>
-    <Stream url="wss://api.dograh.com/api/v1/agent-stream/cloudonix/{agent_uuid}"/>
+    <Stream url="wss://voice-app.botrixai.com/api/v1/agent-stream/cloudonix/{agent_uuid}"/>
   </Connect>
   <Pause length="40"/>
 </Response>
