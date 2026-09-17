@@ -1125,7 +1125,11 @@ def create_realtime_llm_service(user_config, audio_config: "AudioConfig"):
         )
     elif provider == ServiceProviders.GOOGLE_REALTIME.value:
         from api.services.pipecat.realtime.gemini_live import (
+            COMPRESSION_TRIGGER_TOKENS,
             DograhGeminiLiveLLMService,
+        )
+        from pipecat.services.google.gemini_live.llm import (
+            ContextWindowCompressionParams,
         )
 
         # Gemini Live enables input/output audio transcription by default
@@ -1134,6 +1138,10 @@ def create_realtime_llm_service(user_config, audio_config: "AudioConfig"):
             "model": model,
             "voice": voice or "Puck",
         }
+        if COMPRESSION_TRIGGER_TOKENS > 0:
+            settings_kwargs["context_window_compression"] = ContextWindowCompressionParams(
+                enabled=True, trigger_tokens=COMPRESSION_TRIGGER_TOKENS
+            )
         if language:
             settings_kwargs["language"] = language
         return DograhGeminiLiveLLMService(
@@ -1141,8 +1149,14 @@ def create_realtime_llm_service(user_config, audio_config: "AudioConfig"):
             settings=DograhGeminiLiveLLMService.Settings(**settings_kwargs),
         )
     elif provider == ServiceProviders.GOOGLE_VERTEX_REALTIME.value:
+        from api.services.pipecat.realtime.gemini_live import (
+            COMPRESSION_TRIGGER_TOKENS,
+        )
         from api.services.pipecat.realtime.gemini_live_vertex import (
             DograhGeminiLiveVertexLLMService,
+        )
+        from pipecat.services.google.gemini_live.llm import (
+            ContextWindowCompressionParams,
         )
 
         project_id = getattr(realtime_config, "project_id", None)
@@ -1153,6 +1167,10 @@ def create_realtime_llm_service(user_config, audio_config: "AudioConfig"):
             "model": model,
             "voice": voice or "Charon",
         }
+        if COMPRESSION_TRIGGER_TOKENS > 0:
+            settings_kwargs["context_window_compression"] = ContextWindowCompressionParams(
+                enabled=True, trigger_tokens=COMPRESSION_TRIGGER_TOKENS
+            )
         if language:
             settings_kwargs["language"] = language
         return DograhGeminiLiveVertexLLMService(
