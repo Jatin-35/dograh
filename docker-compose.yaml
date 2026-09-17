@@ -268,6 +268,17 @@ services:
       WF_GEN_AZURE_OPENAI_DEPLOYMENT: "${WF_GEN_AZURE_OPENAI_DEPLOYMENT:-}"
       WF_GEN_AZURE_OPENAI_API_VERSION: "${WF_GEN_AZURE_OPENAI_API_VERSION:-}"
 
+      # Gemini Live cost controls. Gemini bills the whole accumulated context
+      # every model turn and holds spoken history as audio, so a long call pays
+      # repeatedly for an expensive form of its own transcript. Refreshing the
+      # session once the context passes the trigger reseeds it from text
+      # instead, at the cost of a ~1.3s reconnect; 5000 suits 3-5 minute calls,
+      # and 0 switches it off. The compression trigger is server-side sliding
+      # window: it rarely fires while compaction holds the context down, but it
+      # lifts Gemini's 15-minute cap on uncompressed audio sessions.
+      GEMINI_LIVE_CONTEXT_COMPACTION_TRIGGER_TOKENS: "${GEMINI_LIVE_CONTEXT_COMPACTION_TRIGGER_TOKENS:-0}"
+      GEMINI_LIVE_COMPRESSION_TRIGGER_TOKENS: "${GEMINI_LIVE_COMPRESSION_TRIGGER_TOKENS:-16000}"
+
       # Code Editor. The API does not execute anything itself — it calls the
       # handlers container, which owns the sandbox. This URL must be the
       # service name on app-network: the code's own fallback is localhost:8080,
