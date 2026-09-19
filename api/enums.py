@@ -52,6 +52,7 @@ class WorkflowRunMode(Enum):
     VOICELINK = "voicelink"
     CLOUDONIX = "cloudonix"
     TELNYX = "telnyx"
+    TATA_SMARTFLO = "tata_smartflo"
     WEBRTC = "webrtc"
     SMALLWEBRTC = "smallwebrtc"
     TEXTCHAT = "textchat"

@@ -10,7 +10,7 @@ providers/<name>/
 ├── config.py       # Required. Pydantic Request + Response, both with `provider: Literal["<name>"]`
 ├── provider.py     # Required. TelephonyProvider subclass
 ├── transport.py    # Required. async create_transport(...) -> FastAPIWebsocketTransport
-├── serializers.py  # Optional but conventional. Re-export from pipecat
+├── serializers.py  # Optional but conventional. Re-export from pipecat, or implement (see below)
 ├── routes.py       # Optional. APIRouter mounted lazily under /api/v1/telephony
 └── strategies.py   # Optional. Transfer/Hangup strategies for the frame serializer
 ```
@@ -86,6 +86,16 @@ Never read the org's default config from `transport.py`. The workflow run carrie
 ### `_config_loader` is a pure dict reshape
 
 It runs over `TelephonyConfigurationModel.credentials` (the JSONB column). Don't do I/O in it. Don't pull `from_numbers` from credentials — the factory attaches active phone numbers from `telephony_phone_numbers` after the loader runs, by joining and normalizing addresses.
+
+### Re-export a serializer only when pipecat has *yours*
+
+`pipecat.serializers` ships one per provider it supports. If yours is there, re-export it — that is the common case and `serializers.py` stays three lines.
+
+If it is **not** there, write one. Do not borrow the serializer of a provider whose wire format merely resembles yours: a similar envelope says nothing about call control, credentials or identifiers, and the borrowed class will validate against *its* provider's requirements.
+
+SmartFlo is the worked example. Its media protocol is Twilio Media Streams field for field, so `TwilioFrameSerializer` looked like a free win — but it raises `ValueError` unless given an `account_sid` and `auth_token`, which SmartFlo does not have (it mints a short-lived bearer from email/password). Every SmartFlo call would have died at transport construction. `tata_smartflo/serializers.py` is now a full `FrameSerializer` with SmartFlo's own identifiers (`ref_id`/`call_id`, not `call_sid`) and a hangup that goes through `strategies.py`, because SmartFlo has no REST hangup of Twilio's shape.
+
+Keeping the wire keys camelCase (`streamSid`, `media.payload`) is not a dependency — that is what the provider puts on the socket.
 
 ### Sensitive fields
 

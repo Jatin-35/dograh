@@ -24,6 +24,10 @@ from api.services.telephony.providers.plivo.config import (
     PlivoConfigurationRequest,
     PlivoConfigurationResponse,
 )
+from api.services.telephony.providers.tata_smartflo.config import (
+    TataSmartfloConfigurationRequest,
+    TataSmartfloConfigurationResponse,
+)
 from api.services.telephony.providers.telnyx.config import (
     TelnyxConfigurationRequest,
     TelnyxConfigurationResponse,
@@ -53,6 +57,7 @@ TelephonyConfigRequest = Annotated[
         ARIConfigurationRequest,
         CloudonixConfigurationRequest,
         PlivoConfigurationRequest,
+        TataSmartfloConfigurationRequest,
         TelnyxConfigurationRequest,
         TwilioConfigurationRequest,
         VobizConfigurationRequest,
@@ -78,6 +83,7 @@ class TelephonyConfigurationResponse(BaseModel):
     voicelink: Optional[VoiceLinkConfigurationResponse] = None
     cloudonix: Optional[CloudonixConfigurationResponse] = None
     ari: Optional[ARIConfigurationResponse] = None
+    tata_smartflo: Optional[TataSmartfloConfigurationResponse] = None
     telnyx: Optional[TelnyxConfigurationResponse] = None
 
 
@@ -154,6 +160,8 @@ __all__ = [
     "VobizConfigurationResponse",
     "VonageConfigurationRequest",
     "VonageConfigurationResponse",
+    "TataSmartfloConfigurationRequest",
+    "TataSmartfloConfigurationResponse",
     "VoiceLinkConfigurationRequest",
     "VoiceLinkConfigurationResponse",
 ]
