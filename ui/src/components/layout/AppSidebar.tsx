@@ -128,6 +128,7 @@ const NAV_SECTIONS: SidebarNavSection[] = [
         title: "Code Editor",
         url: "/code-editor",
         icon: Code2,
+        restrictedHidden: true,
       },
       {
         title: "Files",
