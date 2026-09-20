@@ -34,3 +34,5 @@ docs/skills/
 # Claude Code local state. Holds settings plus agent worktrees — tens of
 # thousands of files, none of them ours to track.
 .claude/
+
+Jatin-Docs
