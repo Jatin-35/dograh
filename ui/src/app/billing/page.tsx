@@ -29,6 +29,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
+import { WalletLedgerSection } from "@/components/wallet/WalletLedgerSection";
 import { useAppConfig } from "@/context/AppConfigContext";
 import { useAuth } from "@/lib/auth";
 
@@ -267,6 +268,8 @@ export default function BillingPage() {
                     )}
                 </div>
             </div>
+
+            <WalletLedgerSection />
 
             {isOssMode && (
                 <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/50 dark:bg-amber-950/30">

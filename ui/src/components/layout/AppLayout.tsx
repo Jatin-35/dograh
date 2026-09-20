@@ -8,6 +8,7 @@ import React, { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { SidebarInset, SidebarProvider, useSidebar } from "@/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { WalletHeaderBadge } from "@/components/wallet/WalletHeaderBadge";
 import { useAppConfig } from "@/context/AppConfigContext";
 import { LeadFormsProvider } from "@/context/LeadFormsContext";
 
@@ -68,6 +69,7 @@ function AppHeader() {
         <Link href="/" className="text-lg font-bold md:hidden">BotrixAI</Link>
       </div>
       <div className="flex items-center gap-3">
+        <WalletHeaderBadge />
         <ComingSoonGhostLink
           label="Join WhatsApp"
           icon={

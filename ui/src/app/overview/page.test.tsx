@@ -25,6 +25,9 @@ vi.mock('@/components/call-dashboard/CallDashboard', () => ({
         <div data-testid="call-dashboard" data-test-calls-switch={String(Boolean(showTestCallsSwitch))} />
     ),
 }));
+vi.mock('@/components/wallet/WalletBalanceCard', () => ({
+    WalletBalanceCard: () => <div data-testid="wallet-card" />,
+}));
 
 import OverviewPage from './page';
 
@@ -44,10 +47,11 @@ describe('OverviewPage', () => {
     describe('on the client domain', () => {
         beforeEach(() => vi.stubEnv('NEXT_PUBLIC_CLIENT_URL', ON_CLIENT_DOMAIN));
 
-        it('shows the dashboard and no admin tools', async () => {
+        it('shows the dashboard and the wallet, and no admin tools', async () => {
             render(<OverviewPage />);
 
             expect(await screen.findByTestId('call-dashboard')).toBeTruthy();
+            expect(screen.getByTestId('wallet-card')).toBeTruthy();
             expect(screen.getByText('Welcome, Priya!')).toBeTruthy();
             expect(screen.getByText('Here is how your voice agents are performing.')).toBeTruthy();
             // Test calls are an admin concern: a client's dashboard never offers the switch.
@@ -66,7 +70,7 @@ describe('OverviewPage', () => {
     });
 
     describe('on the admin domain', () => {
-        it('shows the same dashboard, with quick actions above it', async () => {
+        it('shows the same dashboard, with quick actions above it and no wallet', async () => {
             render(<OverviewPage />);
 
             expect(await screen.findByTestId('call-dashboard')).toBeTruthy();
@@ -76,6 +80,7 @@ describe('OverviewPage', () => {
             expect(screen.getByRole('link', { name: 'Configure models' }).getAttribute('href')).toBe(
                 '/model-configurations',
             );
+            expect(screen.queryByTestId('wallet-card')).toBeNull();
         });
 
         it('says the data is for the organization the viewer has selected', async () => {

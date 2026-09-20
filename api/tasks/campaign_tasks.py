@@ -4,6 +4,10 @@ from typing import Dict
 from loguru import logger
 
 from api.db import db_client
+from api.services.campaign.campaign_billing import (
+    reconcile_campaign_wallet,
+    reserve_campaign_wallet,
+)
 from api.services.campaign.campaign_call_dispatcher import campaign_call_dispatcher
 from api.services.campaign.campaign_event_publisher import (
     get_campaign_event_publisher,
@@ -52,8 +56,14 @@ async def sync_campaign_source(ctx: Dict, campaign_id: int) -> None:
                 source_sync_status="completed",
                 source_last_synced_at=datetime.now(UTC),
             )
+            await reconcile_campaign_wallet(campaign_id)
             logger.info(f"Campaign {campaign_id} completed with no data to process")
             return
+
+        # Reserve this campaign's estimated cost before dispatching any calls.
+        # Raises ValueError on insufficient balance, caught below and surfaced
+        # as a sync failure.
+        await reserve_campaign_wallet(campaign, total_rows=rows_synced)
 
         # Update campaign state to running
         await db_client.update_campaign(
@@ -86,6 +96,7 @@ async def sync_campaign_source(ctx: Dict, campaign_id: int) -> None:
             source_sync_status="failed",
             source_sync_error=str(e),
         )
+        await reconcile_campaign_wallet(campaign_id)
         await db_client.append_campaign_log(
             campaign_id=campaign_id,
             level="error",
@@ -156,6 +167,7 @@ async def process_campaign_batch(
 
         # Update campaign state to failed
         await db_client.update_campaign(campaign_id=campaign_id, state="failed")
+        await reconcile_campaign_wallet(campaign_id)
         await db_client.append_campaign_log(
             campaign_id=campaign_id,
             level="error",
@@ -210,6 +222,7 @@ async def process_campaign_batch(
         )
 
         await db_client.update_campaign(campaign_id=campaign_id, state="failed")
+        await reconcile_campaign_wallet(campaign_id)
         await db_client.append_campaign_log(
             campaign_id=campaign_id,
             level="error",
@@ -241,6 +254,7 @@ async def process_campaign_batch(
 
         # Update campaign state to failed
         await db_client.update_campaign(campaign_id=campaign_id, state="failed")
+        await reconcile_campaign_wallet(campaign_id)
         await db_client.append_campaign_log(
             campaign_id=campaign_id,
             level="error",

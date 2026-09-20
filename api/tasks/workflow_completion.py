@@ -3,6 +3,7 @@ from pipecat.utils.run_context import set_current_run_id
 
 from api.services.workflow_run_billing import (
     report_completed_workflow_run_platform_usage,
+    report_completed_workflow_run_wallet_usage,
 )
 from api.tasks.run_integrations import run_integrations_post_workflow_run
 
@@ -38,6 +39,14 @@ async def process_workflow_completion(
     except Exception as e:
         logger.error(
             f"Error reporting platform usage for workflow {workflow_run_id}: {e}"
+        )
+
+    # Self-hosted wallet accounting — independent of MPS.
+    try:
+        await report_completed_workflow_run_wallet_usage(workflow_run_id)
+    except Exception as e:
+        logger.error(
+            f"Error recording wallet usage for workflow {workflow_run_id}: {e}"
         )
 
     logger.info(f"Completed workflow completion processing for run {workflow_run_id}")

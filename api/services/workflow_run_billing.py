@@ -12,6 +12,7 @@ from loguru import logger
 
 from api.constants import DEPLOYMENT_MODE
 from api.db import db_client
+from api.enums import WorkflowBillingMode
 from api.services.managed_model_services import get_mps_correlation_id
 from api.services.mps_service_key_client import mps_service_key_client
 
@@ -119,3 +120,86 @@ async def report_completed_workflow_run_platform_usage(workflow_run_id: int) -> 
         return
 
     await report_workflow_run_platform_usage(workflow_run)
+
+
+async def report_workflow_run_wallet_usage(workflow_run) -> None:
+    """Debit the self-hosted wallet for a completed workflow run, at the
+    calling agent's own rate (per-minute or flat per-call — whichever
+    billing_mode the agent is set to).
+
+    Independent of DEPLOYMENT_MODE/MPS — the wallet is Dograh's own prepaid
+    accounting, not MPS's. No-ops if the agent has no rate set for its
+    active billing_mode (wallet billing not configured for this agent), the
+    org's wallet is off, or there's no billable duration. Campaign calls
+    are ledger-only (cost already reserved at launch); normal calls debit
+    wallet_balance directly.
+    """
+    if not getattr(workflow_run, "is_completed", False):
+        return
+
+    organization_id = _workflow_run_organization_id(workflow_run)
+    if organization_id is None:
+        return
+
+    duration_seconds = _duration_seconds_from_usage_info(workflow_run)
+    if duration_seconds is None:
+        return
+
+    workflow = getattr(workflow_run, "workflow", None)
+    billing_mode = getattr(workflow, "billing_mode", WorkflowBillingMode.PER_MINUTE.value)
+    price_per_minute = getattr(workflow, "price_per_minute", None)
+    price_per_call = getattr(workflow, "price_per_call", None)
+    pulse_seconds = getattr(workflow, "pulse_seconds", 0) or 0
+    if billing_mode == WorkflowBillingMode.PER_CALL.value:
+        if price_per_call is None:
+            return
+    elif price_per_minute is None:
+        return
+
+    campaign_id = getattr(workflow_run, "campaign_id", None)
+
+    try:
+        org = await db_client.get_organization_by_id(organization_id)
+        if org is None or not org.wallet_enabled:
+            return
+
+        if campaign_id is not None:
+            await db_client.wallet_record_campaign_call_cost(
+                organization_id=organization_id,
+                campaign_id=campaign_id,
+                workflow_run_id=workflow_run.id,
+                duration_seconds=duration_seconds,
+                billing_mode=billing_mode,
+                price_per_minute=price_per_minute,
+                price_per_call=price_per_call,
+                pulse_seconds=pulse_seconds,
+            )
+        else:
+            await db_client.wallet_debit_for_call(
+                organization_id=organization_id,
+                workflow_run_id=workflow_run.id,
+                duration_seconds=duration_seconds,
+                billing_mode=billing_mode,
+                price_per_minute=price_per_minute,
+                price_per_call=price_per_call,
+                pulse_seconds=pulse_seconds,
+            )
+    except Exception as e:
+        logger.error(
+            "Failed to record wallet usage for workflow run {}: {}",
+            workflow_run.id,
+            e,
+        )
+
+
+async def report_completed_workflow_run_wallet_usage(workflow_run_id: int) -> None:
+    """Load a completed workflow run and record wallet usage."""
+    workflow_run = await db_client.get_workflow_run_by_id(workflow_run_id)
+    if not workflow_run:
+        logger.warning(
+            "Skipping wallet usage report: workflow run {} not found",
+            workflow_run_id,
+        )
+        return
+
+    await report_workflow_run_wallet_usage(workflow_run)

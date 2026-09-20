@@ -31,6 +31,7 @@ from api.services.campaign.campaign_event_protocol import (
     SyncCompletedEvent,
     parse_campaign_event,
 )
+from api.services.campaign.campaign_billing import reconcile_campaign_wallet
 from api.services.campaign.campaign_event_publisher import CampaignEventPublisher
 from api.services.campaign.circuit_breaker import circuit_breaker
 from api.tasks.arq import enqueue_job
@@ -615,6 +616,7 @@ class CampaignOrchestrator:
                 state="completed",
                 completed_at=datetime.now(UTC),
             )
+            await reconcile_campaign_wallet(campaign_id)
 
             logger.info(f"campaign_id: {campaign_id} - Campaign marked as completed")
 

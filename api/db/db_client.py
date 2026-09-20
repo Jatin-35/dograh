@@ -15,6 +15,7 @@ from api.db.telephony_configuration_client import TelephonyConfigurationClient
 from api.db.telephony_phone_number_client import TelephonyPhoneNumberClient
 from api.db.tool_client import ToolClient
 from api.db.user_client import UserClient
+from api.db.wallet_client import WalletClient
 from api.db.webhook_credential_client import WebhookCredentialClient
 from api.db.webhook_delivery_client import WebhookDeliveryClient
 from api.db.workflow_client import WorkflowClient
@@ -27,7 +28,6 @@ from api.db.workflow_template_client import WorkflowTemplateClient
 
 class DBClient(
     WorkflowClient,
-    WorkflowGenChatSessionClient,
     WorkflowRunClient,
     WorkflowRunTextSessionClient,
     UserClient,
@@ -51,6 +51,8 @@ class DBClient(
     TelephonyConfigurationClient,
     TelephonyPhoneNumberClient,
     FolderClient,
+    WalletClient,
+    WorkflowGenChatSessionClient,
 ):
     """
     Unified database client that combines all specialized database operations.

@@ -5640,6 +5640,26 @@ export type SuperuserWorkflowResponse = {
      * Organization Primary Contact Email
      */
     organization_primary_contact_email: string | null;
+    /**
+     * Avg Call Duration Minutes
+     */
+    avg_call_duration_minutes: string | null;
+    /**
+     * Price Per Minute
+     */
+    price_per_minute: string | null;
+    /**
+     * Billing Mode
+     */
+    billing_mode: string;
+    /**
+     * Price Per Call
+     */
+    price_per_call: string | null;
+    /**
+     * Pulse Seconds
+     */
+    pulse_seconds: number;
 };
 
 /**
@@ -6635,6 +6655,50 @@ export type UpdateToolRequest = {
 };
 
 /**
+ * UpdateWalletSettingsRequest
+ */
+export type UpdateWalletSettingsRequest = {
+    /**
+     * Wallet Currency
+     */
+    wallet_currency?: string | null;
+    /**
+     * Credit Limit
+     */
+    credit_limit?: number | string | null;
+    /**
+     * Wallet Enabled
+     */
+    wallet_enabled?: boolean | null;
+};
+
+/**
+ * UpdateWorkflowBillingSettingsRequest
+ */
+export type UpdateWorkflowBillingSettingsRequest = {
+    /**
+     * Avg Call Duration Minutes
+     */
+    avg_call_duration_minutes?: number | string | null;
+    /**
+     * Price Per Minute
+     */
+    price_per_minute?: number | string | null;
+    /**
+     * Billing Mode
+     */
+    billing_mode?: string | null;
+    /**
+     * Price Per Call
+     */
+    price_per_call?: number | string | null;
+    /**
+     * Pulse Seconds
+     */
+    pulse_seconds?: number | null;
+};
+
+/**
  * UpdateWorkflowRequest
  */
 export type UpdateWorkflowRequest = {
@@ -7181,11 +7245,171 @@ export type VonageConfigurationResponse = {
 };
 
 /**
+ * WalletAdjustRequest
+ */
+export type WalletAdjustRequest = {
+    /**
+     * Amount
+     */
+    amount: number | string;
+    /**
+     * Note
+     */
+    note: string;
+};
+
+/**
+ * WalletSettingsResponse
+ */
+export type WalletSettingsResponse = {
+    /**
+     * Organization Id
+     */
+    organization_id: number;
+    /**
+     * Wallet Currency
+     */
+    wallet_currency: string;
+    /**
+     * Wallet Balance
+     */
+    wallet_balance: string;
+    /**
+     * Credit Limit
+     */
+    credit_limit: string;
+    /**
+     * Wallet Enabled
+     */
+    wallet_enabled: boolean;
+};
+
+/**
+ * WalletTopupRequest
+ */
+export type WalletTopupRequest = {
+    /**
+     * Amount
+     */
+    amount: number | string;
+    /**
+     * Note
+     */
+    note?: string | null;
+};
+
+/**
+ * WalletTransactionResponse
+ */
+export type WalletTransactionResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Organization Id
+     */
+    organization_id: number;
+    /**
+     * Amount
+     */
+    amount: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Type
+     */
+    type: string;
+    /**
+     * Balance After
+     */
+    balance_after: string | null;
+    /**
+     * Workflow Run Id
+     */
+    workflow_run_id: number | null;
+    /**
+     * Workflow Id
+     */
+    workflow_id: number | null;
+    /**
+     * Campaign Id
+     */
+    campaign_id: number | null;
+    /**
+     * Created By User Id
+     */
+    created_by_user_id: number | null;
+    /**
+     * Note
+     */
+    note: string | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+};
+
+/**
+ * WalletTransactionsListResponse
+ */
+export type WalletTransactionsListResponse = {
+    /**
+     * Transactions
+     */
+    transactions: Array<WalletTransactionResponse>;
+    /**
+     * Total Count
+     */
+    total_count: number;
+    /**
+     * Page
+     */
+    page: number;
+    /**
+     * Limit
+     */
+    limit: number;
+};
+
+/**
  * WebhookCredentialType
  *
  * Webhook credential authentication types
  */
 export type WebhookCredentialType = 'none' | 'api_key' | 'bearer_token' | 'basic_auth' | 'custom_header';
+
+/**
+ * WorkflowBillingSettingsResponse
+ */
+export type WorkflowBillingSettingsResponse = {
+    /**
+     * Workflow Id
+     */
+    workflow_id: number;
+    /**
+     * Avg Call Duration Minutes
+     */
+    avg_call_duration_minutes: string | null;
+    /**
+     * Price Per Minute
+     */
+    price_per_minute: string | null;
+    /**
+     * Billing Mode
+     */
+    billing_mode: string;
+    /**
+     * Price Per Call
+     */
+    price_per_call: string | null;
+    /**
+     * Pulse Seconds
+     */
+    pulse_seconds: number;
+};
 
 /**
  * WorkflowConfigurationDefaults
@@ -15616,6 +15840,366 @@ export type GetNodeTypeApiV1NodeTypesNameGetResponses = {
 };
 
 export type GetNodeTypeApiV1NodeTypesNameGetResponse = GetNodeTypeApiV1NodeTypesNameGetResponses[keyof GetNodeTypeApiV1NodeTypesNameGetResponses];
+
+export type GetWalletSettingsApiV1WalletOrganizationsOrganizationIdGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Organization Id
+         */
+        organization_id: number;
+    };
+    query?: never;
+    url: '/api/v1/wallet/organizations/{organization_id}';
+};
+
+export type GetWalletSettingsApiV1WalletOrganizationsOrganizationIdGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetWalletSettingsApiV1WalletOrganizationsOrganizationIdGetError = GetWalletSettingsApiV1WalletOrganizationsOrganizationIdGetErrors[keyof GetWalletSettingsApiV1WalletOrganizationsOrganizationIdGetErrors];
+
+export type GetWalletSettingsApiV1WalletOrganizationsOrganizationIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: WalletSettingsResponse;
+};
+
+export type GetWalletSettingsApiV1WalletOrganizationsOrganizationIdGetResponse = GetWalletSettingsApiV1WalletOrganizationsOrganizationIdGetResponses[keyof GetWalletSettingsApiV1WalletOrganizationsOrganizationIdGetResponses];
+
+export type UpdateWalletSettingsApiV1WalletOrganizationsOrganizationIdPatchData = {
+    body: UpdateWalletSettingsRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Organization Id
+         */
+        organization_id: number;
+    };
+    query?: never;
+    url: '/api/v1/wallet/organizations/{organization_id}';
+};
+
+export type UpdateWalletSettingsApiV1WalletOrganizationsOrganizationIdPatchErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateWalletSettingsApiV1WalletOrganizationsOrganizationIdPatchError = UpdateWalletSettingsApiV1WalletOrganizationsOrganizationIdPatchErrors[keyof UpdateWalletSettingsApiV1WalletOrganizationsOrganizationIdPatchErrors];
+
+export type UpdateWalletSettingsApiV1WalletOrganizationsOrganizationIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: WalletSettingsResponse;
+};
+
+export type UpdateWalletSettingsApiV1WalletOrganizationsOrganizationIdPatchResponse = UpdateWalletSettingsApiV1WalletOrganizationsOrganizationIdPatchResponses[keyof UpdateWalletSettingsApiV1WalletOrganizationsOrganizationIdPatchResponses];
+
+export type TopupWalletApiV1WalletOrganizationsOrganizationIdTopupPostData = {
+    body: WalletTopupRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Organization Id
+         */
+        organization_id: number;
+    };
+    query?: never;
+    url: '/api/v1/wallet/organizations/{organization_id}/topup';
+};
+
+export type TopupWalletApiV1WalletOrganizationsOrganizationIdTopupPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type TopupWalletApiV1WalletOrganizationsOrganizationIdTopupPostError = TopupWalletApiV1WalletOrganizationsOrganizationIdTopupPostErrors[keyof TopupWalletApiV1WalletOrganizationsOrganizationIdTopupPostErrors];
+
+export type TopupWalletApiV1WalletOrganizationsOrganizationIdTopupPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: WalletSettingsResponse;
+};
+
+export type TopupWalletApiV1WalletOrganizationsOrganizationIdTopupPostResponse = TopupWalletApiV1WalletOrganizationsOrganizationIdTopupPostResponses[keyof TopupWalletApiV1WalletOrganizationsOrganizationIdTopupPostResponses];
+
+export type AdjustWalletApiV1WalletOrganizationsOrganizationIdAdjustPostData = {
+    body: WalletAdjustRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Organization Id
+         */
+        organization_id: number;
+    };
+    query?: never;
+    url: '/api/v1/wallet/organizations/{organization_id}/adjust';
+};
+
+export type AdjustWalletApiV1WalletOrganizationsOrganizationIdAdjustPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AdjustWalletApiV1WalletOrganizationsOrganizationIdAdjustPostError = AdjustWalletApiV1WalletOrganizationsOrganizationIdAdjustPostErrors[keyof AdjustWalletApiV1WalletOrganizationsOrganizationIdAdjustPostErrors];
+
+export type AdjustWalletApiV1WalletOrganizationsOrganizationIdAdjustPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: WalletSettingsResponse;
+};
+
+export type AdjustWalletApiV1WalletOrganizationsOrganizationIdAdjustPostResponse = AdjustWalletApiV1WalletOrganizationsOrganizationIdAdjustPostResponses[keyof AdjustWalletApiV1WalletOrganizationsOrganizationIdAdjustPostResponses];
+
+export type ListOrganizationWalletTransactionsApiV1WalletOrganizationsOrganizationIdTransactionsGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Organization Id
+         */
+        organization_id: number;
+    };
+    query?: {
+        /**
+         * Page
+         */
+        page?: number;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/v1/wallet/organizations/{organization_id}/transactions';
+};
+
+export type ListOrganizationWalletTransactionsApiV1WalletOrganizationsOrganizationIdTransactionsGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListOrganizationWalletTransactionsApiV1WalletOrganizationsOrganizationIdTransactionsGetError = ListOrganizationWalletTransactionsApiV1WalletOrganizationsOrganizationIdTransactionsGetErrors[keyof ListOrganizationWalletTransactionsApiV1WalletOrganizationsOrganizationIdTransactionsGetErrors];
+
+export type ListOrganizationWalletTransactionsApiV1WalletOrganizationsOrganizationIdTransactionsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: WalletTransactionsListResponse;
+};
+
+export type ListOrganizationWalletTransactionsApiV1WalletOrganizationsOrganizationIdTransactionsGetResponse = ListOrganizationWalletTransactionsApiV1WalletOrganizationsOrganizationIdTransactionsGetResponses[keyof ListOrganizationWalletTransactionsApiV1WalletOrganizationsOrganizationIdTransactionsGetResponses];
+
+export type UpdateWorkflowBillingSettingsApiV1WalletWorkflowsWorkflowIdBillingSettingsPatchData = {
+    body: UpdateWorkflowBillingSettingsRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Workflow Id
+         */
+        workflow_id: number;
+    };
+    query?: never;
+    url: '/api/v1/wallet/workflows/{workflow_id}/billing-settings';
+};
+
+export type UpdateWorkflowBillingSettingsApiV1WalletWorkflowsWorkflowIdBillingSettingsPatchErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateWorkflowBillingSettingsApiV1WalletWorkflowsWorkflowIdBillingSettingsPatchError = UpdateWorkflowBillingSettingsApiV1WalletWorkflowsWorkflowIdBillingSettingsPatchErrors[keyof UpdateWorkflowBillingSettingsApiV1WalletWorkflowsWorkflowIdBillingSettingsPatchErrors];
+
+export type UpdateWorkflowBillingSettingsApiV1WalletWorkflowsWorkflowIdBillingSettingsPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: WorkflowBillingSettingsResponse;
+};
+
+export type UpdateWorkflowBillingSettingsApiV1WalletWorkflowsWorkflowIdBillingSettingsPatchResponse = UpdateWorkflowBillingSettingsApiV1WalletWorkflowsWorkflowIdBillingSettingsPatchResponses[keyof UpdateWorkflowBillingSettingsApiV1WalletWorkflowsWorkflowIdBillingSettingsPatchResponses];
+
+export type GetMyWalletApiV1WalletMeGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/wallet/me';
+};
+
+export type GetMyWalletApiV1WalletMeGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetMyWalletApiV1WalletMeGetError = GetMyWalletApiV1WalletMeGetErrors[keyof GetMyWalletApiV1WalletMeGetErrors];
+
+export type GetMyWalletApiV1WalletMeGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: WalletSettingsResponse;
+};
+
+export type GetMyWalletApiV1WalletMeGetResponse = GetMyWalletApiV1WalletMeGetResponses[keyof GetMyWalletApiV1WalletMeGetResponses];
+
+export type ListMyWalletTransactionsApiV1WalletMeTransactionsGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: {
+        /**
+         * Page
+         */
+        page?: number;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/v1/wallet/me/transactions';
+};
+
+export type ListMyWalletTransactionsApiV1WalletMeTransactionsGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListMyWalletTransactionsApiV1WalletMeTransactionsGetError = ListMyWalletTransactionsApiV1WalletMeTransactionsGetErrors[keyof ListMyWalletTransactionsApiV1WalletMeTransactionsGetErrors];
+
+export type ListMyWalletTransactionsApiV1WalletMeTransactionsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: WalletTransactionsListResponse;
+};
+
+export type ListMyWalletTransactionsApiV1WalletMeTransactionsGetResponse = ListMyWalletTransactionsApiV1WalletMeTransactionsGetResponses[keyof ListMyWalletTransactionsApiV1WalletMeTransactionsGetResponses];
 
 export type HealthApiV1HealthGetData = {
     body?: never;

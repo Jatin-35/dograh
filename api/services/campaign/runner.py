@@ -4,6 +4,10 @@ from typing import Any, Dict
 from loguru import logger
 
 from api.db import db_client
+from api.services.campaign.campaign_billing import (
+    reconcile_campaign_wallet,
+    reserve_campaign_wallet,
+)
 from api.services.campaign.campaign_event_publisher import (
     get_campaign_event_publisher,
 )
@@ -33,6 +37,8 @@ class CampaignRunnerService:
             (campaign.orchestrator_metadata or {}).get("parent_campaign_id")
         )
         if is_redial:
+            await reserve_campaign_wallet(campaign, total_rows=campaign.total_rows or 0)
+
             now = datetime.now(UTC)
             await db_client.update_campaign(
                 campaign_id=campaign_id,
@@ -124,6 +130,7 @@ class CampaignRunnerService:
             state="cancelled",
             cancelled_at=datetime.now(UTC),
         )
+        await reconcile_campaign_wallet(campaign_id)
 
         logger.info(f"Campaign {campaign_id} stopped")
 

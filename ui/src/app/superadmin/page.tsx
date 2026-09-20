@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Building2, List, Loader2, Workflow } from 'lucide-react';
+import { ArrowRight, Building2, List, Loader2, Wallet, Workflow } from 'lucide-react';
 import Link from "next/link";
 import { useState } from "react";
 
@@ -206,6 +206,25 @@ export default function SuperadminPage() {
                                     <Button className="w-full md:w-auto">
                                         <Workflow className="mr-2 h-4 w-4" />
                                         Browse Agents
+                                        <ArrowRight className="ml-2 h-4 w-4" />
+                                    </Button>
+                                </Link>
+                            </CardContent>
+                        </Card>
+
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Wallets</CardTitle>
+                                <CardDescription>
+                                    Configure billing rates and manage prepaid balances for
+                                    client organizations
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <Link href="/superadmin/wallets">
+                                    <Button className="w-full md:w-auto">
+                                        <Wallet className="mr-2 h-4 w-4" />
+                                        Manage Wallets
                                         <ArrowRight className="ml-2 h-4 w-4" />
                                     </Button>
                                 </Link>

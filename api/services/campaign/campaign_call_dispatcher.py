@@ -345,6 +345,7 @@ class CampaignCallDispatcher:
             workflow_id=campaign.workflow_id,
             organization_id=campaign.organization_id,
             workflow_run_id=workflow_run.id,
+            campaign_id=campaign.id,
         )
         if not quota_result.has_quota:
             error_message = quota_result.error_message or "Quota exceeded"

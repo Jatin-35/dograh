@@ -6,6 +6,7 @@ import { getAuthUserApiV1UserAuthUserGet } from '@/client/sdk.gen';
 import { CallDashboard } from '@/components/call-dashboard/CallDashboard';
 import { QuickActions } from '@/components/overview/QuickActions';
 import SpinLoader from '@/components/SpinLoader';
+import { WalletBalanceCard } from '@/components/wallet/WalletBalanceCard';
 import { useAuth } from '@/lib/auth';
 
 // Genuine client logins land on NEXT_PUBLIC_CLIENT_URL's domain (as opposed to
@@ -65,7 +66,8 @@ function AdminQuickActions() {
 // One Overview for everyone: the call dashboard (KPIs and charts) for the
 // organization the viewer has selected. A client sees their own; a superadmin
 // sees whichever client they have switched to. The people who build agents also
-// get a Quick actions row above it — clients never do.
+// get a Quick actions row above it — clients never do, and the wallet card is
+// part of a client's Home only.
 export default function OverviewPage() {
     const { user } = useAuth();
     const { isOnClientDashboardDomain, resolved } = useIsOnClientDashboardDomain();
@@ -92,6 +94,12 @@ export default function OverviewPage() {
             {!isOnClientDashboardDomain && <AdminQuickActions />}
 
             <CallDashboard showTestCallsSwitch={!isOnClientDashboardDomain} />
+
+            {isOnClientDashboardDomain && (
+                <div className="max-w-md">
+                    <WalletBalanceCard linkHref="/billing" />
+                </div>
+            )}
         </div>
     );
 }

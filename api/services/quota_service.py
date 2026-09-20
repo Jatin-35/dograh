@@ -361,18 +361,32 @@ async def _authorize_oss_managed_v2_correlation(
     return QuotaCheckResult(has_quota=True)
 
 
+WALLET_INSUFFICIENT_BALANCE_MESSAGE = (
+    "Insufficient wallet balance. Please top up to continue making calls."
+)
+
+
 async def authorize_workflow_run_start(
     *,
     workflow_id: int,
     organization_id: int,
     workflow_run_id: int | None = None,
     actor_user: UserModel | None = None,
+    campaign_id: int | None = None,
 ) -> QuotaCheckResult:
     """Authorize a workflow run before any billable call/text runtime starts.
 
     The workflow organization is the billing subject for hosted deployments.
     OSS deployments are billed per service key instead. The workflow owner is
     used only as billing metadata.
+
+    ``campaign_id`` is set only by CampaignCallDispatcher. A campaign call is
+    never gated by the wallet check below — its cost was already accounted
+    for in one lump sum when the campaign launched (see
+    WalletClient.wallet_reserve_for_campaign); re-checking the live wallet
+    balance per call would incorrectly fail calls against a balance that was
+    deliberately reduced by the reservation. Non-campaign calls (this param
+    left None) are checked normally.
     """
     if organization_id is None:
         logger.warning(
@@ -502,6 +516,26 @@ async def authorize_workflow_run_start(
                 workflow_configurations = (
                     workflow_run.definition.workflow_configurations
                 )
+
+        # Self-hosted wallet check — independent of the MPS/hosted billing
+        # below, and skipped entirely for campaign calls (see docstring).
+        if campaign_id is None:
+            org = await db_client.get_organization_by_id(organization_id)
+            if org is not None and org.wallet_enabled and workflow.price_per_minute is not None:
+                available = org.wallet_balance - org.credit_limit
+                if available <= 0:
+                    logger.warning(
+                        "Workflow start authorization denied: org {} wallet balance "
+                        "({}) at or below credit limit ({})",
+                        organization_id,
+                        org.wallet_balance,
+                        org.credit_limit,
+                    )
+                    return QuotaCheckResult(
+                        has_quota=False,
+                        error_code="insufficient_wallet_balance",
+                        error_message=WALLET_INSUFFICIENT_BALANCE_MESSAGE,
+                    )
 
         user_config = await get_effective_ai_model_configuration_for_workflow(
             organization_id=organization_id,

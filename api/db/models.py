@@ -12,6 +12,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     Table,
     Text,
@@ -32,7 +33,10 @@ from ..enums import (
     ToolCategory,
     ToolStatus,
     TriggerState,
+    WalletTransactionStatus,
+    WalletTransactionType,
     WebhookCredentialType,
+    WorkflowBillingMode,
     WorkflowRunState,
     WorkflowStatus,
 )
@@ -167,6 +171,27 @@ class OrganizationModel(Base):
     )
 
     price_per_second_usd = Column(Float, nullable=True)
+
+    # --- Wallet (self-hosted prepaid billing, distinct from the deprecated
+    # MPS-era quota fields above) ---
+    # Each org is billed in exactly one currency — no conversion, ever. New
+    # orgs default to INR; a future non-Indian client just gets USD set
+    # instead, same columns, no schema change.
+    wallet_currency = Column(String(3), nullable=False, default="INR", server_default=text("'INR'"))
+    # Cached, derived balance — the ledger (wallet_transactions) is the
+    # source of truth; this column is only ever updated in the same
+    # row-locked transaction as a new ledger row, never edited directly.
+    wallet_balance = Column(Numeric(14, 4), nullable=False, default=0, server_default=text("0"))
+    # How far below zero this org may go before calls are refused. Default 0
+    # = strict prepaid. A superadmin can grant a trusted client a buffer
+    # (e.g. -50) without any code change.
+    credit_limit = Column(Numeric(14, 4), nullable=False, default=0, server_default=text("0"))
+    # Master on/off switch for this org's wallet. Every call-authorization
+    # and campaign-reservation check short-circuits to "allowed" (and every
+    # wallet UI element hides itself) when this is false — a superadmin can
+    # configure a rate and balance ahead of time without it taking effect
+    # until they explicitly flip this on.
+    wallet_enabled = Column(Boolean, nullable=False, default=False, server_default=text("false"))
 
     # Relationships
     users = relationship(
@@ -472,6 +497,44 @@ class WorkflowModel(Base):
     workflow_configurations = Column(
         JSON, nullable=False, default=dict, server_default=text("'{}'::json")
     )
+    # Superadmin-set expected call length for this specific agent, used only
+    # to estimate a campaign's upfront wallet reservation
+    # (avg_call_duration_minutes * leads * price_per_minute). Per-agent,
+    # not per-org, since different agents (a quick confirmation bot vs. a
+    # long sales-qualification bot) have very different typical durations.
+    # Nullable = a campaign on this workflow can't be launched until a
+    # superadmin sets it — no guessed fallback.
+    avg_call_duration_minutes = Column(Numeric(10, 2), nullable=True)
+    # Per-minute wallet rate for calls run by this specific agent. Per-agent
+    # rather than per-org for the same reason as avg_call_duration_minutes
+    # above — different agents can have very different costs. Nullable =
+    # calls on this workflow aren't billed and this workflow can't be used
+    # to launch a campaign reservation until a superadmin sets it.
+    price_per_minute = Column(Numeric(10, 4), nullable=True)
+    # Which of price_per_minute or price_per_call actually applies to this
+    # agent's calls — exactly one at a time. Switching modes does not clear
+    # the other mode's rate field, it just stops being read (see
+    # WorkflowBillingMode).
+    billing_mode = Column(
+        Enum(
+            *[m.value for m in WorkflowBillingMode],
+            name="workflow_billing_mode",
+        ),
+        nullable=False,
+        default=WorkflowBillingMode.PER_MINUTE.value,
+        server_default=text("'per_minute'"),
+    )
+    # Flat per-call wallet rate, used only when billing_mode == PER_CALL.
+    # Nullable for the same reason as price_per_minute — unset means this
+    # workflow can't be used to launch a campaign reservation or bill calls
+    # under per-call mode until a superadmin sets it.
+    price_per_call = Column(Numeric(10, 4), nullable=True)
+    # Pulse size for PER_MINUTE billing, in seconds: talk time is rounded up
+    # to a whole number of pulses before price_per_minute is applied. 0 means
+    # no rounding (exact per-second, pay-as-you-go); otherwise one of
+    # WALLET_PULSE_SECONDS_OPTIONS. There is no grace period — any billed
+    # call is at least one pulse. Ignored under PER_CALL.
+    pulse_seconds = Column(Integer, nullable=False, default=0, server_default=text("0"))
     runs = relationship("WorkflowRunModel", back_populates="workflow")
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
@@ -1573,6 +1636,118 @@ class KnowledgeBaseChunkModel(Base):
             postgresql_using="ivfflat",
             postgresql_with={"lists": 100},  # Adjust based on dataset size
             postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+    )
+
+
+class WalletTransactionModel(Base):
+    """Append-only ledger for the self-hosted prepaid wallet. Never UPDATE a
+    row here — every correction (refund, reversal) is a new row. The org's
+    cached `wallet_balance` is derived from this ledger and must only ever
+    change in the same row-locked transaction as a new row here.
+
+    `amount` is signed: positive credits the wallet (topup, refund, a
+    favorable reconcile), negative debits it (a normal call charge, a
+    campaign reservation, an unfavorable reconcile). `campaign_cost` rows
+    are the one exception — they never touch the balance at all, they only
+    record what a call within an already-reserved campaign actually cost.
+    """
+
+    __tablename__ = "wallet_transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(
+        Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    amount = Column(Numeric(14, 4), nullable=False)
+    currency = Column(String(3), nullable=False)
+    type = Column(
+        Enum(
+            *[t.value for t in WalletTransactionType],
+            name="wallet_transaction_type",
+        ),
+        nullable=False,
+    )
+    status = Column(
+        Enum(
+            *[s.value for s in WalletTransactionStatus],
+            name="wallet_transaction_status",
+        ),
+        nullable=False,
+        default=WalletTransactionStatus.COMPLETED.value,
+        server_default=text("'completed'"),
+    )
+    # The balance immediately after this row was applied. NULL for
+    # campaign_cost rows, since those never change the balance.
+    balance_after = Column(Numeric(14, 4), nullable=True)
+
+    # Nullable — only set for the call/campaign this transaction is about.
+    # A topup/adjustment/manual refund has neither.
+    workflow_run_id = Column(
+        Integer, ForeignKey("workflow_runs.id", ondelete="SET NULL"), nullable=True
+    )
+    campaign_id = Column(
+        Integer, ForeignKey("campaigns.id", ondelete="SET NULL"), nullable=True
+    )
+    # Nullable — automated debits/cost-records have no "actor"; only
+    # superadmin-initiated actions (topup, adjustment, manual refund) set this.
+    created_by_user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    note = Column(Text, nullable=True)
+    # Free-form context for disputes/audits — e.g. call duration, the rate
+    # used, or (for a campaign_reconcile) the estimate vs. actual breakdown.
+    transaction_metadata = Column(JSON, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+    # Relationships
+    organization = relationship("OrganizationModel")
+    workflow_run = relationship("WorkflowRunModel")
+    campaign = relationship("CampaignModel")
+    created_by_user = relationship("UserModel")
+
+    __table_args__ = (
+        Index(
+            "ix_wallet_tx_org_created_at", "organization_id", "created_at"
+        ),  # statement pagination
+        # One normal per-call debit per run — a retried completion task
+        # can't double-charge.
+        Index(
+            "uq_wallet_tx_debit_per_run",
+            "workflow_run_id",
+            unique=True,
+            postgresql_where=text("type = 'debit' AND workflow_run_id IS NOT NULL"),
+        ),
+        # One campaign-call cost record per run — same idempotency
+        # guarantee, for the ledger-only campaign path.
+        Index(
+            "uq_wallet_tx_campaign_cost_per_run",
+            "workflow_run_id",
+            unique=True,
+            postgresql_where=text(
+                "type = 'campaign_cost' AND workflow_run_id IS NOT NULL"
+            ),
+        ),
+        # One reservation per campaign.
+        Index(
+            "uq_wallet_tx_reserve_per_campaign",
+            "campaign_id",
+            unique=True,
+            postgresql_where=text(
+                "type = 'campaign_reserve' AND campaign_id IS NOT NULL"
+            ),
+        ),
+        # One final reconciliation per campaign — a retried reconciliation
+        # task can't double-refund (or double-debit an overage).
+        Index(
+            "uq_wallet_tx_reconcile_per_campaign",
+            "campaign_id",
+            unique=True,
+            postgresql_where=text(
+                "type = 'campaign_reconcile' AND campaign_id IS NOT NULL"
+            ),
         ),
     )
 

@@ -1,5 +1,6 @@
 import json
 from datetime import datetime
+from decimal import Decimal
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -129,6 +130,11 @@ class SuperuserWorkflowResponse(BaseModel):
     organization_provider_id: str
     organization_status: str
     organization_primary_contact_email: Optional[str]
+    avg_call_duration_minutes: Optional[Decimal]
+    price_per_minute: Optional[Decimal]
+    billing_mode: str
+    price_per_call: Optional[Decimal]
+    pulse_seconds: int
 
 
 class SuperuserWorkflowsListResponse(BaseModel):

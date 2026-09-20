@@ -163,6 +163,63 @@ class OrganizationStatus(Enum):
     SUSPENDED = "suspended"
 
 
+class WalletTransactionType(str, Enum):
+    """Kind of wallet ledger entry. Kept to exactly what the system actually
+    does — extend only when a genuinely new kind of money movement exists.
+
+    - TOPUP: superadmin adds funds to an org's wallet.
+    - DEBIT: a normal (non-campaign) call charge, or a manual debit.
+    - ADJUSTMENT: a manual superadmin correction, signed either way.
+    - REFUND: a manual superadmin refund, unrelated to a campaign.
+    - CAMPAIGN_RESERVE: the one-time upfront reservation at campaign launch
+      (estimated cost, deducted before any calls dispatch). One per campaign.
+    - CAMPAIGN_COST: a single call's actual cost *within* a reserved
+      campaign — informational only, does NOT touch the cached balance
+      (that money already left the wallet at CAMPAIGN_RESERVE time). One
+      per workflow run.
+    - CAMPAIGN_RECONCILE: the final true-up when a campaign reaches a
+      terminal state (completed/failed/cancelled) — `amount` is signed:
+      positive refunds the unused reservation back to the wallet, negative
+      debits the rare overage (actual cost exceeded the reservation). One
+      per campaign.
+    """
+
+    TOPUP = "topup"
+    DEBIT = "debit"
+    ADJUSTMENT = "adjustment"
+    REFUND = "refund"
+    CAMPAIGN_RESERVE = "campaign_reserve"
+    CAMPAIGN_COST = "campaign_cost"
+    CAMPAIGN_RECONCILE = "campaign_reconcile"
+
+
+class WalletTransactionStatus(str, Enum):
+    """Lifecycle status of a wallet ledger entry. v1 only ever writes
+    COMPLETED — every transaction today is a synchronous, immediate DB
+    write (a superadmin action or a post-call step), none of it async. The
+    column exists now so a future async flow (e.g. a payment gateway
+    top-up) doesn't need a migration to add it."""
+
+    COMPLETED = "completed"
+
+
+class WorkflowBillingMode(str, Enum):
+    """How this agent's calls are priced for the prepaid wallet. Exactly
+    one applies at a time — switching modes doesn't clear the other mode's
+    rate field, it just stops being read.
+
+    - PER_MINUTE: exact fractional-minute billing against price_per_minute
+      (see compute_call_cost). Campaign reservations size off
+      avg_call_duration_minutes * price_per_minute.
+    - PER_CALL: a flat price_per_call charged once per completed call,
+      regardless of duration. Campaign reservations size off
+      price_per_call alone — no avg_call_duration_minutes needed.
+    """
+
+    PER_MINUTE = "per_minute"
+    PER_CALL = "per_call"
+
+
 class RedisChannel(Enum):
     """Redis pub/sub channel names"""
 
