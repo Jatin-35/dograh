@@ -20,6 +20,7 @@ from sqlalchemy import (
     func,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import declarative_base, relationship
 
 from api.constants import DEFAULT_CAMPAIGN_RETRY_CONFIG
@@ -1689,4 +1690,79 @@ class CodeEditorEnvVarModel(Base):
             "organization_id", "key", name="uq_code_editor_env_vars_org_key"
         ),
         Index("ix_code_editor_env_vars_org", "organization_id"),
+    )
+
+
+class CallReportModel(Base):
+    """One row per call: the normalized report a dashboard or run page reads.
+
+    Built once after the call (see services/call_report) and rebuilt in place if
+    QA lands later. The typed columns exist so dashboard queries filter and
+    aggregate by index instead of scanning JSON inside the much larger
+    workflow_runs rows; `report` holds the full record for display and export.
+    """
+
+    __tablename__ = "call_reports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    workflow_run_id = Column(
+        Integer, ForeignKey("workflow_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    # Denormalised from the run's workflow so per-organization queries need no join.
+    organization_id = Column(
+        Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    workflow_id = Column(
+        Integer, ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False
+    )
+    call_started_at = Column(DateTime(timezone=True), nullable=False)
+    call_type = Column(String(16), nullable=True)
+    # False for browser/test sessions, which dashboards exclude.
+    is_telephony = Column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+    duration_seconds = Column(Float, nullable=True)
+    disconnect_category = Column(String(32), nullable=False)
+    outcome = Column(String(32), nullable=False)
+    is_successful = Column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    sentiment = Column(String(16), nullable=True)
+    satisfied = Column(Boolean, nullable=True)
+    reason_for_call = Column(String(64), nullable=True)
+    ticket_count = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    ticket_created = Column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    ticket_closed = Column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    # analysed | skipped | error | not_run
+    qa_status = Column(String(16), nullable=False)
+    # What the call's agent is set up to produce (has a ticket tool / an active QA
+    # node), so a dashboard can leave out tiles and charts that could never fill.
+    ticket_capable = Column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    analysis_capable = Column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    schema_version = Column(Integer, nullable=False)
+    report = Column(JSONB, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+    __table_args__ = (
+        UniqueConstraint("workflow_run_id", name="uq_call_reports_workflow_run"),
+        Index("ix_call_reports_org_started", "organization_id", "call_started_at"),
+        Index(
+            "ix_call_reports_org_workflow_started",
+            "organization_id",
+            "workflow_id",
+            "call_started_at",
+        ),
     )

@@ -41,6 +41,11 @@ from api.services.configuration.resolve import (
     resolve_effective_config,
 )
 from api.services.mps_service_key_client import mps_service_key_client
+from api.services.phone_masking import (
+    apply_run_masking,
+    mask_phone_fields,
+    should_mask_phone_numbers,
+)
 from api.services.posthog_client import capture_event
 from api.services.reports import generate_workflow_report_csv
 from api.services.storage import storage_fs
@@ -1345,7 +1350,7 @@ async def get_workflow_run(
     ) and not public_access_token:
         public_access_token = await db_client.ensure_public_access_token(run.id)
 
-    return {
+    response = {
         "id": run.id,
         "workflow_id": run.workflow_id,
         "name": run.name,
@@ -1378,6 +1383,9 @@ async def get_workflow_run(
         "logs": run.logs,
         "annotations": run.annotations,
     }
+    if await should_mask_phone_numbers(user):
+        apply_run_masking(response)
+    return response
 
 
 class WorkflowRunsResponse(BaseModel):
@@ -1446,6 +1454,12 @@ async def get_workflow_runs(
 
     total_pages = (total_count + limit - 1) // limit
 
+    if await should_mask_phone_numbers(user):
+        # These rows are response-schema objects, not dicts (unlike the run detail).
+        for run in runs:
+            run.initial_context = mask_phone_fields(run.initial_context)
+            run.gathered_context = mask_phone_fields(run.gathered_context)
+
     return WorkflowRunsResponse(
         runs=runs,
         total_count=total_count,
@@ -1477,7 +1491,10 @@ async def download_workflow_report(
         )
 
     output, filename = await generate_workflow_report_csv(
-        workflow_id, start_date=start_date, end_date=end_date
+        workflow_id,
+        start_date=start_date,
+        end_date=end_date,
+        mask_phone=await should_mask_phone_numbers(user),
     )
 
     return StreamingResponse(

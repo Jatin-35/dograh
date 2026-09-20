@@ -13,6 +13,7 @@ from api.constants import BACKEND_API_ENDPOINT, DEFAULT_WEBHOOK_DELIVERY_CONFIG
 from api.db import db_client
 from api.db.models import WorkflowRunModel
 from api.enums import OrganizationConfigurationKey
+from api.services.call_report.service import safe_build_and_store_call_report
 from api.services.integrations import (
     IntegrationCompletionContext,
     has_completion_handlers,
@@ -165,6 +166,19 @@ async def _update_usage_info_with_qa_tokens(
 
 
 async def run_integrations_post_workflow_run(_ctx, workflow_run_id: int):
+    """Run post-call integrations, then build the call's report.
+
+    The report is built in a ``finally`` so it exists for every run — including
+    those with no QA/webhook nodes, which return early — and reflects whatever QA
+    produced. It never raises, so it cannot change how integrations behave.
+    """
+    try:
+        await _run_integrations_for_run(workflow_run_id)
+    finally:
+        await safe_build_and_store_call_report(workflow_run_id)
+
+
+async def _run_integrations_for_run(workflow_run_id: int):
     """
     Run integrations after a workflow run completes.
 

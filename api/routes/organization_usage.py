@@ -12,6 +12,7 @@ from api.db import db_client
 from api.db.models import UserModel
 from api.services.auth.depends import get_user, get_user_with_selected_organization
 from api.services.mps_service_key_client import mps_service_key_client
+from api.services.phone_masking import apply_run_masking, should_mask_phone_numbers
 from api.services.reports import generate_usage_runs_report_csv
 from api.utils.artifacts import artifact_url
 from api.utils.recording_artifacts import has_recording_track
@@ -408,7 +409,11 @@ async def get_usage_history(
 
         total_pages = (total_count + limit - 1) // limit
 
+        mask_phones = await should_mask_phone_numbers(user)
+
         for run in runs:
+            if mask_phones:
+                apply_run_masking(run)
             public_access_token = run.get("public_access_token")
             run["transcript_public_url"] = artifact_url(
                 public_access_token, "transcript"
@@ -474,6 +479,7 @@ async def download_usage_runs_report(
         start_date=start_dt,
         end_date=end_dt,
         filters=parsed_filters,
+        mask_phone=await should_mask_phone_numbers(user),
     )
 
     return StreamingResponse(

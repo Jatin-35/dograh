@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from api.db.models import UserModel
 from api.services.auth.depends import get_user
+from api.services.phone_masking import mask_phone_number, should_mask_phone_numbers
 from api.services.reports import DailyReportService
 
 router = APIRouter(prefix="/organizations/reports")
@@ -127,6 +128,9 @@ async def get_daily_runs_detail(
             timezone=timezone,
             workflow_id=workflow_id,
         )
+        if await should_mask_phone_numbers(user):
+            for run in runs:
+                run["phone_number"] = mask_phone_number(run["phone_number"])
         return [WorkflowRunDetail(**run) for run in runs]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

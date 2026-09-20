@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from typing import Any, List, Optional
 
 from api.db import db_client
+from api.services.phone_masking import mask_phone_number
 from api.utils.artifacts import artifact_url
 
 
@@ -26,8 +27,11 @@ def _collect_extracted_variable_keys(runs: List[Any]) -> list[str]:
     return list(keys)
 
 
-def build_run_report_csv(runs: List[Any]) -> io.StringIO:
-    """Build a CSV from completed workflow runs."""
+def build_run_report_csv(runs: List[Any], mask_phone: bool = False) -> io.StringIO:
+    """Build a CSV from completed workflow runs.
+
+    With ``mask_phone`` the customer number column is masked (see phone_masking).
+    """
     extracted_var_keys = _collect_extracted_variable_keys(runs)
 
     output = io.StringIO()
@@ -65,7 +69,11 @@ def build_run_report_csv(runs: List[Any]) -> io.StringIO:
             run.workflow_id,
             run.definition_id if run.definition_id is not None else "",
             run.created_at.isoformat() if run.created_at else "",
-            initial.get("phone_number", ""),
+            (
+                mask_phone_number(initial.get("phone_number", ""))
+                if mask_phone
+                else initial.get("phone_number", "")
+            ),
             gathered.get("mapped_call_disposition", ""),
             usage.get("call_duration_seconds", ""),
         ]
@@ -91,24 +99,32 @@ async def generate_campaign_report_csv(
     campaign_id: int,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
+    mask_phone: bool = False,
 ) -> tuple[io.StringIO, str]:
     """Generate a CSV report for a campaign."""
     runs = await db_client.get_completed_runs_for_report(
         campaign_id=campaign_id, start_date=start_date, end_date=end_date
     )
-    return build_run_report_csv(runs), f"campaign_{campaign_id}_report.csv"
+    return (
+        build_run_report_csv(runs, mask_phone=mask_phone),
+        f"campaign_{campaign_id}_report.csv",
+    )
 
 
 async def generate_workflow_report_csv(
     workflow_id: int,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
+    mask_phone: bool = False,
 ) -> tuple[io.StringIO, str]:
     """Generate a CSV report for all completed runs of a workflow."""
     runs = await db_client.get_completed_runs_for_report(
         workflow_id=workflow_id, start_date=start_date, end_date=end_date
     )
-    return build_run_report_csv(runs), f"workflow_{workflow_id}_report.csv"
+    return (
+        build_run_report_csv(runs, mask_phone=mask_phone),
+        f"workflow_{workflow_id}_report.csv",
+    )
 
 
 async def generate_usage_runs_report_csv(
@@ -116,6 +132,7 @@ async def generate_usage_runs_report_csv(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     filters: Optional[list[dict]] = None,
+    mask_phone: bool = False,
 ) -> tuple[io.StringIO, str]:
     """Generate a CSV report for runs visible on the org-wide usage page.
 
@@ -128,4 +145,7 @@ async def generate_usage_runs_report_csv(
         filters=filters,
     )
     timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
-    return build_run_report_csv(runs), f"usage_runs_{timestamp}.csv"
+    return (
+        build_run_report_csv(runs, mask_phone=mask_phone),
+        f"usage_runs_{timestamp}.csv",
+    )

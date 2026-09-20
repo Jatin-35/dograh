@@ -1,5 +1,6 @@
 from api.db.agent_trigger_client import AgentTriggerClient
 from api.db.api_key_client import APIKeyClient
+from api.db.call_report_client import CallReportClient
 from api.db.campaign_client import CampaignClient
 from api.db.code_editor_client import CodeEditorClient
 from api.db.embed_token_client import EmbedTokenClient
@@ -37,6 +38,7 @@ class DBClient(
     WorkflowTemplateClient,
     CampaignClient,
     ReportsClient,
+    CallReportClient,
     APIKeyClient,
     EmbedTokenClient,
     AgentTriggerClient,
@@ -64,6 +66,7 @@ class DBClient(
     - WorkflowTemplateClient: handles workflow template operations
     - CampaignClient: handles campaign operations
     - ReportsClient: handles reports and analytics operations
+    - CallReportClient: handles the normalized per-call report rows
     - APIKeyClient: handles API key operations
     - EmbedTokenClient: handles embed token and session operations
     - AgentTriggerClient: handles agent trigger operations for API-based call triggering

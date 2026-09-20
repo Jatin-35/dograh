@@ -86,11 +86,11 @@ export async function getRedirectUrl(token: string, permissions: { id: string }[
     const isAdmin = hasAdminPermission(permissions);
     console.log('[getRedirectUrl] Admin permission check:', { hasAdminPermission: isAdmin });
 
-  // If the user doesn't have admin permissions, redirect them to
-  // usage page
+  // If the user doesn't have admin permissions, they are a client: send them to
+  // the dashboard (their Home) rather than the raw run list.
   if (!isAdmin) {
-    console.log('[getRedirectUrl] No admin permission, redirecting to /usage');
-    return toDestination("/usage", CLIENT_BASE_URL);
+    console.log('[getRedirectUrl] No admin permission, redirecting to /overview');
+    return toDestination("/overview", CLIENT_BASE_URL);
   }
 
   // Check if user has any workflows

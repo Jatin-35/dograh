@@ -1,0 +1,25 @@
+/*
+ * Colours for the call dashboard's charts.
+ *
+ * The series blue and the negative red are the validated categorical slots 1 and
+ * 8 of the reference palette (checked for colour-blind separation and contrast in
+ * both modes); the neutral is its muted grey, used for "everything else". Text
+ * uses the app's own foreground tokens, so only the chart marks are defined here.
+ */
+.cd-root {
+    --cd-series: #2a78d6;
+    --cd-negative: #e34948;
+    --cd-neutral: #898781;
+    --cd-grid: #e1e0d9;
+    --cd-baseline: #c3c2b7;
+    --cd-hover: rgba(11, 11, 11, 0.05);
+}
+
+.dark .cd-root {
+    --cd-series: #3987e5;
+    --cd-negative: #e66767;
+    --cd-neutral: #898781;
+    --cd-grid: #2c2c2a;
+    --cd-baseline: #383835;
+    --cd-hover: rgba(255, 255, 255, 0.06);
+}

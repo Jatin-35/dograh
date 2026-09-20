@@ -124,6 +124,10 @@ class OrganizationConfigurationKey(Enum):
     # Absent means off: an org only gets Scout when a superadmin turns it on,
     # so a new client can't reach it before someone decides they should.
     SCOUT_ENABLED = "SCOUT_ENABLED"
+    # Whether customer phone numbers are masked for this org's non-superadmin
+    # users (reports, run lists, exports). Absent means off, so masking only
+    # ever changes what an org sees when a superadmin has turned it on.
+    MASK_PHONE_NUMBERS = "MASK_PHONE_NUMBERS"
 
 
 class UserConfigurationKey(Enum):

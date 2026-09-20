@@ -1,6 +1,7 @@
 'use client';
 
 import {
+    ArrowLeft,
     Bot,
     Check,
     Copy,
@@ -14,7 +15,7 @@ import {
     Video,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import posthog from 'posthog-js';
 import { useEffect, useRef, useState } from 'react';
 
@@ -23,6 +24,9 @@ import {
     getWorkflowApiV1WorkflowFetchWorkflowIdGet,
     getWorkflowRunApiV1WorkflowWorkflowIdRunsRunIdGet,
 } from '@/client/sdk.gen';
+import { CallReportCard } from '@/components/call-report/CallReportCard';
+import { QAResultsCard } from '@/components/call-report/QAResultsCard';
+import { UnmaskedOnly } from '@/components/call-report/UnmaskedOnly';
 import { MediaPreviewButton, MediaPreviewDialog } from '@/components/MediaPreviewDialog';
 import { OnboardingTooltip } from '@/components/onboarding/OnboardingTooltip';
 import { Button } from '@/components/ui/button';
@@ -595,8 +599,17 @@ function ContextDisplay({ title, context }: { title: string; context: Record<str
 }
 
 
+// Where "Back" lands when the page was opened directly (a new tab, a pasted
+// link) and there is no history to return to.
+const RUN_LIST_FALLBACK_URL = '/usage';
+
 export default function WorkflowRunPage() {
     const params = useParams();
+    const router = useRouter();
+    // Whether the customer number was masked for this viewer. Unknown until the call
+    // report loads; the raw context blocks (which carry the number) stay hidden until
+    // it is known to be false, so they never flash up for a viewer who must not see them.
+    const [phoneMasked, setPhoneMasked] = useState<boolean | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const auth = useAuth();
     const [workflowRun, setWorkflowRun] = useState<WorkflowRunResponse | null>(null);
@@ -611,6 +624,14 @@ export default function WorkflowRunPage() {
     }, [auth]);
 
     const { openPreview, dialog } = MediaPreviewDialog();
+
+    const handleBack = () => {
+        if (window.history.length > 1) {
+            router.back();
+        } else {
+            router.push(RUN_LIST_FALLBACK_URL);
+        }
+    };
 
     useEffect(() => {
         const fetchWorkflowRun = async () => {
@@ -703,6 +724,15 @@ export default function WorkflowRunPage() {
             <div className={`flex ${RUN_SHELL_HEIGHT_CLASS} min-h-0 w-full overflow-hidden bg-background`}>
                 <div className="min-w-0 flex-1 overflow-y-auto">
                     <div className="mx-auto w-full max-w-4xl space-y-6 p-6">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="-ml-2 gap-2 text-muted-foreground"
+                        onClick={handleBack}
+                    >
+                        <ArrowLeft className="h-4 w-4" />
+                        Back
+                    </Button>
                     <Card className="border-border">
                         <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                             <div className="min-w-0 flex-1 space-y-2">
@@ -820,6 +850,14 @@ export default function WorkflowRunPage() {
                         </CardContent>
                     </Card>
 
+                        {!isTextChatRun && (
+                            <CallReportCard
+                                workflowId={Number(params.workflowId)}
+                                runId={Number(params.runId)}
+                                onLoaded={(report) => setPhoneMasked(Boolean(report.phone_masked))}
+                            />
+                        )}
+
                         <RunMetricsSection
                             costInfo={workflowRun?.cost_info ?? null}
                             logs={workflowRun?.logs ?? null}
@@ -833,22 +871,21 @@ export default function WorkflowRunPage() {
                             />
                         )}
 
-                        <div className="grid gap-6 md:grid-cols-2">
-                            <ContextDisplay
-                                title="Initial Context"
-                                context={workflowRun?.initial_context ?? null}
-                            />
-                            <ContextDisplay
-                                title="Gathered Context"
-                                context={workflowRun?.gathered_context ?? null}
-                            />
-                        </div>
+                        <UnmaskedOnly phoneMasked={phoneMasked}>
+                            <div className="grid gap-6 md:grid-cols-2">
+                                <ContextDisplay
+                                    title="Initial Context"
+                                    context={workflowRun?.initial_context ?? null}
+                                />
+                                <ContextDisplay
+                                    title="Gathered Context"
+                                    context={workflowRun?.gathered_context ?? null}
+                                />
+                            </div>
+                        </UnmaskedOnly>
 
                         {workflowRun?.annotations && Object.keys(workflowRun.annotations).length > 0 && (
-                            <ContextDisplay
-                                title="QA Results"
-                                context={workflowRun.annotations as Record<string, string | number | boolean | object>}
-                            />
+                            <QAResultsCard annotations={workflowRun.annotations} />
                         )}
                     </div>
                 </div>

@@ -9538,6 +9538,340 @@ export type GetWorkflowRunApiV1WorkflowWorkflowIdRunsRunIdGetResponses = {
 
 export type GetWorkflowRunApiV1WorkflowWorkflowIdRunsRunIdGetResponse = GetWorkflowRunApiV1WorkflowWorkflowIdRunsRunIdGetResponses[keyof GetWorkflowRunApiV1WorkflowWorkflowIdRunsRunIdGetResponses];
 
+/**
+ * TicketInfo
+ */
+export type TicketInfo = {
+    ticket_id: string;
+    created_at?: string | null;
+    closed?: boolean;
+    closed_at?: string | null;
+    source: string;
+};
+
+/**
+ * NodeAnalysis
+ *
+ * One QA node-segment's view of the call, after normalisation.
+ */
+export type NodeAnalysis = {
+    node_id: string;
+    node_name?: string;
+    sentiment?: string | null;
+    satisfied?: boolean | null;
+    mood?: string | null;
+    reason_for_call?: string | null;
+    resolved?: boolean | null;
+    human_transfer?: boolean | null;
+    summary?: string | null;
+    quality_score?: number | null;
+    tags?: Array<string>;
+};
+
+/**
+ * CallSection
+ */
+export type CallSection = {
+    call_type?: string | null;
+    mode?: string;
+    is_telephony?: boolean;
+    started_at: string;
+    duration_seconds?: number | null;
+    phone_number?: string | null;
+};
+
+/**
+ * DisconnectSection
+ */
+export type DisconnectSection = {
+    reason?: string | null;
+    category: string;
+    label: string;
+};
+
+/**
+ * OutcomeSection
+ */
+export type OutcomeSection = {
+    code: string;
+    label: string;
+    successful: boolean;
+};
+
+/**
+ * TicketSection
+ */
+export type TicketSection = {
+    created?: boolean;
+    closed?: boolean;
+    count?: number;
+    tickets?: Array<TicketInfo>;
+};
+
+/**
+ * AnalysisSection
+ */
+export type AnalysisSection = {
+    status?: string;
+    skipped_reason?: string | null;
+    sentiment?: string | null;
+    satisfied?: boolean | null;
+    mood?: string | null;
+    reason_for_call?: string | null;
+    resolved?: boolean | null;
+    human_transfer?: boolean | null;
+    summary?: string | null;
+    quality_score?: number | null;
+    tags?: Array<string>;
+    nodes?: Array<NodeAnalysis>;
+};
+
+/**
+ * CapabilitiesSection
+ *
+ * What this call's agent is set up to produce — decides which sections apply.
+ */
+export type CapabilitiesSection = {
+    ticket?: boolean;
+    analysis?: boolean;
+};
+
+/**
+ * CallReport
+ *
+ * The normalized, agent-independent record of one call.
+ */
+export type CallReport = {
+    schema_version?: number;
+    run_id: number;
+    workflow_id: number;
+    organization_id: number;
+    call: CallSection;
+    disconnect: DisconnectSection;
+    outcome: OutcomeSection;
+    ticket: TicketSection;
+    analysis: AnalysisSection;
+    capabilities?: CapabilitiesSection;
+    /**
+     * Captured
+     *
+     * Values the agent captured during the call (its extracted variables).
+     */
+    captured?: {
+        [key: string]: unknown;
+    };
+};
+
+/**
+ * CallReportResponse
+ *
+ * The call report as served: `phone_masked` is true when the customer number
+ * in it has been masked for this viewer.
+ */
+export type CallReportResponse = CallReport & {
+    phone_masked?: boolean;
+};
+
+export type GetRunCallReportApiV1WorkflowWorkflowIdRunsRunIdCallReportGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Workflow Id
+         */
+        workflow_id: number;
+        /**
+         * Run Id
+         */
+        run_id: number;
+    };
+    query?: never;
+    url: '/api/v1/workflow/{workflow_id}/runs/{run_id}/call-report';
+};
+
+export type GetRunCallReportApiV1WorkflowWorkflowIdRunsRunIdCallReportGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetRunCallReportApiV1WorkflowWorkflowIdRunsRunIdCallReportGetError = GetRunCallReportApiV1WorkflowWorkflowIdRunsRunIdCallReportGetErrors[keyof GetRunCallReportApiV1WorkflowWorkflowIdRunsRunIdCallReportGetErrors];
+
+export type GetRunCallReportApiV1WorkflowWorkflowIdRunsRunIdCallReportGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: CallReportResponse;
+};
+
+export type GetRunCallReportApiV1WorkflowWorkflowIdRunsRunIdCallReportGetResponse = GetRunCallReportApiV1WorkflowWorkflowIdRunsRunIdCallReportGetResponses[keyof GetRunCallReportApiV1WorkflowWorkflowIdRunsRunIdCallReportGetResponses];
+
+/**
+ * StatsRange
+ */
+export type StatsRange = {
+    start_date: string;
+    end_date: string;
+    timezone: string;
+};
+
+/**
+ * StatsKpis
+ */
+export type StatsKpis = {
+    total_calls: number;
+    inbound_calls: number;
+    outbound_calls: number;
+    successful_calls: number;
+    failed_calls: number;
+    success_rate?: number | null;
+    avg_duration_seconds?: number | null;
+    total_duration_seconds: number;
+    calls_with_ticket: number;
+    tickets_created: number;
+    calls_with_closed_ticket: number;
+    calls_with_open_ticket: number;
+    analysed_calls: number;
+};
+
+/**
+ * StatsCapabilities
+ */
+export type StatsCapabilities = {
+    tickets: boolean;
+    analysis: boolean;
+};
+
+/**
+ * StatsItem
+ */
+export type StatsItem = {
+    key: string;
+    label: string;
+    count: number;
+};
+
+/**
+ * StatsDay
+ */
+export type StatsDay = {
+    date: string;
+    calls: number;
+    successful: number;
+};
+
+/**
+ * StatsHour
+ */
+export type StatsHour = {
+    hour: number;
+    calls: number;
+};
+
+/**
+ * CallStatsResponse
+ */
+export type CallStatsResponse = {
+    range: StatsRange;
+    kpis: StatsKpis;
+    capabilities: StatsCapabilities;
+    outcomes: Array<StatsItem>;
+    disconnections: Array<StatsItem>;
+    sentiment: Array<StatsItem>;
+    satisfaction: Array<StatsItem>;
+    reasons: Array<StatsItem>;
+    daily: Array<StatsDay>;
+    hourly: Array<StatsHour>;
+};
+
+export type GetCallStatsApiV1OrganizationsReportsCallStatsGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query: {
+        /**
+         * Start Date
+         *
+         * First day, YYYY-MM-DD (local)
+         */
+        start_date: string;
+        /**
+         * End Date
+         *
+         * Last day inclusive, YYYY-MM-DD (local)
+         */
+        end_date: string;
+        /**
+         * Timezone
+         *
+         * IANA timezone, e.g. 'Asia/Kolkata'
+         */
+        timezone: string;
+        /**
+         * Workflow Id
+         *
+         * Limit to one agent
+         */
+        workflow_id?: number | null;
+        /**
+         * Call Type
+         */
+        call_type?: 'inbound' | 'outbound' | null;
+        /**
+         * Include Test Calls
+         *
+         * Include browser/test sessions, which are left out by default
+         */
+        include_test_calls?: boolean;
+    };
+    url: '/api/v1/organizations/reports/call-stats';
+};
+
+export type GetCallStatsApiV1OrganizationsReportsCallStatsGetErrors = {
+    /**
+     * Invalid range or timezone
+     */
+    400: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetCallStatsApiV1OrganizationsReportsCallStatsGetError = GetCallStatsApiV1OrganizationsReportsCallStatsGetErrors[keyof GetCallStatsApiV1OrganizationsReportsCallStatsGetErrors];
+
+export type GetCallStatsApiV1OrganizationsReportsCallStatsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: CallStatsResponse;
+};
+
+export type GetCallStatsApiV1OrganizationsReportsCallStatsGetResponse = GetCallStatsApiV1OrganizationsReportsCallStatsGetResponses[keyof GetCallStatsApiV1OrganizationsReportsCallStatsGetResponses];
+
 export type DownloadWorkflowReportApiV1WorkflowWorkflowIdReportGetData = {
     body?: never;
     headers?: {

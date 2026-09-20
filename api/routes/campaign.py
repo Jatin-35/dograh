@@ -18,6 +18,7 @@ from api.services.auth.depends import get_user
 from api.services.campaign.runner import campaign_runner_service
 from api.services.campaign.source_sync import CampaignSourceSyncService
 from api.services.campaign.source_sync_factory import get_sync_service
+from api.services.phone_masking import should_mask_phone_numbers
 from api.services.quota_service import authorize_workflow_run_start
 from api.services.reports import generate_campaign_report_csv
 from api.services.storage import storage_fs
@@ -1045,7 +1046,10 @@ async def download_campaign_report(
         raise HTTPException(status_code=404, detail="Campaign not found")
 
     output, filename = await generate_campaign_report_csv(
-        campaign_id, start_date=start_date, end_date=end_date
+        campaign_id,
+        start_date=start_date,
+        end_date=end_date,
+        mask_phone=await should_mask_phone_numbers(user),
     )
 
     return StreamingResponse(
