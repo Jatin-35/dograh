@@ -492,15 +492,21 @@ class TataSmartfloProvider(TelephonyProvider):
 def _smartflo_refusal(message: str):
     """A refusal SmartFlo will parse.
 
-    Their contract is exact: HTTP 200, JSON, keys spelled ``success`` and
-    ``wss_url``. Anything else — a 4xx, a differently-named key — is documented
-    to hang the call up immediately.
+    Their published JSON schema requires ``wss_url`` on every response (even a
+    refusal), matching ``^wss://.+`` — an empty string fails that pattern, so
+    this cannot simply omit or blank the value — and sets
+    ``additionalProperties: false``, so no other key such as ``message`` is
+    allowed. The placeholder below is syntactically valid but points nowhere;
+    it exists only to satisfy the pattern on a call that ``success: false``
+    already declines. The real reason is logged, not put in the response body.
     """
     import json
 
     from fastapi import Response
 
+    logger.info(f"SmartFlo inbound call refused: {message}")
+
     return Response(
-        content=json.dumps({"success": False, "message": message}),
+        content=json.dumps({"success": False, "wss_url": "wss://declined.invalid/"}),
         media_type="application/json",
     )
