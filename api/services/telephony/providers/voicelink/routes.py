@@ -124,7 +124,26 @@ async def voicelink_inbound_ws(websocket: WebSocket) -> None:
     from api.services.telephony.factory import get_telephony_provider_by_id  # noqa: F401
     from api.utils.telephony_address import normalize_telephony_address
 
-    await websocket.accept()
+    # VoiceLink reports that its client never sees the connection reach "open",
+    # although our upgrade succeeds and nginx logs HTTP 101 — it then closes
+    # with 1006 having sent nothing. An offered subprotocol that the server
+    # fails to echo produces exactly that: the client treats the handshake as
+    # failed. The same trap is handled for chan_websocket in
+    # api/routes/telephony.py, which must echo "media" or the connection drops.
+    #
+    # RFC 6455 has the server select one of the protocols the client offered,
+    # so echoing the first is correct rather than merely accommodating. Logged
+    # either way, because the header is the only evidence of what they send.
+    requested_protocol = websocket.headers.get("sec-websocket-protocol")
+    logger.info(
+        f"VoiceLink INBOUND handshake: sec-websocket-protocol="
+        f"{requested_protocol!r} user-agent={websocket.headers.get('user-agent')!r}"
+    )
+    subprotocol = (
+        requested_protocol.split(",")[0].strip() if requested_protocol else None
+    )
+
+    await websocket.accept(subprotocol=subprotocol)
     try:
         first_msg = json.loads(await websocket.receive_text())
         start_msg = (
