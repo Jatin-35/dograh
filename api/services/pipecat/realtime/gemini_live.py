@@ -19,6 +19,7 @@ Layers Dograh engine integration quirks onto upstream-pristine
 """
 
 import asyncio
+import contextvars
 import os
 from typing import Any
 
@@ -66,6 +67,14 @@ MAX_COMPACTION_BUFFERED_AUDIO_BYTES = 16_000 * 2 * 5
 # lifts Gemini's 15-minute cap on uncompressed audio sessions. 0 disables.
 COMPRESSION_TRIGGER_TOKENS = int(
     os.getenv("GEMINI_LIVE_COMPRESSION_TRIGGER_TOKENS", "16000")
+)
+
+# The connection epoch a connection's background loop was started under. Each
+# connection runs in its own asyncio task, and a task gets its own copy of a
+# context variable, so every loop can tell whether it has been superseded
+# without changing upstream's loop. See _handle_connection_error.
+_LOOP_CONNECTION_EPOCH: contextvars.ContextVar[int | None] = contextvars.ContextVar(
+    "gemini_live_loop_connection_epoch", default=None
 )
 
 
@@ -116,6 +125,9 @@ class DograhGeminiLiveLLMService(GeminiLiveLLMService):
         # here and replay it once the fresh session is seeded.
         self._compaction_audio_frames: list[Any] = []
         self._compaction_audio_bytes: int = 0
+        # Advanced by every _disconnect(); a connection loop started under an
+        # older value has been superseded. See _handle_connection_error.
+        self._connection_epoch: int = 0
 
     # ------------------------------------------------------------------
     # Hooks from upstream GeminiLiveLLMService
@@ -267,8 +279,80 @@ class DograhGeminiLiveLLMService(GeminiLiveLLMService):
         self._node_transition_context_received = False
         self._node_transition_context_seed_started = False
         self._session_resumption_handle = None
+        outgoing_task = self._connection_task
         await self._disconnect()
+        await self._await_outgoing_connection_stopped(outgoing_task)
         await self._connect(session_resumption_handle=None)
+
+    # ------------------------------------------------------------------
+    # Superseded connections must not trigger reconnects (run-442)
+    # ------------------------------------------------------------------
+    #
+    # Upstream's _disconnect() cancels the outgoing connection's loop with a
+    # best-effort ~1s timeout and moves on whether or not it stopped. A loop
+    # that survives then fails on its next read — self._session is already
+    # cleared or belongs to the newer connection ("'NoneType' object has no
+    # attribute 'receive'") — and upstream treats that as a real failure: it
+    # counts it, reconnects on top of the newer connection, and after three
+    # rounds ends the call with "Gemini Live connection failed after 3
+    # consecutive attempts". These three overrides stop that without touching
+    # upstream code: every error upstream reacts to goes through
+    # _handle_connection_error, which now ignores errors from a loop that a
+    # newer connection has replaced.
+
+    async def _disconnect(self, *args, **kwargs):
+        # First, before any await inside upstream's teardown can hand control
+        # back to the outgoing loop. Arguments pass through: newer pipecat
+        # takes _disconnect(preserve_pending_end_frame=...).
+        self._connection_epoch += 1
+        return await super()._disconnect(*args, **kwargs)
+
+    async def _connection_task_handler(self, config):
+        # Runs inside the connection's own task, so this binding is private to
+        # this connection's loop.
+        _LOOP_CONNECTION_EPOCH.set(self._connection_epoch)
+        return await super()._connection_task_handler(config=config)
+
+    async def _handle_connection_error(self, error: Exception) -> bool:
+        started_under = _LOOP_CONNECTION_EPOCH.get()
+        if started_under is not None and started_under != self._connection_epoch:
+            logger.info(
+                f"{self}: ignoring error from a superseded Gemini Live connection: {error}"
+            )
+            return False  # upstream then lets the old loop exit; no retry, no count
+        return await super()._handle_connection_error(error)
+
+    async def _await_outgoing_connection_stopped(
+        self, task: asyncio.Task | None, *, timeout: float = 3.0
+    ) -> None:
+        """Make sure a connection being replaced has actually stopped before we
+        start the next one.
+
+        ``_disconnect()`` (upstream) cancels the outgoing connection's background
+        loop with only a best-effort ~1s timeout, and proceeds regardless of
+        whether that succeeded. If the loop is still alive when a new connection
+        starts, it can still be mid-iteration reading ``self._session`` right as
+        this method reassigns it — the connection-epoch guard (see
+        ``_handle_connection_error``) makes that harmless if it still happens, but
+        giving the outgoing loop a real chance to finish first means it usually
+        doesn't happen at all, avoiding the wasted reconnect-and-discard cycle.
+
+        Bounded rather than unconditional: a connection that never stops must
+        not block reconnection forever, which would turn a freeze into a
+        permanent one.
+        """
+        if task is None or task.done():
+            return
+        try:
+            await asyncio.wait_for(asyncio.shield(task), timeout=timeout)
+        except (TimeoutError, asyncio.CancelledError):
+            logger.warning(
+                f"{self}: outgoing Gemini Live connection did not stop in time"
+            )
+        except Exception:
+            # Whatever it failed with is the outgoing connection's own concern —
+            # already routed through its own error handling before we got here.
+            pass
 
     # ------------------------------------------------------------------
     # Cost compaction: trade a reconnect for a cheaper context
@@ -347,7 +431,9 @@ class DograhGeminiLiveLLMService(GeminiLiveLLMService):
         logger.info(f"{self}: compacting Gemini Live context via session refresh")
         self._awaiting_context_compaction_seed = True
         self._session_resumption_handle = None
+        outgoing_task = self._connection_task
         await self._disconnect()
+        await self._await_outgoing_connection_stopped(outgoing_task)
         await self._connect(session_resumption_handle=None)
 
     # ------------------------------------------------------------------
