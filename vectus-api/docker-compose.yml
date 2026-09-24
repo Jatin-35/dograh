@@ -1,0 +1,30 @@
+# Runs next to Dograh on the same host, reachable only on Dograh's Docker
+# network as http://vectus-api:8080 — no published port, nothing on the internet.
+#
+#   cd vectus-api && docker compose up -d --build
+services:
+  vectus-api:
+    build: .
+    container_name: vectus-api
+    restart: unless-stopped
+    environment:
+      VECTUS_API_KEY: ${VECTUS_API_KEY:?set VECTUS_API_KEY in vectus-api/.env}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    # QA-verified: runs read-only with every capability dropped; ~40 MB RSS.
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    logging:
+      driver: json-file
+      options: {max-size: "20m", max-file: "5"}
+    networks:
+      - dograh
+
+networks:
+  dograh:
+    external: true
+    # Dograh's compose network is "app-network", prefixed with its project name
+    # (the folder it runs from). Override if the folder is not "dograh".
+    name: ${DOGRAH_NETWORK:-dograh_app-network}

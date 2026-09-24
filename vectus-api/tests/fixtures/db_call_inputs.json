@@ -1,0 +1,36 @@
+{
+  "_source": "Dograh DB, workflow 1 'Vectus Smart Care - outbound', runs 1-7 (2026-09-16/17). 'said' is the caller's transcribed words or the bot's retrieval query; 'expect' is what the API must do with it.",
+  "samba_rep": {"salesperson": "Balvinder Kumar", "contact": "7006485067"},
+  "rag_gave": [
+    {"run": 2, "said_number": "9582236521", "in_kb": false},
+    {"run": 3, "said_number": "9797282828", "in_kb": false},
+    {"run": 6, "said_number": "7006485067", "in_kb": true},
+    {"run": 7, "said_number": null, "note": "retrieval returned 0 chunks"}
+  ],
+  "cases": [
+    {"run": 2, "field": "city", "said": "Samba, Jammu and Kashmir", "product": "water tank", "expect": "found_samba"},
+    {"run": 2, "field": "state", "said": "जम्मू एंड कश्मीर", "product": "water tank", "expect": "state_answer"},
+    {"run": 2, "field": "city", "said": "जी मैं जम्मू एंड कश्मीर में रहता हूं।", "product": "water tank", "expect": "state_answer"},
+    {"run": 3, "field": "city", "said": "जी, मैं सांबा, जम्मू कश्मीर में रहता हूं।", "product": "water tank", "expect": "confirm_samba"},
+    {"run": 3, "field": "city", "said": "Area Manager Samba Jammu Kashmir", "product": "water tank", "expect": "found_samba"},
+    {"run": 6, "field": "city", "said": "Area Manager for Samba Jammu Kashmir", "product": "tanki", "expect": "found_samba"},
+    {"run": 6, "field": "city", "said": "Samba, Jammu Kashmir", "product": "Puff", "expect": "found_samba"},
+    {"run": 6, "field": "city", "said": "सांबा", "product": "tanki", "expect": "confirm_samba"},
+    {"run": 7, "field": "city", "said": "Area Manager Jammu and Kashmir samba", "product": "टंकी", "expect": "found_samba"},
+    {"run": 7, "field": "city", "said": "जी, मैं तो इधर रहता हूं। सांबा, जम्मू कश्मीर में।", "product": "टंकी", "expect": "confirm_samba"},
+    {"run": 7, "field": "city", "said": "Area Manager Jammu and Kashmir Kathua", "product": "टंकी", "expect": "found_kathua"},
+    {"run": 7, "field": "city", "said": "कटुआ, जम्मू कश्मीर के लिए चेक कीजिए फिर एक बार।", "product": "टंकी", "expect": "confirm_kathua"},
+    {"run": 7, "field": "city", "said": "कटुआ", "product": "टंकी", "expect": "confirm_kathua"},
+    {"run": 7, "field": "city", "said": "कट हुआ कट हुआ।", "product": "टंकी", "expect": "confirm_kathua_or_nothing"},
+    {"run": 7, "field": "city", "said": "Kafool jammu kashmir", "product": "टंकी", "expect": "no_wrong_number"},
+    {"run": 7, "field": "city", "said": "Kathua, Jammu Kashmir", "product": "Vectus Cool", "expect": "found_kathua"},
+    {"run": 1, "field": "product", "said": "bath pair", "expect": "invalid_product"},
+    {"run": 2, "field": "product", "said": "pathway", "expect": "invalid_product"},
+    {"run": 2, "field": "product", "said": "Vectus ka cooler", "expect": "water_tank"},
+    {"run": 3, "field": "product", "said": "water tank", "expect": "water_tank"},
+    {"run": 6, "field": "product", "said": "tanki", "expect": "water_tank"},
+    {"run": 7, "field": "product", "said": "टंकी", "expect": "water_tank"},
+    {"run": 6, "field": "product", "said": "Puff water tank", "expect": "water_tank"},
+    {"run": 3, "field": "product", "said": "Granito", "expect": "water_tank"}
+  ]
+}
