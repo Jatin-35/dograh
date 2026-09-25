@@ -249,9 +249,17 @@ class DograhGeminiLiveLLMService(GeminiLiveLLMService):
 
     async def _set_bot_is_responding(self, responding: bool):
         was_responding = self._bot_is_responding
+        # Upstream releases an EndFrame held back for this turn inside the call
+        # below, so look before it does.
+        hanging_up = self._end_frame_pending_bot_turn_finished is not None
         await super()._set_bot_is_responding(responding)
         if was_responding and not responding:
             await self._run_pending_node_transition_function_calls()
+            if hanging_up:
+                # A refresh now would only open a session for the EndFrame to
+                # tear down.
+                self._context_compaction_pending = False
+                return
             await self._maybe_compact_context()
 
     async def _run_pending_node_transition_function_calls(self):
@@ -340,8 +348,13 @@ class DograhGeminiLiveLLMService(GeminiLiveLLMService):
         Bounded rather than unconditional: a connection that never stops must
         not block reconnection forever, which would turn a freeze into a
         permanent one.
+
+        Skipped when called from inside that connection's own loop, which is
+        where a compaction refresh runs (turn_complete marks the bot as done
+        responding): a task cannot finish while it waits on itself, so the wait
+        would only ever run out the timeout, leaving the caller unheard.
         """
-        if task is None or task.done():
+        if task is None or task.done() or task is asyncio.current_task():
             return
         try:
             await asyncio.wait_for(asyncio.shield(task), timeout=timeout)
@@ -372,9 +385,10 @@ class DograhGeminiLiveLLMService(GeminiLiveLLMService):
         if not self._context_compaction_enabled or self._context_compaction_pending:
             return
 
-        if self._awaiting_context_compaction_seed:
+        if self._awaiting_context_compaction_seed or self._node_transition_in_flight():
             # Gemini reports the finished turn's usage a moment after we start the
-            # refresh, so this figure describes the context we are already
+            # refresh (or the node transition, which reseeds from text the same
+            # way), so this figure describes the context we are already
             # discarding. Acting on it would queue a second refresh against the
             # compacted session.
             return
