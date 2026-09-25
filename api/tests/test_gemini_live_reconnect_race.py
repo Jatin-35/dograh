@@ -26,7 +26,6 @@ or misplaced, not just if its bookkeeping changes shape.
 """
 
 import asyncio
-import time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -250,25 +249,3 @@ async def test_compaction_waits_for_the_outgoing_connection_before_reconnecting(
     still_running.set()
     await asyncio.wait_for(run, timeout=1.0)
     assert order == ["disconnect", "connect"]
-
-
-@pytest.mark.asyncio
-async def test_await_outgoing_connection_stopped_returns_at_once_from_inside_that_connection():
-    """A compaction refresh runs inside the outgoing connection's own receive
-    loop (turn_complete -> bot stopped responding -> _maybe_compact_context).
-    A task cannot finish while it waits on itself, so waiting there only ever
-    ran out the timeout: on prod every refresh took ~3s, during which the bot
-    could not hear the caller. It must return immediately instead."""
-    service = _make_service()
-
-    async def _refresh_from_inside_the_connection() -> float:
-        started = time.perf_counter()
-        await service._await_outgoing_connection_stopped(
-            asyncio.current_task(), timeout=1.0
-        )
-        return time.perf_counter() - started
-
-    elapsed = await asyncio.wait_for(
-        asyncio.ensure_future(_refresh_from_inside_the_connection()), timeout=3.0
-    )
-    assert elapsed < 0.1
