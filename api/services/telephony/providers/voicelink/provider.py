@@ -69,6 +69,51 @@ _EVENT_STATUS = {
     "call.failed": "failed",
 }
 
+# The event name alone does not say how a call ended: an unanswered call
+# arrives as call.failed (SIP 480, cause 19) or as call.ended/call.completed
+# ("Normal Clearing", no answeredAt). These refine the terminal events so a
+# no-answer or busy is reported as such, which is what campaign retries and
+# the circuit breaker act on.
+_TERMINAL_EVENTS = frozenset({"call.completed", "call.ended", "call.failed"})
+_ANSWER_ENDED_EVENTS = frozenset({"call.completed", "call.ended"})
+_NO_ANSWER_SIP = frozenset({"408", "480"})
+_BUSY_SIP = frozenset({"486", "600"})
+_NO_ANSWER_CAUSES = frozenset({"18", "19"})  # Q.850: no user responding / no answer
+_BUSY_CAUSES = frozenset({"17"})  # Q.850: user busy
+
+
+def _terminal_status(event: str, data: Dict[str, Any], call: Dict[str, Any]) -> str:
+    """Map a terminal VoiceLink event to how the call actually ended."""
+    default = _EVENT_STATUS[event]
+
+    call_status = re.sub(r"[\s_-]", "", str(call.get("callStatus") or "")).upper()
+    if call_status == "ANSWERED":
+        # The customer connected, so this call must not be reported as a
+        # not-connected failure (that would overwrite the call's disposition).
+        return "completed"
+    if call_status == "NOANSWER":
+        return "no-answer"
+    if call_status == "BUSY":
+        return "busy"
+
+    # The customer leg only: the bot leg ("B") always reports SIP 0.
+    sip_statuses = {str(call.get("sipStatus") or "")}
+    for leg in data.get("legs") or []:
+        if isinstance(leg, dict) and leg.get("legType") == "A":
+            sip_statuses.add(str(leg.get("sipStatus") or ""))
+    cause = re.match(r"\s*(\d+)", str(call.get("hangupCause") or ""))
+    cause = cause.group(1) if cause else ""
+
+    if sip_statuses & _BUSY_SIP or cause in _BUSY_CAUSES:
+        return "busy"
+    if sip_statuses & _NO_ANSWER_SIP or cause in _NO_ANSWER_CAUSES:
+        return "no-answer"
+    # VoiceLink fills answeredAt once the customer picks up, so an ended call
+    # that carries the field but no value was never answered.
+    if event in _ANSWER_ENDED_EVENTS and "answeredAt" in call and not call["answeredAt"]:
+        return "no-answer"
+    return default
+
 
 class VoiceLinkProvider(TelephonyProvider):
     """
@@ -370,7 +415,10 @@ class VoiceLinkProvider(TelephonyProvider):
         """
         call = data.get("call") or {}
         event = (data.get("event") or "").lower()
-        status = _EVENT_STATUS.get(event, event)
+        if event in _TERMINAL_EVENTS:
+            status = _terminal_status(event, data, call)
+        else:
+            status = _EVENT_STATUS.get(event, event)
 
         duration = call.get("durationSec")
         # Field name unconfirmed upstream — check both spellings defensively.

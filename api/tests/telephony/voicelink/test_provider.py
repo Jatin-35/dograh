@@ -305,6 +305,100 @@ def test_parse_status_callback_maps_events(event, expected_status):
     assert parsed["duration"] == "60"
 
 
+# Terminal events as VoiceLink sent them on prod (2026-09-25): run 469 rang
+# out, run 470 rang out and ended with "Normal Clearing", run 468 was answered.
+_RANG_OUT_FAILED = {
+    "status": "failed",
+    "hangupCause": "19 - User alerting, no answer",
+    "answeredAt": None,
+    "durationSec": None,
+    "callStatus": "NO ANSWER",
+    "hangupReason": "User alerting, no answer",
+    "sipStatus": "480",
+}
+_RANG_OUT_ENDED = {
+    "status": "ended",
+    "hangupCause": "16 - Normal Clearing",
+    "answeredAt": None,
+    "durationSec": None,
+    "hangupReason": "Normal Clearing",
+    "sipStatus": "200",
+}
+_RANG_OUT_COMPLETED = {
+    "status": "ended",
+    "hangupCause": "16 - Normal Clearing",
+    "answeredAt": None,
+    "durationSec": None,
+    "callStatus": "NO ANSWER",
+    "hangupReason": "16 - Normal Clearing",
+}
+_ANSWERED_COMPLETED = {
+    "status": "ended",
+    "hangupCause": "16",
+    "answeredAt": "2026-09-25T18:10:54.000+05:30",
+    "durationSec": 21,
+    "callStatus": "ANSWERED",
+    "hangupReason": "16",
+}
+
+
+@pytest.mark.parametrize(
+    "event,call,expected_status",
+    [
+        ("call.failed", _RANG_OUT_FAILED, "no-answer"),
+        ("call.completed", {**_RANG_OUT_FAILED, "sipStatus": None}, "no-answer"),
+        ("call.ended", _RANG_OUT_ENDED, "no-answer"),
+        ("call.completed", _RANG_OUT_COMPLETED, "no-answer"),
+        ("call.completed", _ANSWERED_COMPLETED, "completed"),
+        # Answered wins over a stray SIP code on the same event.
+        ("call.completed", {**_ANSWERED_COMPLETED, "sipStatus": "480"}, "completed"),
+        ("call.failed", _ANSWERED_COMPLETED, "completed"),
+        ("call.failed", {"callStatus": "BUSY", "answeredAt": None}, "busy"),
+        ("call.failed", {"sipStatus": "486", "answeredAt": None}, "busy"),
+        ("call.failed", {"hangupCause": "17 - User busy", "answeredAt": None}, "busy"),
+        ("call.failed", {"sipStatus": "408", "answeredAt": None}, "no-answer"),
+        # A genuine failure stays a failure.
+        (
+            "call.failed",
+            {"hangupCause": "1 - Unallocated number", "sipStatus": "404"},
+            "failed",
+        ),
+    ],
+)
+def test_parse_status_callback_reports_how_a_terminal_call_ended(
+    event, call, expected_status
+):
+    provider = _provider()
+
+    parsed = provider.parse_status_callback(_event(event, **call))
+
+    assert parsed["status"] == expected_status
+
+
+def test_parse_status_callback_reads_sip_status_from_the_customer_leg_only():
+    provider = _provider()
+    body = _event("call.failed", answeredAt=None, hangupCause=None)
+    body["legs"] = [
+        {"legType": "A", "sipStatus": "480"},
+        {"legType": "B", "sipStatus": "486"},  # the bot leg; never the customer
+    ]
+
+    parsed = provider.parse_status_callback(body)
+
+    assert parsed["status"] == "no-answer"
+
+
+def test_parse_status_callback_keeps_completed_when_answered_at_is_not_sent():
+    # Older payloads without the field must not be read as unanswered.
+    provider = _provider()
+    body = _event("call.ended")
+    del body["call"]["answeredAt"]
+
+    parsed = provider.parse_status_callback(body)
+
+    assert parsed["status"] == "completed"
+
+
 def test_parse_status_callback_unknown_event_passes_through():
     provider = _provider()
 

@@ -559,6 +559,22 @@ class RateLimiter:
             logger.error(f"Error deleting workflow from_number mapping: {e}")
             return False
 
+    async def claim_not_connected_report(self, workflow_run_id: int) -> bool:
+        """
+        Atomically claim the one not-connected report for a workflow run.
+        Returns True for the first claim only. On a Redis error it returns
+        True, so an unavailable Redis never suppresses a retry.
+        """
+        redis_client = await self._get_redis()
+        key = f"not_connected_reported:{workflow_run_id}"
+
+        try:
+            claimed = await redis_client.set(key, "1", nx=True, ex=3600)
+            return bool(claimed)
+        except Exception as e:
+            logger.error(f"Error claiming not-connected report: {e}")
+            return True
+
     async def close(self):
         """Close Redis connection"""
         if self.redis_client:

@@ -18,6 +18,7 @@ from api.services.campaign.campaign_event_publisher import (
     get_campaign_event_publisher,
 )
 from api.services.campaign.circuit_breaker import circuit_breaker
+from api.services.campaign.rate_limiter import rate_limiter
 from api.tasks.arq import enqueue_job
 from api.tasks.function_names import FunctionNames
 
@@ -165,7 +166,27 @@ async def _process_status_update(workflow_run_id: int, status: StatusCallbackReq
 
         await campaign_call_dispatcher.release_call_slot(workflow_run_id)
 
-        if workflow_run.campaign_id:
+        existing_tags = (
+            workflow_run.gathered_context.get("call_tags", [])
+            if workflow_run.gathered_context
+            else []
+        )
+        # Some providers report the end of one call twice (VoiceLink sends
+        # call.failed or call.ended, then call.completed). queued_runs has no
+        # unique key, so a second pass would schedule a duplicate retry and
+        # count the call twice toward the circuit breaker.
+        already_reported = isinstance(existing_tags, list) and (
+            "not_connected" in existing_tags
+        )
+        if workflow_run.campaign_id and not already_reported:
+            # The tag is read before it is written, so two reports handled at
+            # the same moment can both pass the check above; this claim is
+            # atomic.
+            already_reported = not await rate_limiter.claim_not_connected_report(
+                workflow_run_id
+            )
+
+        if workflow_run.campaign_id and not already_reported:
             is_failure = normalized_status in FAILURE_NOT_CONNECTED_STATUSES
             await circuit_breaker.record_and_evaluate(
                 workflow_run.campaign_id,
@@ -177,6 +198,7 @@ async def _process_status_update(workflow_run_id: int, status: StatusCallbackReq
         if (
             normalized_status in RETRYABLE_NOT_CONNECTED_STATUSES
             and workflow_run.campaign_id
+            and not already_reported
         ):
             publisher = await get_campaign_event_publisher()
             await publisher.publish_retry_needed(
@@ -186,13 +208,8 @@ async def _process_status_update(workflow_run_id: int, status: StatusCallbackReq
                 queued_run_id=workflow_run.queued_run_id,
             )
 
-        call_tags = (
-            workflow_run.gathered_context.get("call_tags", [])
-            if workflow_run.gathered_context
-            else []
-        )
         call_tags = _append_unique_tags(
-            call_tags,
+            existing_tags,
             ["not_connected", f"telephony_{normalized_status.value}"],
         )
 
