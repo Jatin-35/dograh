@@ -15,6 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { VoiceSelector } from "@/components/VoiceSelector";
+import { brandDocsLink } from "@/constants/brand";
 import { LANGUAGE_DISPLAY_NAMES } from "@/constants/languages";
 import { useUserConfig } from "@/context/UserConfigContext";
 import type { ModelOverrides } from "@/types/workflow-configurations";
@@ -666,7 +667,7 @@ export function ServiceConfigurationForm({
                 {actualSchema?.description}{" "}
                 {actualSchema?.docs_url && (
                     <a
-                        href={actualSchema.docs_url}
+                        href={brandDocsLink(actualSchema.docs_url)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-0.5 underline"

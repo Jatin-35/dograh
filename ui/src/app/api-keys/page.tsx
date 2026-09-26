@@ -20,6 +20,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import { CONTACT_EMAIL } from '@/constants/brand';
 import { useAppConfig } from '@/context/AppConfigContext';
 import { useAuth } from '@/lib/auth';
 import logger from '@/lib/logger';
@@ -472,7 +473,13 @@ export default function APIKeysPage() {
                                         </Button>
                                     ) : (
                                         <span className="text">
-                                            To generate additional service keys, <a href="https://app.dograh.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Sign up on app.dograh.com</a>
+                                            To generate additional service keys, contact us at{" "}
+                                            <a
+                                                href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent("Service key request")}`}
+                                                className="text-primary hover:underline"
+                                            >
+                                                {CONTACT_EMAIL}
+                                            </a>
                                         </span>
                                     )}
                                 </div>

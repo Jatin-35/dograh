@@ -303,10 +303,12 @@ services:
       # Rotating it makes existing values undecryptable; they must be re-entered.
       CODE_EDITOR_ENCRYPTION_KEY: "${CODE_EDITOR_ENCRYPTION_KEY:-}"
 
-      # Telemetry
-      ENABLE_TELEMETRY: "${ENABLE_TELEMETRY:-true}"
-      POSTHOG_API_KEY: "phc_ItizB1dP6yv7ZYobbcqrpxTdbomDA8hJFSEmAMdYvIr"
-      POSTHOG_HOST: "https://us.i.posthog.com"
+      # Telemetry: off unless a PostHog project of our own is configured in .env.
+      # The backend sends events whenever POSTHOG_API_KEY is set, regardless of
+      # ENABLE_TELEMETRY, so the key must not have a default.
+      ENABLE_TELEMETRY: "${ENABLE_TELEMETRY:-false}"
+      POSTHOG_API_KEY: "${POSTHOG_API_KEY:-}"
+      POSTHOG_HOST: "${POSTHOG_HOST:-https://us.i.posthog.com}"
 
     ports:
       - "8000:8000"
@@ -392,12 +394,12 @@ services:
       NEXT_PUBLIC_ADMIN_URL: "${NEXT_PUBLIC_ADMIN_URL:-}"
       NEXT_PUBLIC_CLIENT_URL: "${NEXT_PUBLIC_CLIENT_URL:-}"
 
-      # Flag to enable/ disable posthog
-      ENABLE_TELEMETRY: "${ENABLE_TELEMETRY:-true}"
+      # Flag to enable/ disable posthog (off unless configured in .env)
+      ENABLE_TELEMETRY: "${ENABLE_TELEMETRY:-false}"
 
       # Posthog
-      POSTHOG_KEY: "phc_ItizB1dP6yv7ZYobbcqrpxTdbomDA8hJFSEmAMdYvIr"
-      POSTHOG_HOST: "https://us.posthog.com"
+      POSTHOG_KEY: "${POSTHOG_KEY:-}"
+      POSTHOG_HOST: "${POSTHOG_HOST_UI:-https://us.posthog.com}"
     ports:
       - "3010:3010"
     depends_on:

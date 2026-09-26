@@ -19,7 +19,13 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { CONTACT_URL, docsUrl, PRIVACY_POLICY_URL, TERMS_OF_SERVICE_URL } from "./brand";
+import {
+    brandDocsLink,
+    CONTACT_URL,
+    docsUrl,
+    PRIVACY_POLICY_URL,
+    TERMS_OF_SERVICE_URL,
+} from "./brand";
 import * as documentation from "./documentation";
 
 describe("brand URLs", () => {
@@ -51,6 +57,28 @@ describe("brand URLs", () => {
         for (const url of urls) {
             expect(url.startsWith(base)).toBe(true);
         }
+    });
+
+    it("sends backend-supplied upstream docs links to our docs, same page", () => {
+        // Node and telephony-provider specs still carry docs.dograh.com links.
+        expect(brandDocsLink("https://docs.dograh.com/integrations/tuner")).toBe(
+            docsUrl("integrations/tuner"),
+        );
+        expect(brandDocsLink("https://docs.dograh.com/integrations/telephony/voicelink")).toBe(
+            docsUrl("integrations/telephony/voicelink"),
+        );
+    });
+
+    it("leaves every other link alone", () => {
+        for (const url of [
+            "https://docs.inworld.ai/tts/tts",
+            "https://docs.dograh.company/x",
+            docsUrl("integrations/telephony/tata-smartflo"),
+        ]) {
+            expect(brandDocsLink(url)).toBe(url);
+        }
+        expect(brandDocsLink(null)).toBeUndefined();
+        expect(brandDocsLink(undefined)).toBeUndefined();
     });
 });
 

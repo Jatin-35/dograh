@@ -26,6 +26,10 @@ export const COMPANY_BASE_URL = (
     process.env.NEXT_PUBLIC_COMPANY_URL || "https://www.botrixai.com"
 ).replace(/\/+$/, "");
 
+/** Where customers write to us, e.g. to request more service keys. */
+export const CONTACT_EMAIL =
+    process.env.NEXT_PUBLIC_CONTACT_EMAIL || "contact@botrixai.com";
+
 /** Join a path onto a base without doubling or dropping the slash. */
 function join(base: string, path: string): string {
     return `${base}/${path.replace(/^\/+/, "")}`;
@@ -35,6 +39,15 @@ function join(base: string, path: string): string {
  * variable stops being the single point of control this file exists to be. */
 export function docsUrl(path: string): string {
     return join(DOCS_BASE_URL, path);
+}
+
+const UPSTREAM_DOCS_ORIGIN = /^https?:\/\/docs\.dograh\.com(?=\/|$)/;
+
+/** A docs link supplied by the backend (node and provider specs), with the
+ * upstream docs site swapped for ours. Our docs keep upstream's paths, so the
+ * link lands on the same page. Other links pass through unchanged. */
+export function brandDocsLink(url: string | null | undefined): string | undefined {
+    return url ? url.replace(UPSTREAM_DOCS_ORIGIN, DOCS_BASE_URL) : undefined;
 }
 
 /** Legal and contact pages, on the company site rather than the docs site.

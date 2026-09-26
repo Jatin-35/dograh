@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { brandDocsLink } from "@/constants/brand";
 import { detailFromError } from "@/lib/apiError";
 import { useAuth } from "@/lib/auth";
 
@@ -229,7 +230,7 @@ export function ConfigFormDialog({
             )}
             {currentProvider?.docs_url && (
               <a
-                href={currentProvider.docs_url}
+                href={brandDocsLink(currentProvider.docs_url)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-xs text-blue-600 underline"
