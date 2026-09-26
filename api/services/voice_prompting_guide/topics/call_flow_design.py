@@ -26,8 +26,10 @@ TOPIC = VoicePromptingTopic(
         Stage.create: StageLens(
             relevant=True,
             lens=(
-                "Break the node prompt into 5-8 labeled sections and write multi-turn "
-                "tasks as a numbered sequence. Collect one piece of information per "
+                "Break the node prompt into 5-8 labeled sections in the documented "
+                "order, state the stay/move exit conditions in the prompt itself, and "
+                "close with a Rules block of short prohibitions. Write multi-turn "
+                "tasks as a numbered sequence, collect one piece of information per "
                 "turn, and keep variable-extraction instructions in the node's "
                 "separate extraction_prompt field, not the main prompt."
             ),
@@ -35,17 +37,69 @@ TOPIC = VoicePromptingTopic(
         Stage.review: StageLens(
             relevant=True,
             lens=(
-                "Check the node asks for one thing at a time and that extraction "
-                "logic isn't tangled into the conversational prompt. Check whether the nodes "
-                "are created around variable extraction."
+                "Check the node asks for one thing at a time, that it states when to "
+                "stay and when to move on, and that it ends with a Rules block rather "
+                "than trailing off after the call flow. Check extraction logic isn't "
+                "tangled into the conversational prompt, and whether the nodes are "
+                "created around variable extraction."
             ),
         ),
     },
     content="""\
 A good node prompt is broken into clear sections — pick five to eight depending
-on the use case rather than dumping one wall of text. Sections worth using:
-main task at this node, call flow at this node, common objections, knowledge base, 
-guardrails, rules, and success criteria.
+on the use case rather than dumping one wall of text.
+
+Use these section headings, in this order. Omit any the node does not need;
+do not reorder the ones you keep.
+
+  1. Main task at this node — one or two lines stating why this node exists.
+  2. To-do list             — the checklist that must be satisfied before leaving.
+  3. Call flow              — the narrative, or a numbered sequence for multi-turn work.
+  4. Exit conditions        — when to stay, when to move, and to which node.
+  5. Common objections      — only if this node actually attracts them.
+  6. Knowledge base         — pointers to documents, never pasted reference data.
+  7. Rules                  — the closing block; see below.
+
+Sections are about ordering the agent's attention, not about length. A
+well-sectioned node prompt is usually shorter than the wall of text it
+replaces, because structure exposes the sentences that were saying the same
+thing twice.
+
+## State the exit conditions inside the prompt
+
+Edge conditions decide routing, but the node prompt must also say it plainly
+in its own words: "Stay in this node until X. Move to Y only when Z." The
+duplication is deliberate — the edge condition is what the router evaluates,
+while the prompt governs what the agent does while it is still here. Nodes
+that leave this out hand off early, on the first plausible-sounding reply,
+before the to-do list is actually complete.
+
+Where a node should hold for more than one turn, say so explicitly — "use the
+first one or two user turns to confirm you are speaking to the right person"
+— because otherwise a single acknowledgement reads as completion.
+
+## Close every node prompt with a Rules block
+
+The final section is always the constraints, written as short imperative
+bullets. Put them last: a model follows the end of a prompt more reliably than
+its middle, so the things that must never happen belong at the bottom, not
+buried under the call flow.
+
+Cover whichever of these apply to the node:
+
+  - Turn discipline — end the turn with either a question or a tool call,
+    never both in the same output.
+  - Tool-call hygiene — never mix prose and a tool call in one output; do not
+    make a tool call when the last message was not from the user.
+  - Repetition — do not ask again for something the user has already given.
+  - Promises — never offer an email, callback, ticket number or timeline the
+    workflow cannot actually deliver.
+  - Invention — never invent a name, company, price, policy or prior
+    interaction that was not supplied.
+
+Write them as prohibitions, one per line. "Do not X" is followed more
+reliably than "remember to Y", and a bullet list survives compaction better
+than the same rules dissolved into prose.
 
 For multi-turn tasks, break the work into a numbered sequence inside the call
 flow. A refund-status flow looks like:
@@ -86,6 +140,32 @@ each node prompt — a global node is reachable from anywhere in the call.
             quote=(
                 "Prompt batches several asks in one turn — collect one item at a "
                 "time, confirming as you go."
+            ),
+        ),
+        AuditCheck(
+            id="states_its_own_exit_conditions",
+            judge_question=(
+                "Does the node prompt say in its own words when to stay in this "
+                "node and when to move on — not relying on the edge conditions "
+                "alone to express that?"
+            ),
+            expected="yes",
+            quote=(
+                "Prompt never says when to stay or when to move on — the agent "
+                "hands off on the first plausible reply. State it explicitly."
+            ),
+        ),
+        AuditCheck(
+            id="ends_with_a_rules_block",
+            judge_question=(
+                "Does the node prompt end with a short block of constraints or "
+                "rules, written as prohibitions, rather than trailing off after "
+                "the call flow?"
+            ),
+            expected="yes",
+            quote=(
+                "Prompt has no closing rules block — put the must-never-happen "
+                "constraints last, where the model follows them most reliably."
             ),
         ),
         AuditCheck(

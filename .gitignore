@@ -3,6 +3,8 @@ __pycache__
 .env
 .env.prod
 .env.test
+# Backup copies of .env files hold the same secrets
+.env.bak*
 
 # Conductor personal/per-machine overrides (settings.toml IS committed)
 .conductor/settings.local.toml
