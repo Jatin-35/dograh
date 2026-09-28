@@ -55,7 +55,10 @@ async def _drain(rl, org_id, config_id) -> list[str]:
 def test_a_slot_maps_back_to_its_number():
     assert RateLimiter.pool_slot_address("+919429396634") == "+919429396634"
     assert RateLimiter.pool_slot_address("+919429396634::ch7") == "+919429396634"
-    assert RateLimiter.pool_slot_address("sip:agent@pbx.example") == "sip:agent@pbx.example"
+    assert (
+        RateLimiter.pool_slot_address("sip:agent@pbx.example")
+        == "sip:agent@pbx.example"
+    )
 
 
 def test_slot_one_is_the_bare_number_so_old_mappings_still_release():
@@ -237,14 +240,20 @@ async def test_dispatch_dials_the_number_and_records_the_slot():
     dispatcher = module.CampaignCallDispatcher()
     slot = "+919429396634::ch3"
     campaign = SimpleNamespace(
-        id=7, organization_id=5, workflow_id=10, created_by=1,
+        id=7,
+        organization_id=5,
+        workflow_id=10,
+        created_by=1,
         telephony_configuration_id=42,
     )
     queued_run = SimpleNamespace(
-        id=99, source_uuid="row-1", context_variables={"phone_number": "+919018737669"},
+        id=99,
+        source_uuid="row-1",
+        context_variables={"phone_number": "+919018737669"},
     )
     provider = SimpleNamespace(
-        PROVIDER_NAME="voicelink", WEBHOOK_ENDPOINT="voicelink/events",
+        PROVIDER_NAME="voicelink",
+        WEBHOOK_ENDPOINT="voicelink/events",
         initiate_call=AsyncMock(
             return_value=SimpleNamespace(call_id="c1", provider_metadata={})
         ),
@@ -255,14 +264,27 @@ async def test_dispatch_dials_the_number_and_records_the_slot():
         patch.object(module, "db_client") as db,
         patch.object(module, "rate_limiter") as rl,
         patch.object(module, "call_concurrency") as cc,
-        patch.object(module, "authorize_workflow_run_start", new_callable=AsyncMock,
-                     return_value=SimpleNamespace(has_quota=True)),
-        patch.object(module, "get_backend_endpoints", new_callable=AsyncMock,
-                     return_value=("https://api.example", "wss://api.example")),
-        patch.object(dispatcher, "get_provider_for_campaign", new_callable=AsyncMock,
-                     return_value=provider),
-        patch.object(dispatcher, "acquire_from_number", new_callable=AsyncMock,
-                     return_value=slot),
+        patch.object(
+            module,
+            "authorize_workflow_run_start",
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(has_quota=True),
+        ),
+        patch.object(
+            module,
+            "get_backend_endpoints",
+            new_callable=AsyncMock,
+            return_value=("https://api.example", "wss://api.example"),
+        ),
+        patch.object(
+            dispatcher,
+            "get_provider_for_campaign",
+            new_callable=AsyncMock,
+            return_value=provider,
+        ),
+        patch.object(
+            dispatcher, "acquire_from_number", new_callable=AsyncMock, return_value=slot
+        ),
     ):
         rl.pool_slot_address = RateLimiter.pool_slot_address
         rl.store_workflow_from_number_mapping = AsyncMock()
@@ -290,11 +312,16 @@ async def test_failed_dispatch_releases_the_slot_it_took():
     dispatcher = module.CampaignCallDispatcher()
     slot = "+919429396634::ch2"
     campaign = SimpleNamespace(
-        id=7, organization_id=5, workflow_id=10, created_by=1,
+        id=7,
+        organization_id=5,
+        workflow_id=10,
+        created_by=1,
         telephony_configuration_id=42,
     )
     queued_run = SimpleNamespace(
-        id=99, source_uuid="row-1", context_variables={"phone_number": "+919018737669"},
+        id=99,
+        source_uuid="row-1",
+        context_variables={"phone_number": "+919018737669"},
     )
     provider = SimpleNamespace(PROVIDER_NAME="voicelink")
 
@@ -302,10 +329,15 @@ async def test_failed_dispatch_releases_the_slot_it_took():
         patch.object(module, "db_client") as db,
         patch.object(module, "rate_limiter") as rl,
         patch.object(module, "call_concurrency") as cc,
-        patch.object(dispatcher, "get_provider_for_campaign", new_callable=AsyncMock,
-                     return_value=provider),
-        patch.object(dispatcher, "acquire_from_number", new_callable=AsyncMock,
-                     return_value=slot),
+        patch.object(
+            dispatcher,
+            "get_provider_for_campaign",
+            new_callable=AsyncMock,
+            return_value=provider,
+        ),
+        patch.object(
+            dispatcher, "acquire_from_number", new_callable=AsyncMock, return_value=slot
+        ),
     ):
         rl.pool_slot_address = RateLimiter.pool_slot_address
         rl.release_from_number = AsyncMock()
@@ -314,7 +346,9 @@ async def test_failed_dispatch_releases_the_slot_it_took():
         cc.release_slot = AsyncMock()
 
         with pytest.raises(RuntimeError):
-            await dispatcher.dispatch_call(queued_run, campaign, concurrency_slot=object())
+            await dispatcher.dispatch_call(
+                queued_run, campaign, concurrency_slot=object()
+            )
 
     rl.release_from_number.assert_awaited_once_with(
         5, slot, telephony_configuration_id=42
@@ -331,9 +365,7 @@ async def test_channel_capacity_falls_back_to_the_org_default_config():
         db.get_default_telephony_configuration = AsyncMock(
             return_value=SimpleNamespace(id=42)
         )
-        db.get_active_channel_capacity_for_config = AsyncMock(
-            return_value={"+911": 4}
-        )
+        db.get_active_channel_capacity_for_config = AsyncMock(return_value={"+911": 4})
         assert await dispatcher.get_channel_capacity_for_campaign(legacy) == {"+911": 4}
     db.get_active_channel_capacity_for_config.assert_awaited_once_with(42)
 
@@ -351,64 +383,191 @@ async def test_campaign_concurrency_limit_counts_channels_not_numbers():
         db.get_default_telephony_configuration = AsyncMock(
             return_value=SimpleNamespace(id=42)
         )
-        db.get_active_channel_capacity_for_config = AsyncMock(
-            return_value={"+911": 10}
-        )
+        db.get_active_channel_capacity_for_config = AsyncMock(return_value={"+911": 10})
         assert await campaign_routes._get_from_numbers_count(5) == 10
 
 
 # ---------------------------------------------------------------------------
-# Superadmin endpoint
+# Editing channels: the organization-scoped phone number update
 # ---------------------------------------------------------------------------
 
 
-def test_channels_request_is_bounded():
-    from api.routes.superuser import UpdatePhoneNumberChannelsRequest
+def test_channels_in_the_update_request_are_bounded_and_optional():
+    from api.schemas.telephony_phone_number import PhoneNumberUpdateRequest
 
-    assert UpdatePhoneNumberChannelsRequest(max_concurrent_calls=1)
-    assert UpdatePhoneNumberChannelsRequest(max_concurrent_calls=200)
+    assert PhoneNumberUpdateRequest().max_concurrent_calls is None
+    assert PhoneNumberUpdateRequest(max_concurrent_calls=1).max_concurrent_calls == 1
+    assert (
+        PhoneNumberUpdateRequest(max_concurrent_calls=200).max_concurrent_calls == 200
+    )
     for bad in (0, -1, 201):
         with pytest.raises(ValidationError):
-            UpdatePhoneNumberChannelsRequest(max_concurrent_calls=bad)
+            PhoneNumberUpdateRequest(max_concurrent_calls=bad)
 
 
-def test_channels_endpoint_requires_a_superuser():
-    from fastapi.params import Depends as DependsParam
+def test_phone_number_response_defaults_to_one_channel():
+    from api.schemas.telephony_phone_number import PhoneNumberResponse
 
-    from api.routes.superuser import update_phone_number_channels
-    from api.services.auth.depends import get_superuser
+    assert PhoneNumberResponse.model_fields["max_concurrent_calls"].default == 1
 
-    import inspect
 
-    user_param = inspect.signature(update_phone_number_channels).parameters["user"]
-    assert isinstance(user_param.default, DependsParam)
-    assert user_param.default.dependency is get_superuser
+@pytest.fixture
+async def two_orgs_with_numbers(setup_test_database):
+    """Two organizations, each with a telephony config and one active number,
+    plus an inactive number in org A. Real database."""
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    from api.db import db_client
+    from api.db.models import (
+        OrganizationModel,
+        TelephonyConfigurationModel,
+        TelephonyPhoneNumberModel,
+        UserModel,
+    )
+
+    engine = create_async_engine(setup_test_database, echo=False)
+    factory = async_sessionmaker(bind=engine, expire_on_commit=False)
+    original_engine, original_session = db_client.engine, db_client.async_session
+    db_client.engine, db_client.async_session = engine, factory
+
+    ids = {}
+    async with factory() as session:
+        for key in ("a", "b"):
+            org = OrganizationModel(provider_id=f"test-org-{uuid.uuid4().hex[:8]}")
+            session.add(org)
+            await session.flush()
+            user = UserModel(
+                provider_id=f"test-user-{uuid.uuid4().hex[:8]}",
+                selected_organization_id=org.id,
+            )
+            cfg = TelephonyConfigurationModel(
+                organization_id=org.id,
+                name=f"cfg-{key}",
+                provider="twilio",
+                credentials={},
+            )
+            session.add_all([user, cfg])
+            await session.flush()
+            number = f"+9190000{_unique_id():05d}"[:13]
+            row = TelephonyPhoneNumberModel(
+                organization_id=org.id,
+                telephony_configuration_id=cfg.id,
+                address=number,
+                address_normalized=number,
+                address_type="pstn",
+            )
+            session.add(row)
+            await session.flush()
+            ids[key] = SimpleNamespace(
+                org=org.id, user=user.id, cfg=cfg.id, number=row.id, address=number
+            )
+        inactive = TelephonyPhoneNumberModel(
+            organization_id=ids["a"].org,
+            telephony_configuration_id=ids["a"].cfg,
+            address="+919999999990",
+            address_normalized="+919999999990",
+            address_type="pstn",
+            is_active=False,
+            max_concurrent_calls=9,
+        )
+        session.add(inactive)
+        await session.commit()
+
+    yield ids
+
+    db_client.engine, db_client.async_session = original_engine, original_session
+    await engine.dispose()
 
 
 @pytest.mark.asyncio
-async def test_channels_endpoint_returns_404_for_an_unknown_number():
+async def test_new_numbers_start_with_one_channel(two_orgs_with_numbers):
+    from api.db import db_client
+
+    a = two_orgs_with_numbers["a"]
+    row = await db_client.get_phone_number(a.number)
+    assert row.max_concurrent_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_update_sets_channels_and_capacity_reflects_it(two_orgs_with_numbers):
+    from api.db import db_client
+
+    a = two_orgs_with_numbers["a"]
+    row = await db_client.update_phone_number(a.number, a.cfg, max_concurrent_calls=6)
+    assert row.max_concurrent_calls == 6
+    # Only active numbers count toward what campaigns can use.
+    assert await db_client.get_active_channel_capacity_for_config(a.cfg) == {
+        a.address: 6
+    }
+
+
+@pytest.mark.asyncio
+async def test_other_updates_leave_channels_alone(two_orgs_with_numbers):
+    from api.db import db_client
+
+    a = two_orgs_with_numbers["a"]
+    await db_client.update_phone_number(a.number, a.cfg, max_concurrent_calls=4)
+    row = await db_client.update_phone_number(a.number, a.cfg, label="Sales line")
+    assert row.label == "Sales line"
+    assert row.max_concurrent_calls == 4
+
+
+@pytest.mark.asyncio
+async def test_a_number_cannot_be_updated_through_another_config(two_orgs_with_numbers):
+    from api.db import db_client
+
+    a, b = two_orgs_with_numbers["a"], two_orgs_with_numbers["b"]
+    assert (
+        await db_client.update_phone_number(a.number, b.cfg, max_concurrent_calls=50)
+        is None
+    )
+    assert (await db_client.get_phone_number(a.number)).max_concurrent_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_a_user_cannot_change_another_organizations_channels(
+    two_orgs_with_numbers,
+):
     from fastapi import HTTPException
 
-    from api.routes import superuser as superuser_routes
+    from api.routes import organization as org_routes
+    from api.schemas.telephony_phone_number import PhoneNumberUpdateRequest
 
-    with patch.object(superuser_routes, "db_client") as db:
-        db.set_phone_number_channels = AsyncMock(return_value=None)
-        with pytest.raises(HTTPException) as exc:
-            await superuser_routes.update_phone_number_channels(
-                123,
-                superuser_routes.UpdatePhoneNumberChannelsRequest(max_concurrent_calls=4),
-                user=SimpleNamespace(id=1),
-            )
+    a, b = two_orgs_with_numbers["a"], two_orgs_with_numbers["b"]
+    intruder = SimpleNamespace(id=b.user, selected_organization_id=b.org)
+    with pytest.raises(HTTPException) as exc:
+        await org_routes.update_phone_number(
+            config_id=a.cfg,
+            phone_number_id=a.number,
+            request=PhoneNumberUpdateRequest(max_concurrent_calls=50),
+            user=intruder,
+        )
     assert exc.value.status_code == 404
 
+    from api.db import db_client
 
-def test_org_members_cannot_set_channels_through_the_normal_update():
-    # Channels are superadmin-only: the org-facing update request has no field
-    # for them, so an org member's PATCH cannot change it.
-    from api.schemas.telephony_phone_number import (
-        PhoneNumberResponse,
-        PhoneNumberUpdateRequest,
-    )
+    assert (await db_client.get_phone_number(a.number)).max_concurrent_calls == 1
 
-    assert "max_concurrent_calls" not in PhoneNumberUpdateRequest.model_fields
-    assert PhoneNumberResponse.model_fields["max_concurrent_calls"].default == 1
+
+@pytest.mark.asyncio
+async def test_an_org_member_can_change_their_own_channels(two_orgs_with_numbers):
+    from api.db import db_client
+    from api.routes import organization as org_routes
+    from api.schemas.telephony_phone_number import PhoneNumberUpdateRequest
+
+    a = two_orgs_with_numbers["a"]
+    member = SimpleNamespace(id=a.user, selected_organization_id=a.org)
+    with patch.object(
+        org_routes,
+        "_sync_inbound_for_phone_number",
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
+        response = await org_routes.update_phone_number(
+            config_id=a.cfg,
+            phone_number_id=a.number,
+            request=PhoneNumberUpdateRequest(max_concurrent_calls=8),
+            user=member,
+        )
+    assert response.max_concurrent_calls == 8
+    assert (await db_client.get_phone_number(a.number)).max_concurrent_calls == 8

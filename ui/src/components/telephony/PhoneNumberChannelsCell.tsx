@@ -6,28 +6,29 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAuth } from "@/lib/auth";
 import {
   channelsOf,
   MAX_CHANNELS,
   MIN_CHANNELS,
   type PhoneNumberWithChannels,
   updatePhoneNumberChannels,
-} from "@/lib/superadminPhoneNumbers";
+} from "@/lib/phoneNumberChannels";
 
 /**
- * How many calls may run at once on a number. Everyone sees it; only a
- * superadmin can change it, because it reflects what the telephony provider
- * sold rather than a setting the organization controls.
+ * How many calls may run at once on a number (what the telephony provider
+ * sold on it). Campaigns place up to this many calls on the number at once.
  */
 export function PhoneNumberChannelsCell({
+  configId,
   phoneNumber,
-  canEdit,
   onSaved,
 }: {
+  configId: number;
   phoneNumber: PhoneNumberWithChannels;
-  canEdit: boolean;
   onSaved: (updated: PhoneNumberWithChannels) => void;
 }) {
+  const { getAccessToken } = useAuth();
   const current = channelsOf(phoneNumber);
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(String(current));
@@ -50,7 +51,13 @@ export function PhoneNumberChannelsCell({
     }
     setSaving(true);
     try {
-      const updated = await updatePhoneNumberChannels(phoneNumber.id, parsed);
+      const token = await getAccessToken();
+      const updated = await updatePhoneNumberChannels(
+        token,
+        configId,
+        phoneNumber.id,
+        parsed,
+      );
       onSaved(updated);
       setEditing(false);
       toast.success(`${phoneNumber.address} now allows ${parsed} concurrent calls`);
@@ -65,17 +72,15 @@ export function PhoneNumberChannelsCell({
     return (
       <div className="flex items-center gap-1">
         <span>{current}</span>
-        {canEdit && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={startEditing}
-            title="Change channels (superadmin)"
-            aria-label={`Change channels for ${phoneNumber.address}`}
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </Button>
-        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={startEditing}
+          title="Change channels"
+          aria-label={`Change channels for ${phoneNumber.address}`}
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </Button>
       </div>
     );
   }

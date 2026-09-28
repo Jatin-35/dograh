@@ -73,6 +73,8 @@ class PhoneNumberUpdateRequest(BaseModel):
     is_active: Optional[bool] = None
     country_code: Optional[str] = Field(default=None, min_length=2, max_length=2)
     extra_metadata: Optional[Dict[str, Any]] = None
+    # Concurrent calls the telephony provider allows on this number.
+    max_concurrent_calls: Optional[int] = Field(default=None, ge=1, le=200)
 
 
 class ProviderSyncStatus(BaseModel):
@@ -101,8 +103,7 @@ class PhoneNumberResponse(BaseModel):
     inbound_workflow_name: Optional[str] = None
     is_active: bool
     is_default_caller_id: bool
-    # Concurrent calls allowed on this number. Read-only here: only a
-    # superadmin can change it (PATCH /superuser/phone-numbers/{id}/channels).
+    # Concurrent calls allowed on this number (its channels).
     max_concurrent_calls: int = 1
     extra_metadata: Dict[str, Any]
     created_at: datetime

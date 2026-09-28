@@ -925,6 +925,7 @@ async def update_phone_number(
         country_code=request.country_code,
         extra_metadata=request.extra_metadata,
         clear_inbound_workflow=request.clear_inbound_workflow,
+        max_concurrent_calls=request.max_concurrent_calls,
     )
     if not row:
         raise HTTPException(status_code=404, detail="Phone number not found")

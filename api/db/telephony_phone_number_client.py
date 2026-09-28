@@ -95,19 +95,6 @@ class TelephonyPhoneNumberClient(BaseDBClient):
                 address: max(1, channels or 1) for address, channels in result.all()
             }
 
-    async def set_phone_number_channels(
-        self, phone_number_id: int, max_concurrent_calls: int
-    ) -> Optional[TelephonyPhoneNumberModel]:
-        """Set a number's channel count. Not org-scoped: superadmin only."""
-        async with self.async_session() as session:
-            row = await session.get(TelephonyPhoneNumberModel, phone_number_id)
-            if row is None:
-                return None
-            row.max_concurrent_calls = max_concurrent_calls
-            await session.commit()
-            await session.refresh(row)
-            return row
-
     async def get_phone_number(
         self, phone_number_id: int
     ) -> Optional[TelephonyPhoneNumberModel]:
@@ -304,6 +291,7 @@ class TelephonyPhoneNumberClient(BaseDBClient):
         country_code: Optional[str] = None,
         extra_metadata: Optional[Dict[str, Any]] = None,
         clear_inbound_workflow: bool = False,
+        max_concurrent_calls: Optional[int] = None,
     ) -> Optional[TelephonyPhoneNumberModel]:
         """Partial update. ``address`` is intentionally immutable — create a new
         row instead. Set ``clear_inbound_workflow=True`` to null out the FK."""
@@ -324,6 +312,8 @@ class TelephonyPhoneNumberClient(BaseDBClient):
                 row.country_code = country_code
             if extra_metadata is not None:
                 row.extra_metadata = extra_metadata
+            if max_concurrent_calls is not None:
+                row.max_concurrent_calls = max_concurrent_calls
 
             await session.commit()
             await session.refresh(row)

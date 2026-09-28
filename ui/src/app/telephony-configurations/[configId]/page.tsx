@@ -16,7 +16,6 @@ import { toast } from "sonner";
 
 import {
   deletePhoneNumberApiV1OrganizationsTelephonyConfigsConfigIdPhoneNumbersPhoneNumberIdDelete,
-  getAuthUserApiV1UserAuthUserGet,
   getTelephonyConfigurationByIdApiV1OrganizationsTelephonyConfigsConfigIdGet,
   listPhoneNumbersApiV1OrganizationsTelephonyConfigsConfigIdPhoneNumbersGet,
   setDefaultCallerIdApiV1OrganizationsTelephonyConfigsConfigIdPhoneNumbersPhoneNumberIdSetDefaultCallerPost,
@@ -84,23 +83,6 @@ export default function TelephonyConfigurationDetailPage() {
   const [phoneDeleteTarget, setPhoneDeleteTarget] = useState<PhoneNumberResponse | null>(
     null,
   );
-  // Channels are editable by a superadmin only (the API enforces it too).
-  const [isSuperuser, setIsSuperuser] = useState(false);
-
-  useEffect(() => {
-    if (authLoading || !user) return;
-    let cancelled = false;
-    (async () => {
-      const token = await getAccessToken();
-      const res = await getAuthUserApiV1UserAuthUserGet({
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!cancelled) setIsSuperuser(!!res.data?.is_superuser);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [authLoading, user, getAccessToken]);
 
   const fetchAll = useCallback(async () => {
     if (authLoading || !user || !configId) return;
@@ -372,8 +354,8 @@ export default function TelephonyConfigurationDetailPage() {
                     </TableCell>
                     <TableCell>
                       <PhoneNumberChannelsCell
+                        configId={configId}
                         phoneNumber={n}
-                        canEdit={isSuperuser}
                         onSaved={(updated) =>
                           setPhoneNumbers((prev) =>
                             prev.map((p) => (p.id === updated.id ? updated : p)),

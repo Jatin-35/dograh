@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const h = vi.hoisted(() => ({ update: vi.fn(), failWith: null as string | null }));
 
-vi.mock('@/lib/superadminPhoneNumbers', async (importOriginal) => {
-    const actual = await importOriginal<typeof import('@/lib/superadminPhoneNumbers')>();
+vi.mock('@/lib/phoneNumberChannels', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@/lib/phoneNumberChannels')>();
     return {
         ...actual,
         updatePhoneNumberChannels: async (...args: unknown[]) => {
@@ -15,10 +15,11 @@ vi.mock('@/lib/superadminPhoneNumbers', async (importOriginal) => {
     };
 });
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock('@/lib/auth', () => ({ useAuth: () => ({ getAccessToken: async () => 'token-1' }) }));
 
 import { toast } from 'sonner';
 
-import type { PhoneNumberWithChannels } from '@/lib/superadminPhoneNumbers';
+import type { PhoneNumberWithChannels } from '@/lib/phoneNumberChannels';
 
 import { PhoneNumberChannelsCell } from './PhoneNumberChannelsCell';
 
@@ -44,32 +45,32 @@ beforeEach(() => {
 });
 
 describe('PhoneNumberChannelsCell', () => {
-    it('shows the channel count to everyone, with no edit control for org members', () => {
-        render(<PhoneNumberChannelsCell phoneNumber={number(5)} canEdit={false} onSaved={vi.fn()} />);
+    it('shows the channel count with an edit control', () => {
+        render(<PhoneNumberChannelsCell configId={3} phoneNumber={number(5)} onSaved={vi.fn()} />);
         expect(screen.getByText('5')).toBeTruthy();
-        expect(screen.queryByRole('button', { name: /change channels/i })).toBeNull();
+        expect(screen.getByRole('button', { name: /change channels/i })).toBeTruthy();
     });
 
     it('treats a number from before channels existed as 1 channel', () => {
-        render(<PhoneNumberChannelsCell phoneNumber={number()} canEdit={false} onSaved={vi.fn()} />);
+        render(<PhoneNumberChannelsCell configId={3} phoneNumber={number()} onSaved={vi.fn()} />);
         expect(screen.getByText('1')).toBeTruthy();
     });
 
-    it('lets a superadmin save a new value', async () => {
+    it('saves a new value through the org-scoped update', async () => {
         const onSaved = vi.fn();
         h.update.mockResolvedValue(number(10));
-        render(<PhoneNumberChannelsCell phoneNumber={number(1)} canEdit onSaved={onSaved} />);
+        render(<PhoneNumberChannelsCell configId={3} phoneNumber={number(1)} onSaved={onSaved} />);
 
         fireEvent.click(screen.getByRole('button', { name: /change channels/i }));
         fireEvent.change(screen.getByLabelText(/channels for/i), { target: { value: '10' } });
         fireEvent.click(screen.getByRole('button', { name: /save channels/i }));
 
         await waitFor(() => expect(onSaved).toHaveBeenCalledWith(number(10)));
-        expect(h.update).toHaveBeenCalledWith(7, 10);
+        expect(h.update).toHaveBeenCalledWith('token-1', 3, 7, 10);
     });
 
     it.each(['0', '201', '2.5', ''])('refuses an invalid value (%s) without calling the API', (bad) => {
-        render(<PhoneNumberChannelsCell phoneNumber={number(1)} canEdit onSaved={vi.fn()} />);
+        render(<PhoneNumberChannelsCell configId={3} phoneNumber={number(1)} onSaved={vi.fn()} />);
         fireEvent.click(screen.getByRole('button', { name: /change channels/i }));
         fireEvent.change(screen.getByLabelText(/channels for/i), { target: { value: bad } });
 
@@ -80,7 +81,7 @@ describe('PhoneNumberChannelsCell', () => {
     });
 
     it('does not call the API when the value is unchanged', () => {
-        render(<PhoneNumberChannelsCell phoneNumber={number(4)} canEdit onSaved={vi.fn()} />);
+        render(<PhoneNumberChannelsCell configId={3} phoneNumber={number(4)} onSaved={vi.fn()} />);
         fireEvent.click(screen.getByRole('button', { name: /change channels/i }));
         fireEvent.click(screen.getByRole('button', { name: /save channels/i }));
         expect(h.update).not.toHaveBeenCalled();
@@ -88,14 +89,14 @@ describe('PhoneNumberChannelsCell', () => {
 
     it('keeps the old value and stays in edit mode when saving fails', async () => {
         const onSaved = vi.fn();
-        h.failWith = 'Not a superuser';
-        render(<PhoneNumberChannelsCell phoneNumber={number(2)} canEdit onSaved={onSaved} />);
+        h.failWith = 'Phone number not found';
+        render(<PhoneNumberChannelsCell configId={3} phoneNumber={number(2)} onSaved={onSaved} />);
 
         fireEvent.click(screen.getByRole('button', { name: /change channels/i }));
         fireEvent.change(screen.getByLabelText(/channels for/i), { target: { value: '8' } });
         fireEvent.click(screen.getByRole('button', { name: /save channels/i }));
 
-        await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Not a superuser'));
+        await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Phone number not found'));
         expect(onSaved).not.toHaveBeenCalled();
         expect(screen.getByLabelText(/channels for/i)).toBeTruthy();
     });
