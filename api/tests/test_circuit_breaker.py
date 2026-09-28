@@ -596,6 +596,12 @@ class TestProcessStatusUpdateCircuitBreaker:
             patch(
                 "api.services.telephony.status_processor.get_campaign_event_publisher"
             ) as mock_get_publisher,
+            # The real claim is a Redis key per run id that outlives the test,
+            # so a rerun would see run 100 as already reported.
+            patch(
+                "api.services.telephony.status_processor.rate_limiter.claim_not_connected_report",
+                AsyncMock(return_value=True),
+            ),
         ):
             mock_db.get_workflow_run_by_id = AsyncMock(return_value=mock_workflow_run)
             mock_db.update_workflow_run = AsyncMock()
