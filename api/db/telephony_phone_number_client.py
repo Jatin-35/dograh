@@ -75,6 +75,39 @@ class TelephonyPhoneNumberClient(BaseDBClient):
             )
             return [row[0] for row in result.all()]
 
+    async def get_active_channel_capacity_for_config(
+        self, telephony_configuration_id: int
+    ) -> Dict[str, int]:
+        """Channels per active number, keyed by canonical address — the same
+        keys as :meth:`list_active_normalized_addresses_for_config`."""
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(
+                    TelephonyPhoneNumberModel.address_normalized,
+                    TelephonyPhoneNumberModel.max_concurrent_calls,
+                ).where(
+                    TelephonyPhoneNumberModel.telephony_configuration_id
+                    == telephony_configuration_id,
+                    TelephonyPhoneNumberModel.is_active.is_(True),
+                )
+            )
+            return {
+                address: max(1, channels or 1) for address, channels in result.all()
+            }
+
+    async def set_phone_number_channels(
+        self, phone_number_id: int, max_concurrent_calls: int
+    ) -> Optional[TelephonyPhoneNumberModel]:
+        """Set a number's channel count. Not org-scoped: superadmin only."""
+        async with self.async_session() as session:
+            row = await session.get(TelephonyPhoneNumberModel, phone_number_id)
+            if row is None:
+                return None
+            row.max_concurrent_calls = max_concurrent_calls
+            await session.commit()
+            await session.refresh(row)
+            return row
+
     async def get_phone_number(
         self, phone_number_id: int
     ) -> Optional[TelephonyPhoneNumberModel]:

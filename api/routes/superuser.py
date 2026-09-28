@@ -5,12 +5,13 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from api.constants import PUBLIC_BASE_URL, UI_APP_URL
 from api.db import db_client
 from api.db.models import UserModel
 from api.enums import OrganizationConfigurationKey, OrganizationStatus
+from api.schemas.telephony_phone_number import PhoneNumberResponse
 from api.services.auth.depends import get_superuser
 from api.services.organization_context import (
     is_scout_enabled_in_configuration,
@@ -106,6 +107,11 @@ class UpdateOrganizationStatusRequest(BaseModel):
 
 class UpdateOrganizationScoutRequest(BaseModel):
     enabled: bool
+
+
+class UpdatePhoneNumberChannelsRequest(BaseModel):
+    # Concurrent calls the telephony provider allows on the number.
+    max_concurrent_calls: int = Field(..., ge=1, le=200)
 
 
 class CreateOrganizationRequest(BaseModel):
@@ -515,3 +521,30 @@ async def list_workflows(
         workflows=[SuperuserWorkflowResponse(**wf) for wf in workflows],
         total_count=len(workflows),
     )
+
+
+@router.patch("/phone-numbers/{phone_number_id}/channels")
+async def update_phone_number_channels(
+    phone_number_id: int,
+    request: UpdatePhoneNumberChannelsRequest,
+    user: UserModel = Depends(get_superuser),
+) -> PhoneNumberResponse:
+    """Set how many calls may run at once on a phone number (its channels).
+
+    Requires superuser privileges: channels are what the telephony provider
+    sold, so organization members can see them but not change them. Campaign
+    dispatch picks the new value up on its next batch.
+    """
+    row = await db_client.set_phone_number_channels(
+        phone_number_id, request.max_concurrent_calls
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Phone number with ID {phone_number_id} not found.",
+        )
+    logger.info(
+        f"Superuser {user.id} set phone number {phone_number_id} "
+        f"(org {row.organization_id}) channels to {row.max_concurrent_calls}"
+    )
+    return PhoneNumberResponse.model_validate(row)

@@ -101,6 +101,9 @@ class PhoneNumberResponse(BaseModel):
     inbound_workflow_name: Optional[str] = None
     is_active: bool
     is_default_caller_id: bool
+    # Concurrent calls allowed on this number. Read-only here: only a
+    # superadmin can change it (PATCH /superuser/phone-numbers/{id}/channels).
+    max_concurrent_calls: int = 1
     extra_metadata: Dict[str, Any]
     created_at: datetime
     updated_at: datetime

@@ -41,17 +41,18 @@ async def _get_org_concurrent_limit(organization_id: int) -> int:
 
 
 async def _get_from_numbers_count(organization_id: int) -> int:
-    """Active phone-number count from the org's default telephony config.
-    Used to validate ``max_concurrency`` against caller-id supply."""
+    """Total channels across the active numbers of the org's default telephony
+    config — how many campaign calls its caller IDs can carry at once. Used to
+    validate ``max_concurrency`` against caller-id supply."""
     try:
         default_cfg = await db_client.get_default_telephony_configuration(
             organization_id
         )
         if default_cfg:
-            addresses = await db_client.list_active_normalized_addresses_for_config(
+            channels = await db_client.get_active_channel_capacity_for_config(
                 default_cfg.id
             )
-            return len(addresses)
+            return sum(channels.values())
     except Exception:
         pass
     return 0
@@ -71,7 +72,7 @@ async def _validate_max_concurrency(max_concurrency: int, organization_id: int) 
         if from_numbers_count > 0 and from_numbers_count < org_limit:
             raise HTTPException(
                 status_code=400,
-                detail=f"max_concurrency ({max_concurrency}) cannot exceed {effective_limit}. You have {from_numbers_count} phone number(s) configured. Add more CLIs in telephony configuration to increase concurrency.",
+                detail=f"max_concurrency ({max_concurrency}) cannot exceed {effective_limit}. Your phone numbers have {from_numbers_count} channel(s) in total. Add more CLIs or channels in telephony configuration to increase concurrency.",
             )
         raise HTTPException(
             status_code=400,

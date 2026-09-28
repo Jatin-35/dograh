@@ -5,6 +5,7 @@ from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     JSON,
     Boolean,
+    CheckConstraint,
     Column,
     DateTime,
     Enum,
@@ -329,6 +330,12 @@ class TelephonyPhoneNumberModel(Base):
     is_default_caller_id = Column(
         Boolean, nullable=False, default=False, server_default=text("false")
     )
+    # Concurrent calls the telephony provider allows on this number (its
+    # "channels"). Campaign dispatch places up to this many calls on the number
+    # at once. Set by a superadmin: it reflects what the provider sold.
+    max_concurrent_calls = Column(
+        Integer, nullable=False, default=1, server_default=text("1")
+    )
     extra_metadata = Column(
         JSON, nullable=False, default=dict, server_default=text("'{}'::json")
     )
@@ -367,6 +374,10 @@ class TelephonyPhoneNumberModel(Base):
             "telephony_configuration_id",
             unique=True,
             postgresql_where=text("is_default_caller_id = true"),
+        ),
+        CheckConstraint(
+            "max_concurrent_calls >= 1",
+            name="ck_phone_numbers_max_concurrent_calls_positive",
         ),
     )
 

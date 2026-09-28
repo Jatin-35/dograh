@@ -52,6 +52,19 @@ class CampaignCallDispatcher:
         )
         return await get_default_telephony_provider(campaign.organization_id)
 
+    async def get_channel_capacity_for_campaign(self, campaign) -> dict[str, int]:
+        """Channels per active number of the campaign's telephony config (the
+        org default for legacy campaigns without a pinned config)."""
+        config_id = campaign.telephony_configuration_id
+        if not config_id:
+            default_cfg = await db_client.get_default_telephony_configuration(
+                campaign.organization_id
+            )
+            config_id = default_cfg.id if default_cfg else None
+        if not config_id:
+            return {}
+        return await db_client.get_active_channel_capacity_for_config(config_id)
+
     async def get_org_concurrent_limit(self, organization_id: int) -> int:
         """Get the concurrent call limit for an organization."""
         return await call_concurrency.get_org_concurrent_limit(organization_id)
@@ -86,7 +99,8 @@ class CampaignCallDispatcher:
             logger.info(f"No more queued runs for campaign {campaign_id}")
             return 0
 
-        # Initialize from_number pool for this campaign's telephony config.
+        # Initialize from_number pool for this campaign's telephony config,
+        # with one slot per channel on each number.
         try:
             provider = await self.get_provider_for_campaign(campaign)
             if provider.from_numbers:
@@ -94,6 +108,7 @@ class CampaignCallDispatcher:
                     campaign.organization_id,
                     provider.from_numbers,
                     telephony_configuration_id=campaign.telephony_configuration_id,
+                    channels=await self.get_channel_capacity_for_campaign(campaign),
                 )
         except Exception as e:
             logger.warning(f"Failed to initialize from_number pool: {e}")
@@ -249,6 +264,8 @@ class CampaignCallDispatcher:
     ) -> Optional[WorkflowRunModel]:
         """Creates workflow run and initiates call. Requires a pre-acquired slot."""
         from_number = None
+        # The pool slot (a channel on from_number) that this call occupies.
+        from_slot = None
         workflow_run = None
         slot_bound = False
 
@@ -270,10 +287,12 @@ class CampaignCallDispatcher:
             # Acquire a unique from_number from the pool scoped to this campaign's
             # telephony configuration so orgs with multiple configs don't leak
             # caller IDs across configs.
-            from_number = await self.acquire_from_number(
+            from_slot = await self.acquire_from_number(
                 campaign.organization_id,
                 telephony_configuration_id=campaign.telephony_configuration_id,
             )
+            if from_slot is not None:
+                from_number = rate_limiter.pool_slot_address(from_slot)
             if from_number is None:
                 raise PhoneNumberPoolExhaustedError(
                     organization_id=campaign.organization_id
@@ -314,7 +333,7 @@ class CampaignCallDispatcher:
             await rate_limiter.store_workflow_from_number_mapping(
                 workflow_run.id,
                 campaign.organization_id,
-                from_number,
+                from_slot,
                 telephony_configuration_id=campaign.telephony_configuration_id,
             )
         except Exception as e:
@@ -323,10 +342,10 @@ class CampaignCallDispatcher:
                 await call_concurrency.release_workflow_run_slot(workflow_run.id)
             else:
                 await call_concurrency.release_slot(concurrency_slot)
-            if from_number:
+            if from_slot:
                 await rate_limiter.release_from_number(
                     campaign.organization_id,
-                    from_number,
+                    from_slot,
                     telephony_configuration_id=campaign.telephony_configuration_id,
                 )
             raise

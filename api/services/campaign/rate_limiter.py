@@ -369,15 +369,37 @@ class RateLimiter:
     ) -> str:
         return f"from_number_pool:{organization_id}:{telephony_configuration_id}"
 
+    # A number with N channels has N pool members: the number itself (channel
+    # 1, unchanged from before channels existed, so in-flight calls keep
+    # releasing correctly) and "<number>::ch2" .. "<number>::chN".
+    CHANNEL_SEPARATOR = "::ch"
+
+    @classmethod
+    def pool_slot_address(cls, member: str) -> str:
+        """The phone number a pool member (channel slot) belongs to."""
+        return member.split(cls.CHANNEL_SEPARATOR, 1)[0]
+
+    @classmethod
+    def _pool_slots(cls, number: str, channels: int) -> list[str]:
+        return [number] + [
+            f"{number}{cls.CHANNEL_SEPARATOR}{k}" for k in range(2, channels + 1)
+        ]
+
     async def initialize_from_number_pool(
         self,
         organization_id: int,
         from_numbers: list[str],
         telephony_configuration_id: int | None,
+        channels: dict[str, int] | None = None,
     ) -> bool:
         """
         Initialize the from_number pool for an organization + telephony config.
         Uses ZADD NX so it won't overwrite numbers that are already in use.
+
+        ``channels`` maps a number to how many concurrent calls it allows
+        (default 1). Free slots that no longer exist — a number removed or its
+        channels reduced — are dropped; busy ones are dropped on a later call
+        once released.
 
         Pools are scoped per (organization_id, telephony_configuration_id) so
         that orgs with multiple telephony configurations do not leak caller IDs
@@ -386,13 +408,40 @@ class RateLimiter:
         if not from_numbers:
             return False
 
+        channels = channels or {}
+        wanted = [
+            slot
+            for number in from_numbers
+            for slot in self._pool_slots(number, max(1, channels.get(number, 1)))
+        ]
+
         redis_client = await self._get_redis()
         key = self._from_number_pool_key(organization_id, telephony_configuration_id)
 
+        # Remove members only while they are free (score 0), atomically, so a
+        # slot acquired in between is never taken away from a live call.
+        prune_script = """
+        local removed = 0
+        for i, member in ipairs(ARGV) do
+            if redis.call('ZSCORE', KEYS[1], member) == '0' then
+                redis.call('ZREM', KEYS[1], member)
+                removed = removed + 1
+            end
+        end
+        return removed
+        """
+
         try:
             # ZADD NX: only add members that don't already exist (preserves in-use scores)
-            members = {number: 0 for number in from_numbers}
-            await redis_client.zadd(key, members, nx=True)
+            await redis_client.zadd(key, {slot: 0 for slot in wanted}, nx=True)
+            wanted_set = set(wanted)
+            stale = [
+                member
+                for member in await redis_client.zrange(key, 0, -1)
+                if member not in wanted_set
+            ]
+            if stale:
+                await redis_client.eval(prune_script, 1, key, *stale)
             await redis_client.expire(key, 3600)  # 1 hour TTL
             return True
         except Exception as e:

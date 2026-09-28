@@ -16,6 +16,7 @@ import { toast } from "sonner";
 
 import {
   deletePhoneNumberApiV1OrganizationsTelephonyConfigsConfigIdPhoneNumbersPhoneNumberIdDelete,
+  getAuthUserApiV1UserAuthUserGet,
   getTelephonyConfigurationByIdApiV1OrganizationsTelephonyConfigsConfigIdGet,
   listPhoneNumbersApiV1OrganizationsTelephonyConfigsConfigIdPhoneNumbersGet,
   setDefaultCallerIdApiV1OrganizationsTelephonyConfigsConfigIdPhoneNumbersPhoneNumberIdSetDefaultCallerPost,
@@ -26,6 +27,7 @@ import type {
   TelephonyConfigurationDetail,
 } from "@/client/types.gen";
 import { ConfigFormDialog } from "@/components/telephony/ConfigFormDialog";
+import { PhoneNumberChannelsCell } from "@/components/telephony/PhoneNumberChannelsCell";
 import { PhoneNumberDialog } from "@/components/telephony/PhoneNumberDialog";
 import {
   AlertDialog,
@@ -82,6 +84,23 @@ export default function TelephonyConfigurationDetailPage() {
   const [phoneDeleteTarget, setPhoneDeleteTarget] = useState<PhoneNumberResponse | null>(
     null,
   );
+  // Channels are editable by a superadmin only (the API enforces it too).
+  const [isSuperuser, setIsSuperuser] = useState(false);
+
+  useEffect(() => {
+    if (authLoading || !user) return;
+    let cancelled = false;
+    (async () => {
+      const token = await getAccessToken();
+      const res = await getAuthUserApiV1UserAuthUserGet({
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!cancelled) setIsSuperuser(!!res.data?.is_superuser);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, user, getAccessToken]);
 
   const fetchAll = useCallback(async () => {
     if (authLoading || !user || !configId) return;
@@ -320,6 +339,9 @@ export default function TelephonyConfigurationDetailPage() {
                   <TableHead>Type</TableHead>
                   <TableHead>Label</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead title="How many calls can run at once on this number">
+                    Channels
+                  </TableHead>
                   <TableHead>Inbound workflow</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -347,6 +369,17 @@ export default function TelephonyConfigurationDetailPage() {
                           </Badge>
                         )}
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      <PhoneNumberChannelsCell
+                        phoneNumber={n}
+                        canEdit={isSuperuser}
+                        onSaved={(updated) =>
+                          setPhoneNumbers((prev) =>
+                            prev.map((p) => (p.id === updated.id ? updated : p)),
+                          )
+                        }
+                      />
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {n.inbound_workflow_id ? (
