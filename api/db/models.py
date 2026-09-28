@@ -1952,3 +1952,13 @@ class CallReportModel(Base):
             "call_started_at",
         ),
     )
+
+
+# Webhook Sync tables live in their own module (self-contained for upstream
+# merges); importing it here registers them on Base for Alembic.
+from api.db.webhook_sync_models import (  # noqa: E402,F401
+    WebhookEndpointAuditLogModel,
+    WebhookEndpointModel,
+    WebhookLeadModel,
+    WebhookRequestLogModel,
+)

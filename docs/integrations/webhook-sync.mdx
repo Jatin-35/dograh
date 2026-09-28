@@ -1,0 +1,169 @@
+---
+title: "Webhook Sync"
+description: "Send new leads from your CRM to BotrixAI over a webhook, so each lead is stored and called by your voice agent"
+---
+
+## Overview
+
+**Webhook Sync** gives you a webhook URL for your CRM. Whenever a new lead is
+created in the CRM (Zoho, LeadSquared, Salesforce, HubSpot, Facebook Lead Ads
+through Zapier or n8n, your own forms, ...), the CRM sends the lead to that URL.
+BotrixAI checks it, maps its fields, removes duplicates, stores it, and calls the
+lead with the voice agent you chose.
+
+```
+CRM ──POST──► your Webhook Sync URL ──► lead stored ──► call placed by your agent
+```
+
+Each endpoint has:
+
+- a **unique URL** and a **secret**,
+- the **voice agent** that calls its leads,
+- **field mapping** from your CRM's field names to the lead's fields,
+- **call settings**: delay before calling, calling hours (default 09:00–21:00
+  IST), retries and the duplicate window.
+
+## Send a lead
+
+The URL has this shape:
+
+```
+https://<your-botrixai-domain>/api/v1/webhooks/inbound/<endpoint-uuid>
+```
+
+A lead is a JSON object. The only required field is a **phone number**:
+
+```bash
+curl -X POST "https://<your-botrixai-domain>/api/v1/webhooks/inbound/<endpoint-uuid>" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: <secret>" \
+  -d '{"name":"Rahul Kumar","mobile":"9876543210","city":"Patna","source":"Facebook Ads"}'
+```
+
+A successful reply:
+
+```json
+{
+  "success": true,
+  "received": 1, "created": 1, "duplicates": 0, "invalid": 0, "replayed": 0, "rejected": 0,
+  "lead_ids": [50],
+  "leads": [{"lead_id": 50, "status": "received", "replayed": false}]
+}
+```
+
+`created` counts new leads that will be called; `duplicates` and `invalid` are
+stored but not called; `replayed` are repeats of a request you already sent;
+`rejected` had no phone number.
+
+Also accepted:
+
+- **Form posts** (`application/x-www-form-urlencoded`), common from CRM webhook
+  settings.
+- **Several leads at once** as a JSON array (up to 500 per request). Each lead
+  gets its own result; leads without a phone number are listed under `errors`.
+
+## Authentication
+
+Choose one mode per endpoint, depending on what your CRM can send:
+
+| Mode | How to send the secret | Use when |
+|---|---|---|
+| **API key** | Header `X-API-Key: <secret>` | Your CRM can add a custom header (most can) |
+| **HMAC signature** | Headers `X-Botrix-Timestamp: <unix seconds>` and `X-Botrix-Signature: <hex HMAC-SHA256 of "<timestamp>.<raw body>", keyed with the secret>` (a `sha256=` prefix is accepted) | Zapier/n8n code steps or your own code, when the secret must never travel in the request |
+| **URL token** | The endpoint URL ends with `?token=<secret>` | Your CRM cannot set headers at all |
+
+With HMAC, the timestamp must be within **5 minutes** of our clock, so a
+captured request can't be replayed later.
+
+<Warning>
+The **URL token** is the least secure mode: a URL can end up in browser
+history, proxy logs and monitoring tools. BotrixAI removes the token from its
+own logs, but prefer the API key or HMAC whenever your CRM allows it, and
+regenerate the secret if the URL may have been exposed.
+</Warning>
+
+Regenerating the secret stops the old one immediately; update your CRM right
+after.
+
+Signing a request in Python:
+
+```python
+import hashlib, hmac, json, time, requests
+
+body = json.dumps({"name": "Rahul Kumar", "mobile": "9876543210"}).encode()
+timestamp = str(int(time.time()))
+signature = hmac.new(
+    SECRET.encode(), timestamp.encode() + b"." + body, hashlib.sha256
+).hexdigest()
+requests.post(URL, data=body, headers={
+    "Content-Type": "application/json",
+    "X-Botrix-Timestamp": timestamp,
+    "X-Botrix-Signature": signature,
+})
+```
+
+Sign the exact bytes you send: re-serializing the JSON after signing changes
+the body and the signature won't match.
+
+## Fields
+
+The lead's standard fields are **phone** (required), **name**, **email**,
+**external_lead_id**, **source**, **city** and **language_preference**.
+
+- **Without any mapping**, common names are recognised automatically:
+  `mobile`, `phone_number`, `Mobile Number`, `contact_no`, `full_name`,
+  `FirstName` + `LastName`, `email_address`, `lead_source`, `prospect_id` and
+  similar, including inside `data` / `lead` wrappers.
+- **With mapping**, point a field at any path in your payload, for example
+  `data.lead.mobile` or `leads[0].phone`.
+- **Every other plain field** your CRM sends becomes a call variable the agent's
+  prompt can use, e.g. `{{city}}`, `{{budget}}`. A field named `Lead Source`
+  becomes `{{lead_source}}`.
+
+### Phone numbers
+
+Numbers are stored as `+91XXXXXXXXXX`. Spaces, dashes and the `+91`, `91`, `0`
+and `0091` prefixes are all accepted. A number that isn't a valid 10-digit
+Indian mobile is stored with status **invalid_number** and is not called.
+
+## Duplicates and retries from your CRM
+
+- **Same number again**: a lead whose number already arrived on the same
+  endpoint within the duplicate window (default 24 hours) is stored as
+  **duplicate** and not called again.
+- **CRM retries**: send an `Idempotency-Key` header, or include your CRM's lead
+  id (`lead_id`, `prospect_id`, ...). Repeating a request with the same key or
+  lead id returns the original lead with `"replayed": true` and stores nothing
+  new. This is safe even if your CRM retries several times at once.
+
+## Responses
+
+| Status | Meaning |
+|---|---|
+| `200` | Stored. `leads` lists each lead's id and status |
+| `400` | The body isn't valid JSON or form data |
+| `401` | Missing or wrong secret |
+| `404` | Unknown endpoint, or the endpoint is paused |
+| `413` | Body over 1 MB, or more than 500 leads in one request |
+| `422` | No phone number in the lead (or in any lead of a bulk request) |
+| `429` | Over the endpoint's rate limit (default 100 requests per minute); retry after the `Retry-After` seconds |
+| `500` | Temporary error; retrying is safe |
+
+## Debugging an integration
+
+Every request to an endpoint is kept in its **Logs**, with the response code,
+the reason for any error, the response time and the body. Authentication
+headers and URL tokens are always hidden. When authentication fails, the log
+says why (for example *Wrong API key* or *Signature timestamp is more than 5
+minutes off*); your CRM only receives a generic `401`.
+
+## Data retention
+
+| Data | Kept for |
+|---|---|
+| Request logs | 30 days |
+| The full original payload from your CRM, on each lead | 30 days |
+| The lead's own fields (name, phone, email, source, variables, status) | Until you delete the endpoint |
+
+Deleting an endpoint deletes its leads and logs. The endpoint's change history
+(who created, changed, paused, rotated or deleted it) is kept.

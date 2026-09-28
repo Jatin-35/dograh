@@ -29,6 +29,8 @@ from api.routes.turn_credentials import router as turn_credentials_router
 from api.routes.user import router as user_router
 from api.routes.wallet import router as wallet_router
 from api.routes.webrtc_signaling import router as webrtc_signaling_router
+from api.routes.webhook_inbound import router as webhook_inbound_router
+from api.routes.webhook_sync import router as webhook_sync_router
 from api.routes.workflow import router as workflow_router
 from api.routes.workflow_embed import router as workflow_embed_router
 from api.routes.code_editor import router as code_editor_router
@@ -72,6 +74,8 @@ router.include_router(auth_router)
 router.include_router(node_types_router)
 router.include_router(agent_stream_router)
 router.include_router(wallet_router)
+router.include_router(webhook_sync_router)
+router.include_router(webhook_inbound_router)
 
 for _integration_router in all_routers():
     router.include_router(_integration_router)

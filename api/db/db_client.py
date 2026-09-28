@@ -18,6 +18,7 @@ from api.db.user_client import UserClient
 from api.db.wallet_client import WalletClient
 from api.db.webhook_credential_client import WebhookCredentialClient
 from api.db.webhook_delivery_client import WebhookDeliveryClient
+from api.db.webhook_sync_client import WebhookSyncClient
 from api.db.workflow_client import WorkflowClient
 from api.db.workflow_gen_chat_session_client import WorkflowGenChatSessionClient
 from api.db.workflow_recording_client import WorkflowRecordingClient
@@ -44,6 +45,7 @@ class DBClient(
     AgentTriggerClient,
     WebhookCredentialClient,
     WebhookDeliveryClient,
+    WebhookSyncClient,
     ToolClient,
     CodeEditorClient,
     KnowledgeBaseClient,
