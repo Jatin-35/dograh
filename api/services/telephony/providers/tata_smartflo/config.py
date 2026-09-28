@@ -10,10 +10,16 @@ DEFAULT_TATA_SMARTFLO_API_BASE = "https://api-smartflo.tatateleservices.com"
 class TataSmartfloConfigurationRequest(BaseModel):
     """Request schema for SmartFlo configuration.
 
-    SmartFlo issues short-lived bearer tokens rather than static API keys: a
-    successful ``POST /v1/auth/login`` returns an ``access_token`` with
-    ``expires_in`` around an hour. So this stores *credentials*, not a token,
-    and the provider mints and refreshes tokens as it goes.
+    SmartFlo offers two ways to get a bearer token. Either a successful
+    ``POST /v1/auth/login`` (email + password) returns an ``access_token``
+    that expires in about an hour and must be refreshed continuously, or the
+    account holder generates a token themselves from their SmartFlo dashboard
+    (API Connect -> API Tokens), valid for up to 90 days and independently
+    revocable without touching the account password. ``api_token`` stores the
+    latter; when set, the provider uses it directly and never calls
+    /v1/auth/login at all. Exactly one of password/api_token must be given —
+    email is required either way, since inbound webhook routing matches a
+    stored config by login id regardless of which auth path it uses.
 
     ``api_key`` is a separate thing entirely — the Click-to-Call Support key,
     which travels in the request body rather than the Authorization header, and
@@ -29,11 +35,28 @@ class TataSmartfloConfigurationRequest(BaseModel):
     email: str = Field(
         ...,
         description=(
-            "SmartFlo login id. Used with the password against /v1/auth/login "
-            "to mint bearer tokens; SmartFlo issues no long-lived API token."
+            "SmartFlo login id. Always required — inbound webhook routing "
+            "matches a stored config by this, even when api_token is used "
+            "instead of password."
         ),
     )
-    password: str = Field(..., description="SmartFlo account password")
+    password: Optional[str] = Field(
+        default=None,
+        description=(
+            "SmartFlo account password, exchanged for an hourly bearer token "
+            "via /v1/auth/login. Required only if api_token is not set."
+        ),
+    )
+    api_token: Optional[str] = Field(
+        default=None,
+        description=(
+            "A token generated from the SmartFlo dashboard (API Connect -> "
+            "API Tokens), valid up to 90 days. Used directly as the bearer "
+            "token, bypassing /v1/auth/login entirely. Preferred over "
+            "password: it can be revoked independently of the account login, "
+            "without changing the account password."
+        ),
+    )
     api_key: Optional[str] = Field(
         default=None,
         description=(
@@ -75,6 +98,16 @@ class TataSmartfloConfigurationRequest(BaseModel):
             )
         return self
 
+    @model_validator(mode="after")
+    def _require_password_or_api_token(self) -> "TataSmartfloConfigurationRequest":
+        # Neither auth path is optional to have entirely — without one of
+        # them there is no way to mint or hold a bearer token at all.
+        if not self.password and not self.api_token:
+            raise ValueError(
+                "SmartFlo requires either password or api_token to authenticate."
+            )
+        return self
+
 
 class TataSmartfloConfigurationResponse(BaseModel):
     """Response schema for SmartFlo configuration with masked sensitive fields."""
@@ -83,6 +116,7 @@ class TataSmartfloConfigurationResponse(BaseModel):
     api_base: str = DEFAULT_TATA_SMARTFLO_API_BASE
     email: Optional[str] = None  # Masked
     password: Optional[str] = None  # Masked
+    api_token: Optional[str] = None  # Masked
     api_key: Optional[str] = None  # Masked
     connect_secret: Optional[str] = None  # Masked
     caller_id: Optional[str] = None

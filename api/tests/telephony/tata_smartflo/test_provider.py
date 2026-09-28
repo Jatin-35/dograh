@@ -374,6 +374,93 @@ def test_config_without_credentials_is_invalid():
     assert not _provider(email=None, password=None).validate_config()
 
 
+def test_config_is_valid_with_api_token_and_no_password():
+    """A portal-generated token is a full substitute for password."""
+    assert _provider(password=None, api_token="portal-tok-1").validate_config()
+
+
+def test_config_without_password_or_api_token_is_invalid():
+    assert not _provider(password=None, api_token=None).validate_config()
+
+
+class TestApiTokenAuth:
+    """A portal-generated API token (API Connect -> API Tokens) is a static,
+    independently-revocable alternative to email+password login."""
+
+    @pytest.mark.asyncio
+    async def test_api_token_is_used_directly_without_minting(self):
+        provider = _provider(password=None, api_token="portal-tok-1")
+
+        with patch(
+            "api.services.telephony.providers.tata_smartflo.provider.token_cache"
+        ) as cache:
+            token = await provider._bearer()
+
+        assert token == "portal-tok-1"
+        cache.get_token.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_api_token_takes_priority_over_password(self):
+        """If both are somehow set, the static token wins — it's the one that
+        does not need minting and matches operator intent to move off password."""
+        provider = _provider(password="placeholder-password", api_token="portal-tok-1")
+
+        with patch(
+            "api.services.telephony.providers.tata_smartflo.provider.token_cache"
+        ) as cache:
+            token = await provider._bearer()
+
+        assert token == "portal-tok-1"
+        cache.get_token.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_a_401_on_a_static_token_does_not_retry(self):
+        """There is nothing to refresh — only the account holder can issue a
+        new one from their dashboard. Retrying would resend the same rejected
+        token and waste rate-limit budget for nothing."""
+        provider = _provider(password=None, api_token="portal-tok-1")
+
+        responses = [(401, {"success": False, "message": "Invalid token"})]
+
+        class _Response:
+            def __init__(self, status, body):
+                self.status = status
+                self._body = body
+
+            async def json(self, content_type=None):
+                return self._body
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                return False
+
+        class _Session:
+            def post(self, *a, **k):
+                return _Response(*responses.pop(0))
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                return False
+
+        with patch(
+            "api.services.telephony.providers.tata_smartflo.provider.aiohttp.ClientSession",
+            return_value=_Session(),
+        ):
+            status, body = await provider._authed_post("/v1/click_to_call_support", {})
+
+        assert status == 401
+        assert responses == []  # exactly one request was made, no retry
+
+    @pytest.mark.asyncio
+    async def test_force_refresh_is_a_noop_for_a_static_token(self):
+        provider = _provider(password=None, api_token="portal-tok-1")
+        assert await provider._bearer(force_refresh=True) == "portal-tok-1"
+
+
 def test_transfers_are_supported():
     assert _provider().supports_transfers()
 

@@ -52,6 +52,7 @@ class TataSmartfloProvider(TelephonyProvider):
         ).rstrip("/")
         self.email = config.get("email")
         self.password = config.get("password")
+        self.api_token = config.get("api_token")
         self.api_key = config.get("api_key")
         self.caller_id = config.get("caller_id")
         self.from_numbers: List[str] = config.get("from_numbers") or []
@@ -62,9 +63,20 @@ class TataSmartfloProvider(TelephonyProvider):
     # ------------------------------------------------------------------
 
     async def _bearer(self, *, force_refresh: bool = False) -> str:
+        """Return a bearer token, from a static portal token if configured,
+        else by minting/caching one against email+password.
+
+        A portal-generated ``api_token`` (SmartFlo dashboard -> API Connect ->
+        API Tokens) is used exactly as-is: there is nothing to mint or cache,
+        and ``force_refresh`` has no effect on it — only the account holder
+        can issue a new one, from their dashboard.
+        """
+        if self.api_token:
+            return self.api_token
         if not self.email or not self.password:
             raise TataSmartfloAuthError(
-                "SmartFlo requires email and password; it issues no static token."
+                "SmartFlo requires either api_token or email+password; it "
+                "issues no other static token."
             )
         return await token_cache.get_token(
             self.api_base, self.email, self.password, force_refresh=force_refresh
@@ -76,7 +88,10 @@ class TataSmartfloProvider(TelephonyProvider):
         """POST with a bearer token, re-minting once on 401.
 
         Once, not in a loop: a 401 that survives a fresh token is a credential
-        problem, and retrying it only spends rate-limit budget.
+        problem, and retrying it only spends rate-limit budget. A static
+        ``api_token`` cannot be refreshed at all — only the account holder can
+        issue a new one from their dashboard — so a 401 on that path skips the
+        retry outright rather than resending the same rejected token.
         """
         url = f"{self.api_base}{path}"
         token = await self._bearer()
@@ -91,6 +106,15 @@ class TataSmartfloProvider(TelephonyProvider):
                 body = await response.json(content_type=None)
                 if response.status != 401:
                     return response.status, (body or {})
+
+            if self.api_token:
+                logger.error(
+                    "SmartFlo rejected the configured api_token (HTTP 401) — "
+                    "it has likely expired or been revoked. A new one must be "
+                    "generated from the SmartFlo dashboard's API Connect -> "
+                    "API Tokens page."
+                )
+                return response.status, (body or {})
 
             token = await self._bearer(force_refresh=True)
             async with session.post(
@@ -281,8 +305,9 @@ class TataSmartfloProvider(TelephonyProvider):
         return list(self.from_numbers)
 
     def validate_config(self) -> bool:
-        """Inbound needs credentials; outbound additionally needs the API key."""
-        return bool(self.email and self.password)
+        """Inbound needs an identity + a way to authenticate; outbound
+        additionally needs the Click-to-Call API key."""
+        return bool(self.email and (self.password or self.api_token))
 
     # ------------------------------------------------------------------
     # Inbound — the work happens in routes.py

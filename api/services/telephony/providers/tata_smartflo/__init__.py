@@ -32,6 +32,7 @@ def _config_loader(value: Dict[str, Any]) -> Dict[str, Any]:
         "api_base": value.get("api_base"),
         "email": value.get("email"),
         "password": value.get("password"),
+        "api_token": value.get("api_token"),
         "api_key": value.get("api_key"),
         "caller_id": value.get("caller_id"),
         "from_numbers": value.get("from_numbers", []),
@@ -57,19 +58,37 @@ _UI_METADATA = ProviderUIMetadata(
             type="text",
             sensitive=True,
             description=(
-                "SmartFlo login id. SmartFlo issues no long-lived API token — "
-                "credentials are exchanged for a bearer token that expires "
-                "roughly hourly, and refreshed automatically."
+                "SmartFlo login id. Always required — used to route inbound "
+                "webhooks to this configuration, regardless of which "
+                "authentication method below is used."
             ),
         ),
         ProviderUIField(
             name="password",
             label="Password",
             type="password",
+            required=False,
             sensitive=True,
             description=(
-                "SmartFlo account password. Note SmartFlo enforces a 90-day "
-                "password expiry; calling stops when it lapses."
+                "SmartFlo account password. Exchanged for a bearer token that "
+                "expires roughly hourly and is refreshed automatically. Note "
+                "SmartFlo enforces a 90-day password expiry; calling stops "
+                "when it lapses. Required only if API Token is not set — "
+                "prefer API Token below when possible."
+            ),
+        ),
+        ProviderUIField(
+            name="api_token",
+            label="API Token",
+            type="password",
+            required=False,
+            sensitive=True,
+            description=(
+                "A token generated from your SmartFlo dashboard (API Connect "
+                "→ API Tokens), valid up to 90 days. Preferred over Password: "
+                "it can be revoked independently at any time from that same "
+                "dashboard page, without changing your account password. "
+                "Required only if Password is not set."
             ),
         ),
         ProviderUIField(
