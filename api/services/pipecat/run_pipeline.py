@@ -385,6 +385,7 @@ async def _run_pipeline_telephony_impl(
             workflow_run=workflow_run,
             resolved_user_config=user_config,
             organization_id=organization_id,
+            seed_call_id=provider_seeds_live_call_id(provider_name),
         )
     except Exception as e:
         logger.error(
@@ -392,6 +393,33 @@ async def _run_pipeline_telephony_impl(
             exc_info=True,
         )
         raise
+
+
+def provider_seeds_live_call_id(provider_name: str) -> bool:
+    """Whether this provider's calls get the call id seeded into the live
+    context (see ``seed_live_context``). Only providers that opt in with
+    ``SEEDS_LIVE_CALL_ID`` do; every other call runs exactly as before."""
+    spec = telephony_registry.get_optional(provider_name)
+    return bool(spec and getattr(spec.provider_cls, "SEEDS_LIVE_CALL_ID", False))
+
+
+def seed_live_context(
+    live_gathered: dict, call_context_vars: dict, recorded: dict | None
+) -> None:
+    """Make the provider's call id visible to tools during the call.
+
+    The call id is written to the run's gathered context when an inbound call
+    is admitted (or an outbound one placed), but the engine's gathered context
+    starts empty, so a tool's ``{{gathered_context.call_id}}`` preset (a
+    SmartFlo transfer, say) resolved to nothing until the call ended. Only
+    the call id is carried over; nothing else the run recorded changes how
+    the call behaves. It is also offered as ``{{call_id}}``.
+    """
+    call_id = (recorded or {}).get("call_id")
+    if not call_id:
+        return
+    live_gathered.setdefault("call_id", call_id)
+    call_context_vars.setdefault("call_id", call_id)
 
 
 async def run_pipeline_smallwebrtc(
@@ -553,6 +581,7 @@ async def _run_pipeline_impl(
     workflow_run=None,
     resolved_user_config=None,
     organization_id: int | None = None,
+    seed_call_id: bool = False,
 ) -> None:
     """
     Run the pipeline with the given transport and configuration
@@ -565,6 +594,8 @@ async def _run_pipeline_impl(
         workflow_run: Pre-fetched workflow run row. Fetched here if None.
         resolved_user_config: Organization model configuration with workflow
             model_overrides already applied. Fetched and resolved here if None.
+        seed_call_id: Offer the provider's call id to tools during the call
+            (see ``seed_live_context``).
     """
     workflow_scope = (
         {"organization_id": organization_id}
@@ -832,6 +863,13 @@ async def _run_pipeline_impl(
         has_recordings=has_recordings,
         context_compaction_enabled=context_compaction_enabled,
     )
+
+    if seed_call_id:
+        seed_live_context(
+            engine._gathered_context,
+            merged_call_context_vars,
+            workflow_run.gathered_context,
+        )
 
     # Create pipeline components
     audio_buffer, context = create_pipeline_components(audio_config)

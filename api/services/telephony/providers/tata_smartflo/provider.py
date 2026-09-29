@@ -325,6 +325,11 @@ class TataSmartfloProvider(TelephonyProvider):
     # routes it by the called number alone.
     INBOUND_REQUEST_HAS_ACCOUNT_ID = False
 
+    # A SmartFlo transfer tool sends the call id (``{{gathered_context.call_id}}``)
+    # while the caller is on the line, so the pipeline offers it to tools from
+    # the start of the call.
+    SEEDS_LIVE_CALL_ID = True
+
     @staticmethod
     def can_handle_webhook(
         webhook_data: Dict[str, Any], headers: Dict[str, str]
