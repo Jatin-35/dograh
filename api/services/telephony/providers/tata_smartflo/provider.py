@@ -282,7 +282,9 @@ class TataSmartfloProvider(TelephonyProvider):
             manager = await get_call_transfer_manager()
             context = await manager.get_transfer_context(transfer_id)
         except Exception as exc:  # noqa: BLE001 - never fail a live call over this
-            logger.error(f"SmartFlo could not read transfer context {transfer_id}: {exc}")
+            logger.error(
+                f"SmartFlo could not read transfer context {transfer_id}: {exc}"
+            )
             return None
 
         return context.original_call_sid if context else None
@@ -312,6 +314,12 @@ class TataSmartfloProvider(TelephonyProvider):
     # ------------------------------------------------------------------
     # Inbound — the work happens in routes.py
     # ------------------------------------------------------------------
+
+    # The config is keyed by the login email, which SmartFlo's connect request
+    # does not carry (whether it carries any account id of its own is not yet
+    # known; see the field-name log in parse_inbound_webhook). So /inbound/run
+    # routes it by the called number alone.
+    INBOUND_REQUEST_HAS_ACCOUNT_ID = False
 
     @staticmethod
     def can_handle_webhook(
@@ -377,12 +385,20 @@ class TataSmartfloProvider(TelephonyProvider):
         SmartFlo sends ``callId``/``fromNumber``/``toNumber``; the webhook
         variants use ``$``-prefixed names, so both spellings are accepted.
         """
+
         def pick(*names: str) -> str:
             for name in names:
                 value = webhook_data.get(name)
                 if value:
                     return str(value)
             return ""
+
+        # Field names only, never values (they hold phone numbers): Tata has
+        # not documented the connect request, so this shows what it carries,
+        # e.g. whether there is an account identifier to match on.
+        logger.info(
+            f"SmartFlo inbound request fields: {sorted(map(str, webhook_data))}"
+        )
 
         return NormalizedInboundData(
             provider=TataSmartfloProvider.PROVIDER_NAME,
@@ -391,6 +407,10 @@ class TataSmartfloProvider(TelephonyProvider):
             to_number=pick("toNumber", "to_number", "$call_to_number"),
             direction="inbound",
             call_status=pick("status", "$status") or "ringing",
+            # SmartFlo is India-only; a number without a country code
+            # ("8065607348", "08065607348") is an Indian one.
+            from_country="IN",
+            to_country="IN",
             raw_data=webhook_data,
         )
 
@@ -465,7 +485,11 @@ class TataSmartfloProvider(TelephonyProvider):
         )
 
     async def handle_websocket(
-        self, websocket: Any, workflow_id: int, organization_id: int, workflow_run_id: int
+        self,
+        websocket: Any,
+        workflow_id: int,
+        organization_id: int,
+        workflow_run_id: int,
     ) -> None:
         """Media is served by the shared telephony WebSocket route."""
         raise NotImplementedError(

@@ -198,6 +198,39 @@ class TelephonyPhoneNumberClient(BaseDBClient):
                 return None
             return row[0], row[1]
 
+    async def find_inbound_routes_by_number(
+        self,
+        provider: str,
+        to_number: str,
+        country_hint: Optional[str] = None,
+    ) -> List[Tuple[TelephonyConfigurationModel, TelephonyPhoneNumberModel]]:
+        """Active (config, phone number) rows for a provider and called number,
+        across all organizations, for providers whose inbound request carries
+        no account id. At most two rows are returned: the caller only needs to
+        know whether the match is unique."""
+        if not (provider and to_number):
+            return []
+
+        normalized = normalize_telephony_address(to_number, country_hint=country_hint)
+
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(TelephonyConfigurationModel, TelephonyPhoneNumberModel)
+                .join(
+                    TelephonyPhoneNumberModel,
+                    TelephonyPhoneNumberModel.telephony_configuration_id
+                    == TelephonyConfigurationModel.id,
+                )
+                .where(
+                    TelephonyConfigurationModel.provider == provider,
+                    TelephonyPhoneNumberModel.address_normalized
+                    == normalized.canonical,
+                    TelephonyPhoneNumberModel.is_active.is_(True),
+                )
+                .limit(2)
+            )
+            return [(row[0], row[1]) for row in result.all()]
+
     async def find_inbound_routing_conflict(
         self,
         provider: str,

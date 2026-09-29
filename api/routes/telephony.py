@@ -770,6 +770,27 @@ async def handle_inbound_run(request: Request):
             country_hint=normalized_data.to_country,
         )
 
+        # Some providers (SmartFlo) put no account id on the inbound request,
+        # so the called number alone must identify the route. Only a unique
+        # match is used: the same number under two configs is ambiguous, and
+        # guessing would hand one customer's call to another.
+        if not match and not getattr(
+            provider_class, "INBOUND_REQUEST_HAS_ACCOUNT_ID", True
+        ):
+            candidates = await db_client.find_inbound_routes_by_number(
+                provider=provider_class.PROVIDER_NAME,
+                to_number=normalized_data.to_number,
+                country_hint=normalized_data.to_country,
+            )
+            if len(candidates) == 1:
+                match = candidates[0]
+            elif len(candidates) > 1:
+                logger.error(
+                    f"/inbound/run: {normalized_data.to_number} is active under "
+                    f"more than one {provider_class.PROVIDER_NAME} configuration; "
+                    f"refusing rather than guessing"
+                )
+
         if not match:
             logger.warning(
                 f"/inbound/run: no inbound route matched "
