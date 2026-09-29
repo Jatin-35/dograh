@@ -22,6 +22,7 @@ from api.services.pipecat.audio_mixer import build_audio_out_mixer
 from api.services.pipecat.transport_params import realtime_param_overrides
 from api.services.telephony.factory import load_credentials_for_transport
 
+from .config import DEFAULT_TATA_SMARTFLO_API_BASE
 from .serializers import SMARTFLO_WIRE_SAMPLE_RATE, SmartfloFrameSerializer
 from .strategies import TataSmartfloHangupStrategy, TataSmartfloTransferStrategy
 
@@ -48,15 +49,20 @@ async def create_transport(
         organization_id, telephony_configuration_id, expected_provider="tata_smartflo"
     )
 
-    api_base = config.get("api_base")
+    # Left blank in the form, it's SmartFlo's standard API host.
+    api_base = config.get("api_base") or DEFAULT_TATA_SMARTFLO_API_BASE
     email = config.get("email")
     password = config.get("password")
+    api_token = config.get("api_token")
 
-    if not email or not password:
+    # Hangup and transfer go over SmartFlo's REST API: a portal-generated API
+    # token is used as-is, otherwise email + password mint one. With neither,
+    # the agent couldn't end or transfer the call, so it isn't started.
+    if not api_token and not (email and password):
         raise ValueError(
             f"Incomplete SmartFlo configuration for organization {organization_id}: "
-            "email and password are required to mint the bearer token used for "
-            "hangup and transfer."
+            "an API token, or email and password, is required for hangup and "
+            "transfer."
         )
 
     # ref_id is only known for outbound calls, where the Click-to-Call response
@@ -68,6 +74,7 @@ async def create_transport(
         "api_base": api_base,
         "email": email,
         "password": password,
+        "api_token": api_token,
         "ref_id": ref_id,
     }
 

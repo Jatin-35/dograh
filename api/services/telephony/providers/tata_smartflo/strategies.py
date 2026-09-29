@@ -31,13 +31,17 @@ class _SmartfloCallOperation:
         self,
         *,
         api_base: str,
-        email: str,
-        password: str,
+        email: str | None,
+        password: str | None,
         ref_id: str | None = None,
+        api_token: str | None = None,
     ) -> None:
         self._api_base = api_base.rstrip("/")
         self._email = email
         self._password = password
+        # A token generated in the SmartFlo portal is used as-is; only an
+        # email + password login is minted and refreshed.
+        self._api_token = api_token
         # Outbound knows its ref_id from the Click-to-Call response. Inbound
         # does not — there was no initiation call — so it falls back to the
         # call_id the serializer carries. SmartFlo accepts either identifier.
@@ -68,7 +72,7 @@ class _SmartfloCallOperation:
 
     async def _post(self, path: str, payload: dict[str, Any]) -> bool:
         try:
-            token = await token_cache.get_token(
+            token = self._api_token or await token_cache.get_token(
                 self._api_base, self._email, self._password
             )
         except TataSmartfloAuthError as exc:
@@ -86,7 +90,7 @@ class _SmartfloCallOperation:
                 ) as response:
                     body = await response.json(content_type=None)
 
-                    if response.status == 401:
+                    if response.status == 401 and not self._api_token:
                         # Our clock said the token was good; SmartFlo disagreed.
                         # Mint once more, then give up — a loop here would burn
                         # the shared rate-limit budget during a live call.
@@ -165,14 +169,19 @@ class TataSmartfloTransferStrategy(_SmartfloCallOperation, TransferStrategy):
         self,
         *,
         api_base: str,
-        email: str,
-        password: str,
+        email: str | None,
+        password: str | None,
         ref_id: str | None = None,
+        api_token: str | None = None,
         agent_id: str | None = None,
         intercom: str | None = None,
     ) -> None:
         super().__init__(
-            api_base=api_base, email=email, password=password, ref_id=ref_id
+            api_base=api_base,
+            email=email,
+            password=password,
+            ref_id=ref_id,
+            api_token=api_token,
         )
         self._agent_id = agent_id
         self._intercom = intercom

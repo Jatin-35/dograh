@@ -16,7 +16,9 @@ import pytest
 # shares its name — ``transport.py`` imports the object, so that is what has
 # to be patched.
 from api.db import db_client
-from api.services.telephony.providers.tata_smartflo import transport as smartflo_transport
+from api.services.telephony.providers.tata_smartflo import (
+    transport as smartflo_transport,
+)
 from api.services.telephony.providers.tata_smartflo.serializers import (
     SmartfloFrameSerializer,
 )
@@ -50,9 +52,7 @@ def _patches(credentials=None, gathered_context=None):
             new_callable=AsyncMock,
             return_value=None,
         ),
-        patch.object(
-            smartflo_transport, "FastAPIWebsocketTransport", autospec=True
-        ),
+        patch.object(smartflo_transport, "FastAPIWebsocketTransport", autospec=True),
         patch.object(
             db_client,
             "get_workflow_run_by_id",
@@ -101,7 +101,9 @@ async def test_the_serializer_is_wired_to_smartflos_own_strategies():
     serializer = await _create()
 
     assert type(serializer._hangup_strategy).__name__ == "TataSmartfloHangupStrategy"
-    assert type(serializer._transfer_strategy).__name__ == "TataSmartfloTransferStrategy"
+    assert (
+        type(serializer._transfer_strategy).__name__ == "TataSmartfloTransferStrategy"
+    )
 
 
 @pytest.mark.asyncio
@@ -131,6 +133,26 @@ async def test_the_wire_rate_stays_8k_while_the_pipeline_runs_at_its_own_rate():
 
 @pytest.mark.asyncio
 async def test_missing_credentials_are_refused_before_a_call_starts():
-    """Without email/password the call could be answered but never hung up."""
-    with pytest.raises(ValueError, match="email and password are required"):
+    """Without a token or email/password the call could be answered but never
+    hung up."""
+    with pytest.raises(ValueError, match="an API token, or email and password"):
         await _create(credentials={"api_base": _CREDENTIALS["api_base"]})
+
+
+@pytest.mark.asyncio
+async def test_a_portal_api_token_alone_is_enough():
+    """The setup used in production: API token, no password."""
+    serializer = await _create(
+        credentials={"api_base": _CREDENTIALS["api_base"], "api_token": "tok-1"}
+    )
+    assert serializer._hangup_strategy._api_token == "tok-1"
+    assert serializer._transfer_strategy._api_token == "tok-1"
+
+
+@pytest.mark.asyncio
+async def test_a_blank_api_base_uses_smartflos_standard_host():
+    serializer = await _create(credentials={"api_token": "tok-1"})
+    assert (
+        serializer._hangup_strategy._api_base
+        == "https://api-smartflo.tatateleservices.com"
+    )

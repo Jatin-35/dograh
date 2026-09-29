@@ -35,6 +35,10 @@ from .config import DEFAULT_TATA_SMARTFLO_API_BASE
 
 _REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=20)
 
+# The media socket's opening messages (connected, start) before audio.
+_MAX_PREAMBLE_MESSAGES = 10
+_PREAMBLE_TIMEOUT_SECONDS = 10
+
 
 class TataSmartfloProvider(TelephonyProvider):
     """Telephony provider for TATA SmartFlo."""
@@ -491,9 +495,80 @@ class TataSmartfloProvider(TelephonyProvider):
         organization_id: int,
         workflow_run_id: int,
     ) -> None:
-        """Media is served by the shared telephony WebSocket route."""
-        raise NotImplementedError(
-            "SmartFlo media is handled by the shared /api/v1/telephony/ws route."
+        """Take over the media socket the shared /api/v1/telephony/ws route
+        accepted, and run the agent on it.
+
+        SmartFlo's stream is Twilio Media Streams in shape: ``connected``, then
+        ``start`` (carrying ``streamSid`` and the call id), then ``media``.
+        The preamble is read leniently: unknown events are skipped, and a
+        stream that starts with ``media`` still works, since a live call must
+        not be dropped over an envelope detail. The call id falls back to the
+        one the connect request gave (stored on the run).
+        """
+        import asyncio
+        import json
+
+        from api.db import db_client
+        from api.services.pipecat.run_pipeline import run_pipeline_telephony
+
+        stream_id: Optional[str] = None
+        call_id: Optional[str] = None
+        for _ in range(_MAX_PREAMBLE_MESSAGES):
+            try:
+                raw = await asyncio.wait_for(
+                    websocket.receive_text(), timeout=_PREAMBLE_TIMEOUT_SECONDS
+                )
+            except asyncio.TimeoutError:
+                break
+            try:
+                message = json.loads(raw)
+            except (TypeError, ValueError):
+                continue
+            if not isinstance(message, dict):
+                continue
+            event = message.get("event")
+            if event == "start":
+                start = message.get("start") or {}
+                # Field names only (never values): SmartFlo's start event is
+                # not documented in detail.
+                logger.info(
+                    f"[run {workflow_run_id}] SmartFlo start event fields: "
+                    f"{sorted(map(str, message))} / start: {sorted(map(str, start))}"
+                )
+                stream_id = message.get("streamSid") or start.get("streamSid")
+                call_id = (
+                    start.get("callSid")
+                    or start.get("callId")
+                    or start.get("call_id")
+                    or message.get("callId")
+                )
+                break
+            if event == "media" and message.get("streamSid"):
+                stream_id = message["streamSid"]
+                break
+            logger.info(f"[run {workflow_run_id}] SmartFlo preamble event: {event}")
+
+        if not stream_id:
+            logger.error(
+                f"[run {workflow_run_id}] SmartFlo stream never sent a start event "
+                "with a streamSid; closing"
+            )
+            await websocket.close(code=4400, reason="Expected a start event")
+            return
+
+        if not call_id:
+            run = await db_client.get_workflow_run_by_id(workflow_run_id)
+            call_id = ((run.gathered_context or {}) if run else {}).get("call_id")
+
+        logger.info(f"[run {workflow_run_id}] SmartFlo stream started")
+        await run_pipeline_telephony(
+            websocket,
+            provider_name=self.PROVIDER_NAME,
+            workflow_id=workflow_id,
+            workflow_run_id=workflow_run_id,
+            organization_id=organization_id,
+            call_id=call_id or "",
+            transport_kwargs={"stream_id": stream_id, "call_id": call_id or ""},
         )
 
     async def start_inbound_stream(
