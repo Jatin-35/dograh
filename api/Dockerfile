@@ -13,7 +13,10 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # uv (https://github.com/astral-sh/uv) for ~5-10x faster installs than pip.
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+# Pinned: a new uv image invalidates every layer below and reinstalls all
+# Python packages at their newest allowed versions (on 2026-09-30 that pulled
+# google-genai 2.25.0 and broke Gemini Live). Bump it deliberately.
+COPY --from=ghcr.io/astral-sh/uv:0.12.21 /uv /uvx /usr/local/bin/
 
 # Build the venv at the path it will live at in the final image, so shebangs
 # and console-scripts inside the venv reference the correct runtime location
