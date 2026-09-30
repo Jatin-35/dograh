@@ -159,7 +159,9 @@ services:
     environment:
       # Core application config
       ENVIRONMENT: "${ENVIRONMENT:-local}"
-      LOG_LEVEL: "INFO"
+      # Set LOG_LEVEL=DEBUG in .env to see what Gemini Live hears during a call
+      # ([Transcription:user] lines); it is noisy, so set it back afterwards.
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
 
       # Set to "false" in .env to disable public signup (invite-only installs).
       ENABLE_SIGNUP: "${ENABLE_SIGNUP:-true}"
