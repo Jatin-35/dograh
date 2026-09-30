@@ -26,9 +26,12 @@ ENV VIRTUAL_ENV=/opt/venv \
 RUN python -m venv "$VIRTUAL_ENV"
 
 # Layer 1: API deps. Cache invalidates only when requirements.txt changes.
+# api/constraints.txt pins every package (pipecat's too) to a tested version,
+# so a rebuild can't silently upgrade anything.
 RUN --mount=type=bind,source=api/requirements.txt,target=/tmp/req.txt \
+    --mount=type=bind,source=api/constraints.txt,target=/tmp/constraints.txt \
     --mount=type=cache,target=/root/.cache/uv \
-    uv pip install -r /tmp/req.txt
+    uv pip install -r /tmp/req.txt -c /tmp/constraints.txt
 
 # Layer 2: pipecat deps. Cache invalidates when pipecat source changes.
 # After installing pipecat, two hardening tweaks:
@@ -39,10 +42,11 @@ RUN --mount=type=bind,source=api/requirements.txt,target=/tmp/req.txt \
 #      doesn't hit the network on first agent run. NLTK auto-finds it under
 #      sys.prefix/nltk_data, so it travels with the venv on COPY.
 RUN --mount=type=bind,source=pipecat,target=/tmp/pipecat,rw \
+    --mount=type=bind,source=api/constraints.txt,target=/tmp/constraints.txt \
     --mount=type=cache,target=/root/.cache/uv \
-    uv pip install '/tmp/pipecat[cartesia,deepgram,openai,elevenlabs,groq,google,azure,sarvam,soundfile,silero,webrtc,speechmatics,openrouter,camb,mcp,inworld,smallest]' \
+    uv pip install '/tmp/pipecat[cartesia,deepgram,openai,elevenlabs,groq,google,azure,sarvam,soundfile,silero,webrtc,speechmatics,openrouter,camb,mcp,inworld,smallest]' -c /tmp/constraints.txt \
  && uv pip uninstall opencv-python \
- && uv pip install opencv-python-headless \
+ && uv pip install opencv-python-headless -c /tmp/constraints.txt \
  && python -c "import nltk; nltk.download('punkt_tab', download_dir='/opt/venv/nltk_data', quiet=True)"
 
 # Layer 3: Rumik TTS plugin, installed AFTER pipecat and with --no-deps.
