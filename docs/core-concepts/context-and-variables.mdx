@@ -51,6 +51,24 @@ When `customer_name` is not set, the agent will say "Hello there" instead of lea
 
 If the variable is present and non-empty, the fallback is ignored and the actual value is used.
 
+### Formatting phone numbers
+
+Some APIs reject a number written as `+919018737669` and want digits only. Two formatting options reshape a number before it is used:
+
+| You write | `+91 90187-37669` becomes | `9018737669` becomes |
+|---|---|---|
+| `{{caller_number \| digits}}` | `919018737669` | `9018737669` |
+| `{{caller_number \| phone_digits}}` | `919018737669` | `919018737669` |
+
+- `digits` keeps only the digits: it removes `+`, spaces and dashes.
+- `phone_digits` does the same and makes sure the number carries the country code. A 10-digit number (or one written with a leading `0`) gets `91` in front; other numbers keep their own country code (`+14155550123` becomes `14155550123`).
+
+Both work with the full path too: `{{initial_context.caller_number | phone_digits}}` gives the same result as `{{caller_number | phone_digits}}`. If the number is missing, the result is empty, so a required [preset parameter](/voice-agent/tools/http-api#6-preset-parameters) stops the request instead of sending a blank number.
+
+<Note>
+`digits` and `phone_digits` are formatting options, not fallback values: `{{caller_number | digits}}` never outputs the word "digits".
+</Note>
+
 ### Default variables
 
 Built-in variables for current time and weekday, available in any prompt without setting up `initial_context`.

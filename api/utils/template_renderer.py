@@ -15,6 +15,29 @@ _CURRENT_WEEKDAY_PREFIX = "current_weekday"
 _INITIAL_CONTEXT_PREFIX = "initial_context."
 
 
+def _digits(value: str) -> str:
+    return re.sub(r"\D", "", value)
+
+
+def _phone_digits(value: str) -> str:
+    """Digits with the country code, for APIs that want ``919876543210``.
+
+    A 10-digit number (or one written with a leading trunk 0) is taken to be
+    Indian and gets ``91``; anything else is left as its digits.
+    """
+    digits = _digits(value)
+    if len(digits) == 11 and digits.startswith("0"):
+        digits = digits[1:]
+    if len(digits) == 10:
+        return "91" + digits
+    return digits
+
+
+# Filters that reshape a value, e.g. ``{{caller_number | digits}}``. Any other
+# filter name is a default value (``{{name | there}}``).
+_FORMAT_FILTERS = {"digits": _digits, "phone_digits": _phone_digits}
+
+
 def get_nested_value(obj: Any, path: str) -> Any:
     """
     Get a nested value from a dictionary using dot notation.
@@ -62,6 +85,7 @@ def render_template(
     - Nested paths: "{{initial_context.phone_number}}"
     - Deep nesting: "{{gathered_context.customer.address.city}}"
     - Fallback: "{{name | fallback:Unknown}}"
+    - Formatting: "{{caller_number | digits}}", "{{caller_number | phone_digits}}"
 
     Args:
         template: String, dict, list, or None with {{variable}} placeholders
@@ -193,6 +217,11 @@ def _render_string(template_str: str, context: Dict[str, Any]) -> str:
             value = get_nested_value(
                 context, variable_path[len(_INITIAL_CONTEXT_PREFIX) :]
             )
+
+        if filter_name in _FORMAT_FILTERS and filter_value is None:
+            if value is None or value == "" or isinstance(value, (dict, list)):
+                return ""
+            return _FORMAT_FILTERS[filter_name](str(value))
 
         # Apply fallback: new syntax {{var | default}} or legacy {{var | fallback:default}}
         if filter_name is not None:
