@@ -101,10 +101,10 @@ Preset parameters are filled by BotrixAI when the tool runs, not by the agent. T
 
 Each preset has a name (the field sent to your API), a value, and a Required flag. The value is a fixed text or a [template variable](/core-concepts/context-and-variables#template-variables), and can be [formatted](/core-concepts/context-and-variables#formatting-phone-numbers).
 
-**Example: send details to the caller on WhatsApp.** Your WhatsApp API wants the caller's number as `919018737669`, and the agent should only supply the details to send.
+**Example: send details to the customer on WhatsApp.** Your WhatsApp API wants the customer's number as `919018737669`, and the agent should only supply the details to send.
 
 - Parameters (filled by the agent): `manager_name`, `manager_phone`
-- Preset parameter: name `sender_phone`, value `{{caller_number | phone_digits}}`, Required on
+- Preset parameter: name `sender_phone`, value `{{phone_number | phone_digits}}` on an outbound agent, or `{{caller_number | phone_digits}}` on an inbound agent; Required on
 
 When the agent calls the tool, BotrixAI adds `sender_phone` to the request body:
 
@@ -115,7 +115,7 @@ When the agent calls the tool, BotrixAI adds `sender_phone` to the request body:
 Then tell the agent in its prompt: "When the customer agrees, call the tool right away. Never ask for their number. Only say it was sent after the tool succeeds."
 
 <Warning>
-Use `caller_number` for the customer on **inbound** calls. On outbound calls, including a test call from the dashboard, `caller_number` is your own BotrixAI number and the customer is `called_number`. See [telephony variables](/core-concepts/context-and-variables#telephony-variables).
+Pick the variable that holds the **customer's** number for how your agent's calls start: `phone_number` on outbound calls (campaigns, calls started through the API, dashboard test calls) and `caller_number` on inbound calls. On an outbound call `caller_number` is your own BotrixAI number, and on a call started through the API it is empty. See [telephony variables](/core-concepts/context-and-variables#telephony-variables).
 </Warning>
 
 <Note>

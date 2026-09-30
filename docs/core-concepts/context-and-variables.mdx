@@ -57,16 +57,16 @@ Some APIs reject a number written as `+919018737669` and want digits only. Two f
 
 | You write | `+91 90187-37669` becomes | `9018737669` becomes |
 |---|---|---|
-| `{{caller_number \| digits}}` | `919018737669` | `9018737669` |
-| `{{caller_number \| phone_digits}}` | `919018737669` | `919018737669` |
+| `{{phone_number \| digits}}` | `919018737669` | `9018737669` |
+| `{{phone_number \| phone_digits}}` | `919018737669` | `919018737669` |
 
 - `digits` keeps only the digits: it removes `+`, spaces and dashes.
 - `phone_digits` does the same and makes sure the number carries the country code. A 10-digit number (or one written with a leading `0`) gets `91` in front; other numbers keep their own country code (`+14155550123` becomes `14155550123`).
 
-Both work with the full path too: `{{initial_context.caller_number | phone_digits}}` gives the same result as `{{caller_number | phone_digits}}`. If the number is missing, the result is empty, so a required [preset parameter](/voice-agent/tools/http-api#6-preset-parameters) stops the request instead of sending a blank number.
+They work on any variable. Use `phone_number` on outbound calls and `caller_number` on inbound calls (see [telephony variables](#telephony-variables)). The full path works too: `{{initial_context.phone_number | phone_digits}}` gives the same result as `{{phone_number | phone_digits}}`. If the number is missing, the result is empty, so a required [preset parameter](/voice-agent/tools/http-api#6-preset-parameters) stops the request instead of sending a blank number.
 
 <Note>
-`digits` and `phone_digits` are formatting options, not fallback values: `{{caller_number | digits}}` never outputs the word "digits".
+`digits` and `phone_digits` are formatting options, not fallback values: `{{phone_number | digits}}` never outputs the word "digits".
 </Note>
 
 ### Default variables
@@ -92,14 +92,16 @@ When you use a timezone suffix on **either** `current_time` or `current_weekday`
 
 ### Telephony variables
 
-For telephony calls (inbound and outbound), BotrixAI automatically adds these variables to `initial_context`:
+For telephony calls, BotrixAI adds the phone numbers to `initial_context`. Which variable holds the **customer's** number depends on how the call started:
 
-| Variable | Description | Example |
+| How the call started | Customer's number | Your BotrixAI number |
 |---|---|---|
-| `{{caller_number}}` | The phone number that initiated the call | `+14155550100` |
-| `{{called_number}}` | The phone number that received the call | `+18005550199` |
+| The customer called your number (inbound) | `{{caller_number}}` | `{{called_number}}` |
+| A campaign called the customer | `{{phone_number}}` (also `{{called_number}}`) | `{{caller_number}}` |
+| A call started through the API (a CRM or lead source) | `{{phone_number}}` | — |
+| A test call from the dashboard | `{{phone_number}}` (also `{{called_number}}`) | `{{caller_number}}` |
 
-For **inbound** calls, `caller_number` is the customer's number and `called_number` is your BotrixAI number. For **outbound** calls, it's the reverse — `caller_number` is your BotrixAI number and `called_number` is the customer's number.
+In short: on an **outbound** call the customer is `phone_number`; on an **inbound** call the customer is `caller_number`. A call started through the API only carries `phone_number`, so `caller_number` and `called_number` are empty there.
 
 ```
 You are speaking with the caller at {{caller_number}}.
