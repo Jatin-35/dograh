@@ -18,6 +18,7 @@ import {
     applyThreadEvent,
     resolveApproval,
     settleSteps,
+    STOPPED,
     THINKING,
     threadFromSession,
 } from "./threadState";
@@ -35,6 +36,12 @@ const sessionStorageKey = (surface: string) =>
 
 function getErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : "Something went wrong";
+}
+
+/** The user pressed Stop: fetch rejects (or the read loop throws) with an
+ * AbortError. Not a failure, so no error toast. */
+function isAbort(error: unknown): boolean {
+    return (error as { name?: unknown } | null)?.name === "AbortError";
 }
 
 async function* parseSseStream(response: Response): AsyncGenerator<WorkflowGenSseFrame> {
@@ -187,14 +194,21 @@ export function useWorkflowGenChatSession({
         setThread((prev) => applyThreadEvent(settleSteps(prev), event, `live-${Date.now()}`));
     }, []);
 
+    // The in-flight turn's stream, so Stop can cancel it. Dropping the stream
+    // is what stops the turn: the server cancels it on disconnect.
+    const abortRef = useRef<AbortController | null>(null);
+
     const streamFrom = useCallback(
         async (path: string, body: Record<string, unknown>) => {
             const token = await getAccessToken();
             const baseUrl = client.getConfig().baseUrl ?? "";
+            const controller = new AbortController();
+            abortRef.current = controller;
             const response = await fetch(`${baseUrl}${path}`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
                 body: JSON.stringify(body),
+                signal: controller.signal,
             });
             if (!response.ok || !response.body) {
                 throw new Error(`Request failed: ${response.status}`);
@@ -213,6 +227,26 @@ export function useWorkflowGenChatSession({
         [getAccessToken, handleEvent],
     );
 
+    /** Stop the turn in flight. */
+    const stop = useCallback(() => {
+        abortRef.current?.abort();
+    }, []);
+
+    /** After a Stop, the steps that did complete have advanced the session's
+     * revision server-side, but this tab only learns a revision at the end of
+     * a stream, so the next message would be refused as stale. Re-read it. */
+    const afterStop = useCallback(async () => {
+        setThread((prev) => appendStep(prev, STOPPED));
+        if (!session) return;
+        const response = await getWorkflowGenSessionApiV1WorkflowGenSessionsSessionIdGet({
+            path: { session_id: session.id },
+        });
+        if (!response.error && response.data) {
+            const fresh = response.data;
+            setSession((prev) => (prev ? { ...prev, revision: fresh.revision, status: fresh.status } : prev));
+        }
+    }, [session]);
+
     const sendMessage = useCallback(
         async (text: string) => {
             const trimmed = text.trim();
@@ -226,14 +260,16 @@ export function useWorkflowGenChatSession({
                     expected_revision: session.revision,
                 });
             } catch (error) {
-                toast.error(getErrorMessage(error));
+                if (isAbort(error)) await afterStop();
+                else toast.error(getErrorMessage(error));
             } finally {
+                abortRef.current = null;
                 setSendingMessage(false);
                 setStatusMessage(null);
                 setThread(settleSteps);
             }
         },
-        [session, streamFrom],
+        [session, streamFrom, afterStop],
     );
 
     const confirmPendingAction = useCallback(
@@ -253,14 +289,16 @@ export function useWorkflowGenChatSession({
                     approve,
                 });
             } catch (error) {
-                toast.error(getErrorMessage(error));
+                if (isAbort(error)) await afterStop();
+                else toast.error(getErrorMessage(error));
             } finally {
+                abortRef.current = null;
                 setConfirming(false);
                 setStatusMessage(null);
                 setThread(settleSteps);
             }
         },
-        [session, streamFrom],
+        [session, streamFrom, afterStop],
     );
 
     return {
@@ -275,6 +313,7 @@ export function useWorkflowGenChatSession({
         hasPendingAction: Boolean(pendingAction),
         sendMessage,
         confirmPendingAction,
+        stop,
         switchToSession,
         startNewSession,
     };

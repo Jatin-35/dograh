@@ -8,6 +8,7 @@ end: this is what makes `pending_action` durable the instant it's proposed
 in the agent loop's stack frame.
 """
 
+import asyncio
 from typing import Any, AsyncIterator
 
 from loguru import logger
@@ -190,6 +191,13 @@ async def append_user_turn_and_run(
                 append_event=_persistable(step.event),
             )
             yield {"event": step.event, "revision": updated.revision}
+    except asyncio.CancelledError:
+        # The user pressed Stop (the browser dropped the stream) or the client
+        # went away. Not an error, so the handler below never sees it; without
+        # this the session would stay "running". Shielded: this coroutine is
+        # being cancelled, and the reset must still reach the database.
+        await asyncio.shield(_reset_status_to_idle(session_id, organization_id))
+        raise
     except Exception:
         await _reset_status_to_idle(session_id, organization_id)
         raise
@@ -255,6 +263,13 @@ async def confirm_pending_action(
                 append_event=_persistable(step.event),
             )
             yield {"event": step.event, "revision": updated.revision}
+    except asyncio.CancelledError:
+        # The user pressed Stop (the browser dropped the stream) or the client
+        # went away. Not an error, so the handler below never sees it; without
+        # this the session would stay "running". Shielded: this coroutine is
+        # being cancelled, and the reset must still reach the database.
+        await asyncio.shield(_reset_status_to_idle(session_id, organization_id))
+        raise
     except Exception:
         await _reset_status_to_idle(session_id, organization_id)
         raise

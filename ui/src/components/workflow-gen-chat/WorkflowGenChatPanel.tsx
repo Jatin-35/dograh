@@ -6,7 +6,7 @@ import {
     type ThreadMessageLike,
     useExternalStoreRuntime,
 } from "@assistant-ui/react";
-import { ArrowUp, Loader2, Sparkles, X } from "lucide-react";
+import { ArrowUp, Loader2, Sparkles, Square, X } from "lucide-react";
 import { useEffect, useMemo } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -155,11 +155,14 @@ function convertMessage(item: WorkflowGenThreadItem): ThreadMessageLike {
 interface ChatComposerProps {
     placeholder: string;
     sendingMessage: boolean;
+    /** A turn is in flight (a message or an approved action). */
+    busy: boolean;
+    onStop: () => void;
 }
 
 /** The message-input pill, shared between the docked (non-empty-thread) and
  * centered hero (empty-thread) layouts below. */
-function ChatComposer({ placeholder, sendingMessage }: ChatComposerProps) {
+function ChatComposer({ placeholder, sendingMessage, busy, onStop }: ChatComposerProps) {
     return (
         <div>
             <ComposerPrimitive.Root className="flex items-end gap-2 rounded-2xl border border-input bg-background p-1.5 pl-3.5 focus-within:ring-2 focus-within:ring-ring/40">
@@ -169,11 +172,27 @@ function ChatComposer({ placeholder, sendingMessage }: ChatComposerProps) {
                     rows={1}
                     maxRows={6}
                 />
-                <ComposerPrimitive.Send asChild>
-                    <Button size="icon" className="h-8 w-8 shrink-0 rounded-lg">
-                        {sendingMessage ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
+                {busy ? (
+                    // While Scout is working the send button becomes Stop: it
+                    // cancels the turn (and any tool call still running).
+                    <Button
+                        type="button"
+                        size="icon"
+                        variant="secondary"
+                        className="h-8 w-8 shrink-0 rounded-lg"
+                        onClick={onStop}
+                        title="Stop"
+                        aria-label="Stop"
+                    >
+                        <Square className="h-3.5 w-3.5 fill-current" />
                     </Button>
-                </ComposerPrimitive.Send>
+                ) : (
+                    <ComposerPrimitive.Send asChild>
+                        <Button size="icon" className="h-8 w-8 shrink-0 rounded-lg">
+                            {sendingMessage ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
+                        </Button>
+                    </ComposerPrimitive.Send>
+                )}
             </ComposerPrimitive.Root>
             {/* Scout edits real workflows that answer real calls, so the
                 caveat sits where it's read — under the box you type in. */}
@@ -215,6 +234,7 @@ export function WorkflowGenChatPanel({
         hasPendingAction,
         sendMessage,
         confirmPendingAction,
+        stop,
     } = externalSession ?? ownSession;
 
     const busy = sendingMessage || confirming;
@@ -299,7 +319,7 @@ export function WorkflowGenChatPanel({
                                 </p>
 
                                 <div className="w-full max-w-md">
-                                    <ChatComposer placeholder={composerPlaceholder} sendingMessage={sendingMessage} />
+                                    <ChatComposer placeholder={composerPlaceholder} sendingMessage={sendingMessage} busy={busy} onStop={stop} />
                                 </div>
 
                                 <div className="flex max-w-md flex-wrap items-center justify-center gap-2">
@@ -321,7 +341,7 @@ export function WorkflowGenChatPanel({
                             <>
                                 <WorkflowGenThreadView />
                                 <div className="shrink-0 border-t border-border p-3">
-                                    <ChatComposer placeholder={composerPlaceholder} sendingMessage={sendingMessage} />
+                                    <ChatComposer placeholder={composerPlaceholder} sendingMessage={sendingMessage} busy={busy} onStop={stop} />
                                 </div>
                             </>
                         )}

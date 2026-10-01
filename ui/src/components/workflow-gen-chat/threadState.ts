@@ -13,6 +13,10 @@ import type { WorkflowGenEvent, WorkflowGenRawMessage, WorkflowGenThreadItem } f
  * real step, so the gap while the model decides what to do isn't silent. */
 export const THINKING = "Thinking…";
 
+/** Left in the turn's step group when the user stops it, so the cut-off is
+ * visible rather than the turn just ending. */
+export const STOPPED = "Stopped";
+
 /** Add a step to the turn's in-progress group, starting one if needed.
  *
  * The placeholder is dropped as soon as a real step arrives, and consecutive
