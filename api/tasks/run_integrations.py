@@ -404,7 +404,9 @@ def _build_render_context(
 
 
 def _build_webhook_payload(
-    webhook_data: WebhookNodeData, render_context: Dict[str, Any]
+    webhook_data: WebhookNodeData,
+    render_context: Dict[str, Any],
+    add_call_disposition: bool = True,
 ) -> Any:
     """Render the webhook payload once, so retries are deterministic.
 
@@ -414,7 +416,7 @@ def _build_webhook_payload(
     """
     payload = render_template(webhook_data.payload_template or {}, render_context)
 
-    if isinstance(payload, dict):
+    if add_call_disposition and isinstance(payload, dict):
         gathered_context = render_context.get("gathered_context") or {}
         payload.setdefault(
             "call_disposition", gathered_context.get("call_disposition", "")
@@ -479,6 +481,7 @@ async def _enqueue_webhook_delivery(
     organization_id: int,
     workflow_run_id: int,
     webhook_node_id: str,
+    add_call_disposition: bool = True,
 ) -> None:
     """Persist a durable delivery record and enqueue its first send attempt.
 
@@ -501,7 +504,9 @@ async def _enqueue_webhook_delivery(
         logger.warning(f"Webhook '{webhook_name}' has no endpoint URL")
         return
 
-    payload = _build_webhook_payload(webhook_data, render_context)
+    payload = _build_webhook_payload(
+        webhook_data, render_context, add_call_disposition=add_call_disposition
+    )
 
     # Persist non-secret request definition. The credential is stored by reference
     # (uuid) and re-resolved at send time so secrets never land in this row.

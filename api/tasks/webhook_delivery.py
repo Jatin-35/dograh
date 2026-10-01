@@ -102,6 +102,39 @@ async def _build_headers(delivery: WebhookDeliveryModel, attempt: int) -> dict:
     return headers
 
 
+async def _report_outcome(
+    delivery: WebhookDeliveryModel,
+    status: str,
+    attempt: int,
+    status_code: Optional[int] = None,
+    error: Optional[str] = None,
+    response_body: Optional[str] = None,
+) -> None:
+    """Mirror the outcome onto the run's annotation when the delivery belongs to
+    a Conditional Webhook (a no-op for any other webhook). Never raises: the
+    delivery itself is already recorded."""
+    try:
+        # Lazy: integration packages import the task layer at load time.
+        from api.services.integrations.conditional_webhook.outcome import (
+            record_delivery_outcome,
+        )
+
+        await record_delivery_outcome(
+            workflow_run_id=delivery.workflow_run_id,
+            webhook_node_id=delivery.webhook_node_id,
+            status=status,
+            attempt=attempt,
+            status_code=status_code,
+            error=error,
+            response_body=response_body,
+        )
+    except Exception as e:
+        logger.warning(
+            f"Could not record the outcome of webhook delivery {delivery.id} on "
+            f"its run: {e!r}"
+        )
+
+
 async def _handle_transient_failure(
     delivery: WebhookDeliveryModel,
     attempt: int,
@@ -113,6 +146,7 @@ async def _handle_transient_failure(
         await db_client.mark_webhook_delivery_dead_letter(
             delivery.id, attempt, error, status_code
         )
+        await _report_outcome(delivery, "failed", attempt, status_code, error)
         return
 
     delay = _backoff_seconds(attempt)
@@ -125,6 +159,7 @@ async def _handle_transient_failure(
         last_status_code=status_code,
     )
     await _enqueue_delivery(delivery.id, attempt_count=attempt, defer_by=delay)
+    await _report_outcome(delivery, "retrying", attempt, status_code, error)
     logger.warning(
         f"Webhook '{delivery.webhook_name}' delivery {delivery.id} attempt {attempt} "
         f"failed ({error}); retrying in {delay}s "
@@ -188,6 +223,14 @@ async def deliver_webhook(_ctx, delivery_id: int) -> None:
             await db_client.mark_webhook_delivery_dead_letter(
                 delivery.id, attempt, error, status_code
             )
+            await _report_outcome(
+                delivery,
+                "failed",
+                attempt,
+                status_code,
+                error,
+                response_body=e.response.text,
+            )
         return
     except httpx.RequestError as e:
         # Connect/read timeouts, DNS, connection resets -- the transient class that
@@ -203,6 +246,7 @@ async def deliver_webhook(_ctx, delivery_id: int) -> None:
         await db_client.mark_webhook_delivery_dead_letter(
             delivery.id, attempt, repr(e), None
         )
+        await _report_outcome(delivery, "failed", attempt, None, repr(e))
         return
 
     # The receiver accepted the payload (2xx). Recording success must NOT be able
@@ -216,6 +260,13 @@ async def deliver_webhook(_ctx, delivery_id: int) -> None:
         logger.info(
             f"Webhook '{delivery.webhook_name}' delivery {delivery.id} succeeded: "
             f"{response.status_code} (attempt {attempt})"
+        )
+        await _report_outcome(
+            delivery,
+            "delivered",
+            attempt,
+            response.status_code,
+            response_body=response.text,
         )
     except Exception as e:
         logger.error(

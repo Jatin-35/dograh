@@ -412,6 +412,39 @@ class WorkflowRunClient(BaseDBClient):
             await session.refresh(run)
         return run
 
+    async def patch_workflow_run_annotation(
+        self, run_id: int, key: str, value: dict, *, create: bool
+    ) -> bool:
+        """Write one annotation entry under the row lock. Returns whether it wrote.
+
+        ``create=True`` sets ``key`` only if it is absent, so a retried run
+        never resets a later outcome. ``create=False`` merges ``value`` into an
+        existing entry and does nothing if there is none. The row lock (as in
+        ``update_workflow_run``) keeps concurrent writers from losing updates.
+        """
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(WorkflowRunModel)
+                .where(WorkflowRunModel.id == run_id)
+                .with_for_update()
+            )
+            run = result.scalars().first()
+            if run is None:
+                return False
+            annotations = dict(run.annotations or {})
+            current = annotations.get(key)
+            if create:
+                if current is not None:
+                    return False
+                annotations[key] = value
+            else:
+                if not isinstance(current, dict):
+                    return False
+                annotations[key] = {**current, **value}
+            run.annotations = annotations
+            await session.commit()
+            return True
+
     async def get_workflow_run_with_context(
         self, workflow_run_id: int
     ) -> Tuple[Optional[WorkflowRunModel], Optional[int]]:

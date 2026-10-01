@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
+import { CONDITIONAL_WEBHOOK_PREFIX, ConditionalWebhookResults } from './ConditionalWebhookResult';
 import { StructuredData } from './StructuredData';
 
 type Annotations = Record<string, unknown>;
@@ -54,9 +55,17 @@ function NodeResult({ name, result }: { name: string; result: Record<string, unk
 }
 
 function FormattedView({ annotations }: { annotations: Annotations }) {
+    // Conditional Webhooks are grouped under their own heading, after the rest.
+    const webhooks = Object.entries(annotations).filter(
+        (entry): entry is [string, Record<string, unknown>] =>
+            entry[0].startsWith(CONDITIONAL_WEBHOOK_PREFIX) && isRecord(entry[1]),
+    );
+    const others = Object.entries(annotations).filter(
+        ([key, value]) => !(key.startsWith(CONDITIONAL_WEBHOOK_PREFIX) && isRecord(value)),
+    );
     return (
         <div className="space-y-4">
-            {Object.entries(annotations).map(([key, value]) => {
+            {others.map(([key, value]) => {
                 if (key.startsWith('qa_') && isRecord(value)) {
                     if (value.skipped) {
                         return (
@@ -92,6 +101,7 @@ function FormattedView({ annotations }: { annotations: Annotations }) {
                     </section>
                 );
             })}
+            <ConditionalWebhookResults entries={webhooks} />
         </div>
     );
 }
@@ -114,7 +124,7 @@ export function QAResultsCard({ annotations }: { annotations: Annotations }) {
         <Card className="border-border">
             <Tabs defaultValue="formatted">
                 <CardHeader className="flex-row items-center justify-between gap-4 space-y-0 pb-3">
-                    <CardTitle className="text-lg">QA Results</CardTitle>
+                    <CardTitle className="text-lg">Post-call Results</CardTitle>
                     <TabsList>
                         <TabsTrigger value="formatted">Formatted</TabsTrigger>
                         <TabsTrigger value="json">JSON</TabsTrigger>

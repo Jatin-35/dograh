@@ -125,10 +125,16 @@ async def _run(nodes):
         public_token=None,
     )
     enqueue = AsyncMock()
+    notes = AsyncMock(return_value=True)
     with patch(
         "api.tasks.run_integrations._build_render_context", return_value=CALL
-    ), patch("api.tasks.run_integrations._enqueue_webhook_delivery", enqueue):
+    ), patch("api.tasks.run_integrations._enqueue_webhook_delivery", enqueue), patch(
+        "api.services.integrations.conditional_webhook.completion.db_client"
+        ".patch_workflow_run_annotation",
+        notes,
+    ):
         results = await run_completion(nodes, context)
+    _run.notes = notes
     return results, enqueue
 
 
@@ -158,9 +164,24 @@ async def test_sends_only_the_webhooks_whose_conditions_hold():
     assert first["webhook_data"].payload_template == {
         "to": "{{initial_context.phone_number | phone_digits}}"
     }
-    assert results["conditional_webhook_wa_customer"]["sent"] is True
+    # A sent node writes its own "queued" note (only if absent) before it is
+    # queued, and is not in the returned results, which the caller stores later.
+    request = {
+        "method": "POST",
+        "url": "https://wa.example/send",
+        "payload": {"to": "919018737669"},  # rendered, exactly as sent
+    }
+    assert [c.args for c in _run.notes.await_args_list] == [
+        (601, "conditional_webhook_wa_customer",
+         {"name": "wa_customer", "status": "queued", "sent": False, "request": request}),
+        (601, "conditional_webhook_wa_manager",
+         {"name": "wa_manager", "status": "queued", "sent": False, "request": request}),
+    ]
+    assert all(c.kwargs == {"create": True} for c in _run.notes.await_args_list)
+    assert "conditional_webhook_wa_customer" not in results
     assert results["conditional_webhook_wa_delhi"] == {
         "name": "wa_delhi",
+        "status": "not_sent",
         "sent": False,
         "reason": "conditions_not_met",
         "failed_conditions": ["gathered_context.city equals 'Delhi'"],
@@ -178,3 +199,19 @@ async def test_an_invalid_node_is_skipped_not_fatal():
     results, enqueue = await _run([broken, _node("ok")])
     assert results["conditional_webhook_bad"]["reason"] == "invalid_configuration"
     assert [c.kwargs["webhook_node_id"] for c in enqueue.await_args_list] == ["ok"]
+
+
+def test_the_api_key_in_a_whatsapp_url_is_masked():
+    from api.services.integrations.conditional_webhook.outcome import mask_url
+
+    url = (
+        "https://pannel.ailifebot.com/API_V2/Whatsapp/send_template/"
+        "Y0xLWDhOckNvd2dmbXBuSkYyOUwrQT09"
+    )
+    assert mask_url(url) == (
+        "https://pannel.ailifebot.com/API_V2/Whatsapp/send_template/Y0xL••••"
+    )
+    assert mask_url("https://x.example/send?api_key=abcdef123&to=91") == (
+        "https://x.example/send?api_key=abcd••••&to=91"
+    )
+    assert mask_url("https://wa.example/send") == "https://wa.example/send"
