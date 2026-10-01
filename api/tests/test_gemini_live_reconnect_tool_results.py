@@ -363,3 +363,40 @@ async def test_node_transition_frame_commits_user_transcript_to_context():
     }
     user_aggregator.push_context_frame.assert_awaited_once()
     assert context_aggregation_event.is_set()
+
+
+@pytest.mark.asyncio
+async def test_node_transition_context_frame_during_disconnect_defers_seed():
+    """A node-transition context frame that arrives while the reconnect's
+    disconnect is still in flight must not seed against the dying session.
+
+    Regression (upstream dograh fa1df112; run 600 here): `self._session` still
+    points to the old session mid-disconnect, so the `not self._session` guard
+    did not protect the seed. Seeding there ran against a session being torn
+    down and cleared the node-transition flags, so the fresh session was never
+    seeded and the bot stopped hearing the caller after the transition.
+    """
+    service = _make_service()
+    service._handled_initial_context = True
+    service._awaiting_node_transition_context = True
+    service._node_transition_context_received = False
+    service._process_completed_function_calls = AsyncMock()
+    service._create_initial_response = AsyncMock()
+
+    # Mid-reconnect: the old session is still present and the disconnect is in
+    # progress. The transition's context frame lands in exactly this window.
+    service._session = _FakeSession()
+    service._disconnecting = True
+
+    await service._handle_context(_make_tool_result_context("call-transition"))
+
+    service._create_initial_response.assert_not_awaited()
+    assert service._awaiting_node_transition_context is True
+    assert service._node_transition_context_received is True
+
+    # Reconnect settles: the fresh session becomes ready and seeds exactly once.
+    service._disconnecting = False
+    await service._handle_session_ready(_FakeSession())
+
+    service._create_initial_response.assert_awaited_once()
+    assert service._awaiting_node_transition_context is False

@@ -29,6 +29,7 @@ from api.services.configuration.options import (
     GOOGLE_MODELS,
     GOOGLE_REALTIME_LANGUAGES,
     GOOGLE_REALTIME_MODELS,
+    GEMINI_LIVE_38_MODELS,
     GOOGLE_REALTIME_VOICES,
     GOOGLE_STT_LANGUAGES,
     GOOGLE_STT_MODELS,
@@ -93,6 +94,7 @@ class ServiceProviders(str, Enum):
     GROK_REALTIME = "grok_realtime"
     ULTRAVOX_REALTIME = "ultravox_realtime"
     GOOGLE_REALTIME = "google_realtime"
+    GEMINI_LIVE_38 = "gemini_live_38"
     GOOGLE_VERTEX_REALTIME = "google_vertex_realtime"
     AZURE_REALTIME = "azure_realtime"
     SMALLEST = "smallest"
@@ -125,6 +127,7 @@ class BaseServiceConfiguration(BaseModel):
         ServiceProviders.GROK_REALTIME,
         ServiceProviders.ULTRAVOX_REALTIME,
         ServiceProviders.GOOGLE_REALTIME,
+        ServiceProviders.GEMINI_LIVE_38,
         ServiceProviders.GOOGLE_VERTEX_REALTIME,
         ServiceProviders.AZURE_REALTIME,
         ServiceProviders.SARVAM,
@@ -258,6 +261,14 @@ OPENAI_REALTIME_PROVIDER_MODEL_CONFIG = provider_model_config("OpenAI Realtime")
 GROK_REALTIME_PROVIDER_MODEL_CONFIG = provider_model_config("Grok Realtime")
 ULTRAVOX_REALTIME_PROVIDER_MODEL_CONFIG = provider_model_config("Ultravox Realtime")
 GOOGLE_REALTIME_PROVIDER_MODEL_CONFIG = provider_model_config("Google Realtime")
+GEMINI_LIVE_38_PROVIDER_MODEL_CONFIG = provider_model_config(
+    "Gemini 3.8 Live",
+    description=(
+        "Gemini 3.8 Live on Google AI Studio, with 3.8's tool behaviour: tools "
+        "are declared blocking so the agent waits for their results. Uses the "
+        "same Google API key as Google Realtime."
+    ),
+)
 GOOGLE_VERTEX_REALTIME_PROVIDER_MODEL_CONFIG = provider_model_config(
     "Google Vertex Realtime"
 )
@@ -739,6 +750,36 @@ class GoogleRealtimeLLMConfiguration(BaseLLMConfiguration):
 
 
 @register_service(ServiceType.REALTIME)
+class GeminiLive38LLMConfiguration(BaseLLMConfiguration):
+    model_config = GEMINI_LIVE_38_PROVIDER_MODEL_CONFIG
+    provider: Literal[ServiceProviders.GEMINI_LIVE_38] = ServiceProviders.GEMINI_LIVE_38
+    model: str = Field(
+        default="gemini-3.8-live",
+        description="Gemini 3.8 Live model on Google AI Studio (not Vertex).",
+        json_schema_extra={
+            "examples": GEMINI_LIVE_38_MODELS,
+            "allow_custom_input": True,
+        },
+    )
+    voice: str = Field(
+        default="Puck",
+        description="Voice the model speaks in.",
+        json_schema_extra={
+            "examples": GOOGLE_REALTIME_VOICES,
+            "allow_custom_input": True,
+        },
+    )
+    language: str = Field(
+        default="en",
+        description="ISO 639-1 language code.",
+        json_schema_extra={
+            "examples": GOOGLE_REALTIME_LANGUAGES,
+            "allow_custom_input": True,
+        },
+    )
+
+
+@register_service(ServiceType.REALTIME)
 class GoogleVertexRealtimeLLMConfiguration(BaseLLMConfiguration):
     model_config = GOOGLE_VERTEX_REALTIME_PROVIDER_MODEL_CONFIG
     provider: Literal[ServiceProviders.GOOGLE_VERTEX_REALTIME] = (
@@ -830,6 +871,7 @@ REALTIME_PROVIDERS = {
     ServiceProviders.GROK_REALTIME.value,
     ServiceProviders.ULTRAVOX_REALTIME.value,
     ServiceProviders.GOOGLE_REALTIME.value,
+    ServiceProviders.GEMINI_LIVE_38.value,
     ServiceProviders.GOOGLE_VERTEX_REALTIME.value,
     ServiceProviders.AZURE_REALTIME.value,
 }
@@ -859,6 +901,7 @@ RealtimeConfig = Annotated[
         GrokRealtimeLLMConfiguration,
         UltravoxRealtimeLLMConfiguration,
         GoogleRealtimeLLMConfiguration,
+        GeminiLive38LLMConfiguration,
         GoogleVertexRealtimeLLMConfiguration,
         AzureRealtimeLLMConfiguration,
     ],

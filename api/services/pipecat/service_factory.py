@@ -1148,6 +1148,32 @@ def create_realtime_llm_service(user_config, audio_config: "AudioConfig"):
             api_key=api_key,
             settings=DograhGeminiLiveLLMService.Settings(**settings_kwargs),
         )
+    elif provider == ServiceProviders.GEMINI_LIVE_38.value:
+        from api.services.pipecat.realtime.gemini_live import (
+            COMPRESSION_TRIGGER_TOKENS,
+        )
+        from api.services.pipecat.realtime.gemini_live_38 import (
+            DEFAULT_MODEL,
+            DograhGemini38LiveLLMService,
+        )
+        from pipecat.services.google.gemini_live.llm import (
+            ContextWindowCompressionParams,
+        )
+
+        settings_kwargs = {
+            "model": model or DEFAULT_MODEL,
+            "voice": voice or "Puck",
+        }
+        if COMPRESSION_TRIGGER_TOKENS > 0:
+            settings_kwargs["context_window_compression"] = ContextWindowCompressionParams(
+                enabled=True, trigger_tokens=COMPRESSION_TRIGGER_TOKENS
+            )
+        if language:
+            settings_kwargs["language"] = language
+        return DograhGemini38LiveLLMService(
+            api_key=api_key,
+            settings=DograhGemini38LiveLLMService.Settings(**settings_kwargs),
+        )
     elif provider == ServiceProviders.GOOGLE_VERTEX_REALTIME.value:
         from api.services.pipecat.realtime.gemini_live import (
             COMPRESSION_TRIGGER_TOKENS,

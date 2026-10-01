@@ -227,6 +227,7 @@ def _create_realtime_user_turn_config(provider: str):
 
     if provider in {
         ServiceProviders.GOOGLE_REALTIME.value,
+        ServiceProviders.GEMINI_LIVE_38.value,
         ServiceProviders.GOOGLE_VERTEX_REALTIME.value,
     }:
         # Let Gemini Live own barge-in via its server-side VAD, but keep local

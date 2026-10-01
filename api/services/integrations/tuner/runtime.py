@@ -28,6 +28,7 @@ def _resolve_model_labels(context: IntegrationRuntimeContext) -> tuple[str, str,
         llm_model = _format_model_label(realtime_provider, realtime_model)
         if realtime_provider in {
             ServiceProviders.GOOGLE_REALTIME.value,
+            ServiceProviders.GEMINI_LIVE_38.value,
             ServiceProviders.GOOGLE_VERTEX_REALTIME.value,
             ServiceProviders.OPENAI_REALTIME.value,
         }:

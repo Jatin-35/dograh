@@ -12,6 +12,10 @@ GOOGLE_VERTEX_MODELS = (
 )
 
 GOOGLE_REALTIME_MODELS = ("gemini-3.1-flash-live-preview",)
+# Gemini 3.8 Live has its own provider (see GeminiLive38LLMConfiguration):
+# its tool semantics differ from 3.1's. Plain 3.8 only; the extended-thinking
+# variant needs pipecat v1.12.
+GEMINI_LIVE_38_MODELS = ("gemini-3.8-live",)
 GOOGLE_REALTIME_VOICES = ("Puck", "Charon", "Kore", "Fenrir", "Aoede")
 GOOGLE_REALTIME_LANGUAGES = (
     "ar",
