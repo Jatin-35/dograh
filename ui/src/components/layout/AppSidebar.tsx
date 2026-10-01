@@ -74,6 +74,9 @@ type SidebarNavItem = {
   // 'admin' team permission, and not on the impersonation domain). See
   // hasFullAccess below.
   restrictedHidden?: boolean;
+  // Shown only when the organization turned it on in Settings → Preferences
+  // (orgContext.custom_tools_visible). Hiding it never stops existing tools.
+  hiddenUnlessCustomToolsShown?: boolean;
 };
 
 type SidebarNavSection = {
@@ -125,10 +128,11 @@ const NAV_SECTIONS: SidebarNavSection[] = [
         icon: Wrench,
       },
       {
-        title: "Code Editor",
-        url: "/code-editor",
+        title: "Custom Tools",
+        url: "/custom-tools",
         icon: Code2,
         restrictedHidden: true,
+        hiddenUnlessCustomToolsShown: true,
       },
       {
         title: "Files",
@@ -177,7 +181,8 @@ export function AppSidebar() {
   const { state, isMobile, setOpenMobile } = useSidebar();
   const { provider, logout, user, loading: authLoading, getAccessToken } = useAuth();
   const { config } = useAppConfig();
-  const { permissions } = useOrgConfig();
+  const { permissions, orgContext } = useOrgConfig();
+  const customToolsShown = orgContext?.custom_tools_visible === true;
   const { openHireExpert } = useLeadForms();
   const {
     telnyxMissingWebhookPublicKeyCount,
@@ -229,14 +234,14 @@ export function AppSidebar() {
 
   const hasFullAccess = isSuperuser || hasAdminPermission(permissions) || isOnImpersonationDomain;
 
-  const navSections = (
-    hasFullAccess
-      ? NAV_SECTIONS
-      : NAV_SECTIONS.map(section => ({
-          ...section,
-          items: section.items.filter(item => !item.restrictedHidden),
-        }))
-  ).concat(
+  const navSections = NAV_SECTIONS.map(section => ({
+    ...section,
+    items: section.items.filter(
+      item =>
+        (hasFullAccess || !item.restrictedHidden) &&
+        (customToolsShown || !item.hiddenUnlessCustomToolsShown),
+    ),
+  })).concat(
     isSuperuser
       ? [
           {

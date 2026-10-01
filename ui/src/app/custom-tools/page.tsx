@@ -591,7 +591,7 @@ export default function CodeEditorPage() {
         <main className="flex h-[calc(100dvh-3.5rem)] w-full min-w-0 flex-col overflow-hidden">
             <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
                 <div>
-                    <h1 className="text-lg font-semibold">Code Editor</h1>
+                    <h1 className="text-lg font-semibold">Custom Tools</h1>
                     <p className="text-xs text-muted-foreground">
                         Custom Python functions your agents can call.
                         {dirtyCount > 0 && (

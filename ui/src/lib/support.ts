@@ -43,11 +43,11 @@ export const whatsappHref = (number: string) =>
 
 // Surfaces that own the bottom-right corner themselves, where a floating
 // bubble would sit on top of something the user needs: the workflow builder
-// (the in-app call tester) and the code editor (the test-run panel and Scout).
+// (the in-app call tester) and Custom Tools (the test-run panel and Scout).
 // `/workflow/create` and the `/workflow` list are not builders and keep it.
 const CORNER_OCCUPIED = [
     /^\/workflow\/(?!create(?:$|\/))[^/]+(?:\/.*)?$/,
-    /^\/code-editor(?:$|\/)/,
+    /^\/custom-tools(?:$|\/)/,
 ];
 
 /** This route needs its bottom-right corner left alone. */

@@ -129,8 +129,8 @@ describe("hidesSupportLauncher", () => {
     it.each([
         "/workflow/42",
         "/workflow/42/run/7",
-        "/code-editor",
-        "/code-editor/files",
+        "/custom-tools",
+        "/custom-tools/files",
     ])("hides on %s, whose bottom-right corner is already spoken for", async (pathname) => {
         const { hidesSupportLauncher } = await import("./support");
         expect(hidesSupportLauncher(pathname)).toBe(true);
@@ -143,8 +143,8 @@ describe("hidesSupportLauncher", () => {
         "/overview",
         "/tools",
         "/settings",
-        // Not the code editor — a different route that merely starts the same way.
-        "/code-editors",
+        // Not Custom Tools — a different route that merely starts the same way.
+        "/custom-toolsets",
     ])("keeps the launcher on %s", async (pathname) => {
         const { hidesSupportLauncher } = await import("./support");
         expect(hidesSupportLauncher(pathname)).toBe(false);

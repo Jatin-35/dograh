@@ -479,9 +479,12 @@ async def save_preferences(
     user: UserModel = Depends(get_user_with_selected_organization),
 ):
     organization_id = user.selected_organization_id
+    # Merge rather than replace: a client that only sends the fields it knows
+    # about (an older Settings form, say) must not reset the others.
+    current = await get_organization_preferences(organization_id)
     return await upsert_organization_preferences(
         organization_id,
-        request,
+        current.model_copy(update=request.model_dump(exclude_unset=True)),
     )
 
 

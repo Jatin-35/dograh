@@ -7,6 +7,13 @@ const nextConfig: NextConfig = {
   experimental: {
     serverSourceMaps: true,
   },
+  async redirects() {
+    return [
+      // The Code Editor was renamed Custom Tools; keep old links working.
+      { source: "/code-editor", destination: "/custom-tools", permanent: true },
+      { source: "/code-editor/:path*", destination: "/custom-tools/:path*", permanent: true },
+    ];
+  },
   async rewrites() {
     return [
       {

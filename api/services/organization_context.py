@@ -8,6 +8,7 @@ from api.enums import OrganizationConfigurationKey
 from api.services.configuration.ai_model_configuration import (
     get_resolved_ai_model_configuration,
 )
+from api.services.organization_preferences import get_organization_preferences
 from api.services.workflow_gen.config import is_workflow_gen_configured
 
 
@@ -27,6 +28,9 @@ class OrganizationContextResponse(BaseModel):
     # a superadmin has turned it on for this org. Off unless explicitly
     # enabled, so a new client never gets it by default.
     scout_enabled: bool = False
+    # Whether Custom Tools shows in the navigation, as the org chose in
+    # Settings. Hidden unless turned on; hiding it never stops existing tools.
+    custom_tools_visible: bool = False
 
 
 async def is_scout_enabled_for_organization(organization_id: Optional[int]) -> bool:
@@ -92,6 +96,9 @@ async def get_organization_context(user: UserModel) -> OrganizationContextRespon
         organization_id=organization_id,
         organization_provider_id=organization.provider_id if organization else None,
         scout_enabled=await is_scout_enabled_for_organization(organization_id),
+        custom_tools_visible=bool(
+            (await get_organization_preferences(organization_id)).show_custom_tools
+        ),
         model_services=OrganizationModelServicesContext(
             config_source=resolved.source,
             has_model_configuration_v2=resolved.source == "organization_v2",

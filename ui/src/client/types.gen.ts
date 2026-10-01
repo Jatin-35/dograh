@@ -4247,6 +4247,10 @@ export type OrganizationContextResponse = {
      * Scout Enabled
      */
     scout_enabled?: boolean;
+    /**
+     * Custom Tools Visible
+     */
+    custom_tools_visible?: boolean;
 };
 
 /**
@@ -4283,6 +4287,10 @@ export type OrganizationPreferences = {
      * Timezone
      */
     timezone?: string | null;
+    /**
+     * Show Custom Tools
+     */
+    show_custom_tools?: boolean | null;
 };
 
 /**

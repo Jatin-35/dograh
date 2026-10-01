@@ -14,6 +14,7 @@ import pytest
 from fastapi import HTTPException
 
 from api.enums import OrganizationConfigurationKey
+from api.schemas.organization_preferences import OrganizationPreferences
 from api.routes.workflow_gen_chat import _require_scout_enabled
 from api.services.organization_context import (
     get_organization_context,
@@ -177,6 +178,9 @@ async def test_organization_context_carries_the_flag(stored, expected):
     ), patch(
         "api.services.organization_context.get_resolved_ai_model_configuration",
         AsyncMock(return_value=resolved),
+    ), patch(
+        "api.services.organization_context.get_organization_preferences",
+        AsyncMock(return_value=OrganizationPreferences()),
     ):
         context = await get_organization_context(_user())
 

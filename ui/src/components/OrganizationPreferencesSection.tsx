@@ -13,6 +13,7 @@ import type { OrganizationPreferences } from "@/client/types.gen";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { useUserConfig } from "@/context/UserConfigContext";
 import { detailFromError } from "@/lib/apiError";
 import { useAuth } from "@/lib/auth";
@@ -20,6 +21,7 @@ import { useAuth } from "@/lib/auth";
 const emptyPreferences: OrganizationPreferences = {
   test_phone_number: "",
   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+  show_custom_tools: false,
 };
 
 const timezoneSelectStyles = {
@@ -130,6 +132,7 @@ export function OrganizationPreferencesSection() {
       setPreferences({
         test_phone_number: nextPreferences.test_phone_number || "",
         timezone: nextPreferences.timezone || emptyPreferences.timezone,
+        show_custom_tools: nextPreferences.show_custom_tools === true,
       });
       setTimezone(
         nextPreferences.timezone || emptyPreferences.timezone || "UTC",
@@ -151,6 +154,7 @@ export function OrganizationPreferencesSection() {
             body: {
               test_phone_number: preferences.test_phone_number || null,
               timezone: getTimezoneValue(timezone),
+              show_custom_tools: preferences.show_custom_tools === true,
             },
           },
         );
@@ -167,6 +171,7 @@ export function OrganizationPreferencesSection() {
       setPreferences({
         test_phone_number: result.data.test_phone_number || "",
         timezone: result.data.timezone || emptyPreferences.timezone,
+        show_custom_tools: result.data.show_custom_tools === true,
       });
       setTimezone(result.data.timezone || emptyPreferences.timezone || "UTC");
       await refreshConfig();
@@ -211,6 +216,22 @@ export function OrganizationPreferencesSection() {
             styles={timezoneSelectStyles}
           />
         </div>
+      </div>
+      <div className="flex items-start justify-between gap-4 rounded-md border p-3">
+        <div className="space-y-1">
+          <Label htmlFor="settings-show-custom-tools">Show Custom Tools</Label>
+          <p className="text-xs text-muted-foreground">
+            Show Custom Tools in the sidebar. Hiding it doesn&apos;t affect tools
+            you&apos;ve already built: agents keep using them on calls.
+          </p>
+        </div>
+        <Switch
+          id="settings-show-custom-tools"
+          checked={preferences.show_custom_tools === true}
+          onCheckedChange={(checked) =>
+            setPreferences({ ...preferences, show_custom_tools: checked })
+          }
+        />
       </div>
       <Button type="submit" disabled={saving}>
         <Save className="mr-2 h-4 w-4" />
