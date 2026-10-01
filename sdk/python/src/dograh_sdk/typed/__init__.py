@@ -5,6 +5,7 @@ Re-exports every typed node class so users can write
 """
 
 from dograh_sdk.typed.agent_node import AgentNode
+from dograh_sdk.typed.conditional_webhook import ConditionalWebhook
 from dograh_sdk.typed.end_call import EndCall
 from dograh_sdk.typed.global_node import GlobalNode
 from dograh_sdk.typed.paygent import Paygent
@@ -17,6 +18,7 @@ from dograh_sdk.typed._base import TypedNode
 
 __all__ = [
     "AgentNode",
+    "ConditionalWebhook",
     "EndCall",
     "GlobalNode",
     "Paygent",
