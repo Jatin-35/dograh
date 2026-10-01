@@ -685,6 +685,9 @@ class PipecatEngine:
                             transcript=result.transcript,
                             append_to_context=True,
                         )
+                        await self._open_realtime_after_recorded_greeting(
+                            result.transcript
+                        )
                         return "greeting"
                     logger.warning(
                         f"Failed to fetch audio greeting {greeting_value}, "
@@ -712,6 +715,26 @@ class PipecatEngine:
             return "llm"
 
         return "none"
+
+    async def _open_realtime_after_recorded_greeting(
+        self, transcript: str | None
+    ) -> None:
+        """Hand the opening turn to a realtime service after a recording.
+
+        A recorded greeting is queued straight to the output transport, so a
+        realtime service (Gemini Live) is otherwise never told the call has
+        started or what was said, and greets the caller again on its first
+        reply. The transcript goes with it because the recording is still
+        playing: the assistant aggregator only commits it to LLMContext once
+        playback drains. A no-op for text LLMs, which re-read the context on
+        every generation. (Upstream dograh 9c82ceb0.)
+        """
+        handle_prerecorded_greeting = getattr(
+            self.llm, "handle_prerecorded_greeting", None
+        )
+        if handle_prerecorded_greeting is None:
+            return
+        await handle_prerecorded_greeting(self.context, transcript)
 
     async def _handle_end_node(self, node: Node) -> None:
         """Handle end node execution."""

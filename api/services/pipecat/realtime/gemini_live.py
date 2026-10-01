@@ -107,6 +107,9 @@ class DograhGeminiLiveLLMService(GeminiLiveLLMService):
         # Text greeting captured from the first TTSSpeakFrame while the Gemini
         # session is still connecting.
         self._pending_initial_greeting_text: str | None = None
+        # Greeting a recording already delivered, held until a session exists.
+        # A 1-tuple, because the transcript itself may legitimately be None.
+        self._pending_prerecorded_greeting: tuple[str | None] | None = None
         self._transition_function_call_task: asyncio.Task | None = None
         # Intentional node changes use a fresh, context-seeded connection rather
         # than a potentially stale session-resumption handle. The new connection
@@ -549,6 +552,84 @@ class DograhGeminiLiveLLMService(GeminiLiveLLMService):
             self._context = context
             await self._process_completed_function_calls(send_new_results=True)
 
+    async def handle_prerecorded_greeting(
+        self, context: LLMContext | None, transcript: str | None
+    ) -> None:
+        """Open the conversation after a recording has greeted the caller.
+
+        A recorded greeting is played straight to the output transport, so the
+        opening TTSSpeakFrame never reaches this service: without this, Gemini
+        is never told the call started or what it already said, and its first
+        reply greets the caller a second time. Seed the greeting the caller
+        heard as a model turn, accept caller audio, and generate nothing.
+
+        ``transcript`` arrives here rather than through LLMContext because the
+        recording is still playing; the aggregator commits it only once
+        playback drains, after this seed is sent. (Ported from upstream dograh
+        9c82ceb0, Gemini part.)
+        """
+        if self._handled_initial_context:
+            return
+        if context is None:
+            logger.warning(
+                f"{self}: received prerecorded greeting before context was set"
+            )
+            return
+        self._handled_initial_context = True
+        self._context = context
+        # A fresh session never issued the tool calls in this history, so mark
+        # their results delivered rather than sending them as tool responses.
+        await self._process_completed_function_calls(send_new_results=False)
+        self._pending_tool_results.clear()
+        await self._create_prerecorded_greeting_response(transcript)
+
+    async def _create_prerecorded_greeting_response(self, transcript: str | None):
+        """Seed the spoken greeting, leaving the turn open for the caller.
+
+        ``turn_complete=False`` is what separates this from every other
+        opening: Gemini takes the history but is not asked to produce a turn,
+        so it waits for the caller instead of greeting them again.
+        """
+        if self._disconnecting:
+            return
+
+        if not self._session:
+            self._pending_prerecorded_greeting = (transcript,)
+            self._run_llm_when_session_ready = True
+            return
+
+        self._pending_prerecorded_greeting = None
+
+        adapter = self.get_llm_adapter()
+        turns = list(
+            adapter.get_llm_invocation_params(self._context).get("messages", [])
+        )
+        if transcript:
+            turns.append(Content(role="model", parts=[Part(text=transcript)]))
+        if not self._is_gemini_3 and (
+            not turns or getattr(turns[-1], "role", None) != "user"
+        ):
+            # Gemini 2.5 requires a seed to end on a user turn; padding one that
+            # already does would put two user turns back to back.
+            turns.append(Content(role="user", parts=[Part(text=" ")]))
+
+        logger.debug("Seeding Gemini Live with a prerecorded greeting")
+
+        try:
+            if turns:
+                await self._session.send_client_content(
+                    turns=turns, turn_complete=False
+                )
+        except Exception as e:
+            await self._handle_send_error(e)
+
+        if not self._is_gemini_3:
+            # 2.5 only picks seeded history up once a turn completes; let the
+            # caller's first utterance carry that completion.
+            self._needs_initial_turn_complete_message = True
+
+        self._ready_for_realtime_input = True
+
     async def _handle_initial_greeting(self, context: LLMContext, greeting_text: str):
         """Trigger the first Gemini turn with an exact static text greeting."""
         if context is None:
@@ -626,7 +707,10 @@ class DograhGeminiLiveLLMService(GeminiLiveLLMService):
             # Context arrived before session was ready — fulfil the queued
             # initial response now.
             self._run_llm_when_session_ready = False
-            if self._pending_initial_greeting_text is not None:
+            if self._pending_prerecorded_greeting is not None:
+                (transcript,) = self._pending_prerecorded_greeting
+                await self._create_prerecorded_greeting_response(transcript)
+            elif self._pending_initial_greeting_text is not None:
                 await self._create_initial_greeting_response(
                     self._pending_initial_greeting_text
                 )
