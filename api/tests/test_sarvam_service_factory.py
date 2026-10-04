@@ -2,6 +2,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
+from loguru import logger
 from pipecat.services.sarvam.llm import SarvamLLMService as RealSarvamLLMService
 from pipecat.transcriptions.language import Language
 
@@ -11,6 +12,7 @@ from api.services.configuration.registry import (
     ServiceProviders,
 )
 from api.services.pipecat.audio_config import AudioConfig
+from api.services.pipecat.sarvam_llm import DograhSarvamLLMService
 from api.services.pipecat.service_factory import (
     create_llm_service,
     create_llm_service_from_provider,
@@ -23,40 +25,136 @@ class TestSarvamLLMConfiguration:
     def test_default_values(self):
         config = SarvamLLMConfiguration(api_key="test-key")
         assert config.provider == ServiceProviders.SARVAM
-        assert config.model == "sarvam-30b"
+        assert config.model == "sarvam-105b"
+        assert config.base_url == "https://api.sarvam.ai/v1"
         assert config.temperature == 0.5
 
     def test_custom_model(self):
-        config = SarvamLLMConfiguration(api_key="test-key", model="sarvam-105b")
-        assert config.model == "sarvam-105b"
+        config = SarvamLLMConfiguration(
+            api_key="test-key", model="sarvam-105b-conversations"
+        )
+        assert config.model == "sarvam-105b-conversations"
+
+    def test_the_dropdown_offers_only_models_the_service_accepts(self):
+        """A listed model the service rejects fails every call at start."""
+        schema = SarvamLLMConfiguration.model_json_schema()["properties"]["model"]
+        assert schema["examples"] == ["sarvam-105b", "sarvam-105b-conversations"]
+        assert "sarvam-30b" not in schema["examples"]  # withdrawn by Sarvam
+        for model in schema["examples"]:
+            assert model in DograhSarvamLLMService._SUPPORTED_MODELS
+
+    def test_a_saved_config_with_a_withdrawn_model_still_loads(self):
+        config = SarvamLLMConfiguration(api_key="test-key", model="sarvam-30b")
+        assert config.model == "sarvam-30b"  # kept; replaced when the call runs
 
 
 class TestSarvamLLMServiceFactory:
     def test_create_sarvam_llm_service(self):
         with patch(
-            "api.services.pipecat.service_factory.SarvamLLMService"
+            "api.services.pipecat.service_factory.DograhSarvamLLMService"
         ) as mock_service:
             mock_service.Settings = RealSarvamLLMService.Settings
             create_llm_service_from_provider(
                 provider=ServiceProviders.SARVAM.value,
-                model="sarvam-30b",
+                model="sarvam-105b",
                 api_key="test-key",
             )
 
         assert mock_service.call_count == 1
         kwargs = mock_service.call_args.kwargs
         assert kwargs["api_key"] == "test-key"
-        assert kwargs["settings"].model == "sarvam-30b"
+        assert kwargs["settings"].model == "sarvam-105b"
         assert kwargs["settings"].temperature == 0.5
+        assert kwargs["base_url"] == "https://api.sarvam.ai/v1"
+
+    @pytest.mark.parametrize("model", ["sarvam-105b", "sarvam-105b-conversations"])
+    def test_real_sarvam_llm_service_instantiation(self, model):
+        service = create_llm_service_from_provider(
+            provider=ServiceProviders.SARVAM.value,
+            model=model,
+            api_key="test-key",
+        )
+        assert isinstance(service, RealSarvamLLMService)
+        assert service._settings.model == model
+        assert str(service._client.base_url).rstrip("/") == "https://api.sarvam.ai/v1"
+
+    def test_real_sarvam_llm_service_instantiation_with_custom_base_url(self):
+        service = create_llm_service_from_provider(
+            provider=ServiceProviders.SARVAM.value,
+            model="sarvam-105b-conversations",
+            api_key="test-key",
+            base_url="https://custom.sarvam.ai/v1",
+        )
+        assert str(service._client.base_url).rstrip("/") == "https://custom.sarvam.ai/v1"
+
+    @pytest.mark.parametrize("withdrawn", ["sarvam-30b", "sarvam-30b-16k"])
+    def test_a_withdrawn_model_runs_as_sarvam_105b(self, withdrawn):
+        """Agents saved with sarvam-30b keep working instead of failing."""
+        lines = []
+        sink = logger.add(lines.append, format="{message}")
+        try:
+            service = create_llm_service_from_provider(
+                provider=ServiceProviders.SARVAM.value,
+                model=withdrawn,
+                api_key="test-key",
+            )
+        finally:
+            logger.remove(sink)
+        assert service._settings.model == "sarvam-105b"
+        assert any(withdrawn in line and "withdrawn" in line for line in lines)
+
+    def test_an_unknown_model_is_still_refused(self):
+        with pytest.raises(ValueError, match="Unsupported Sarvam LLM model"):
+            create_llm_service_from_provider(
+                provider=ServiceProviders.SARVAM.value,
+                model="sarvam-999b",
+                api_key="test-key",
+            )
+
+    def test_the_conversations_model_never_gets_reasoning_options(self):
+        """sarvam-105b-conversations rejects reasoning_effort and wiki_grounding."""
+        service = DograhSarvamLLMService(
+            api_key="test-key",
+            settings=DograhSarvamLLMService.Settings(
+                model="sarvam-105b-conversations",
+                reasoning_effort="low",
+                wiki_grounding=True,
+            ),
+        )
+        params = service.build_chat_completion_params(
+            {"messages": [{"role": "user", "content": "namaste"}]}
+        )
+        assert params["model"] == "sarvam-105b-conversations"
+        assert "reasoning_effort" not in params and "wiki_grounding" not in params
+
+    def test_sarvam_105b_keeps_its_options(self):
+        service = DograhSarvamLLMService(
+            api_key="test-key",
+            settings=DograhSarvamLLMService.Settings(
+                model="sarvam-105b", reasoning_effort="low"
+            ),
+        )
+        params = service.build_chat_completion_params(
+            {"messages": [{"role": "user", "content": "namaste"}]}
+        )
+        assert params["reasoning_effort"] == "low"
+
+    def test_the_sarvam_auth_header_is_sent(self):
+        service = create_llm_service_from_provider(
+            provider=ServiceProviders.SARVAM.value,
+            model="sarvam-105b-conversations",
+            api_key="test-key",
+        )
+        assert service._client.default_headers["api-subscription-key"] == "test-key"
 
     def test_create_sarvam_llm_service_passes_user_temperature(self):
         with patch(
-            "api.services.pipecat.service_factory.SarvamLLMService"
+            "api.services.pipecat.service_factory.DograhSarvamLLMService"
         ) as mock_service:
             mock_service.Settings = RealSarvamLLMService.Settings
             create_llm_service_from_provider(
                 provider=ServiceProviders.SARVAM.value,
-                model="sarvam-30b",
+                model="sarvam-105b",
                 api_key="test-key",
                 temperature=0.8,
             )
@@ -64,24 +162,40 @@ class TestSarvamLLMServiceFactory:
         kwargs = mock_service.call_args.kwargs
         assert kwargs["settings"].temperature == 0.8
 
-    def test_create_llm_service_extracts_sarvam_temperature(self):
+    def test_create_llm_service_extracts_sarvam_config(self):
         user_config = SimpleNamespace(
             llm=SimpleNamespace(
                 provider=ServiceProviders.SARVAM.value,
-                model="sarvam-30b",
+                model="sarvam-105b-conversations",
                 api_key="test-key",
+                base_url="https://api.sarvam.ai/v1",
                 temperature=0.7,
             )
         )
 
         with patch(
-            "api.services.pipecat.service_factory.SarvamLLMService"
+            "api.services.pipecat.service_factory.DograhSarvamLLMService"
         ) as mock_service:
             mock_service.Settings = RealSarvamLLMService.Settings
             create_llm_service(user_config)
 
         kwargs = mock_service.call_args.kwargs
+        assert kwargs["base_url"] == "https://api.sarvam.ai/v1"
+        assert kwargs["settings"].model == "sarvam-105b-conversations"
         assert kwargs["settings"].temperature == 0.7
+
+    def test_a_config_saved_before_base_url_existed_still_works(self):
+        user_config = SimpleNamespace(
+            llm=SimpleNamespace(
+                provider=ServiceProviders.SARVAM.value,
+                model="sarvam-30b",
+                api_key="test-key",
+                temperature=0.5,
+            )
+        )
+        service = create_llm_service(user_config)
+        assert service._settings.model == "sarvam-105b"
+        assert str(service._client.base_url).rstrip("/") == "https://api.sarvam.ai/v1"
 
 
 class TestSarvamSTTServiceFactory:

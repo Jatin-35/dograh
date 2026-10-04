@@ -619,12 +619,16 @@ class SarvamLLMConfiguration(BaseLLMConfiguration):
     model_config = SARVAM_PROVIDER_MODEL_CONFIG
     provider: Literal[ServiceProviders.SARVAM] = ServiceProviders.SARVAM
     model: str = Field(
-        default="sarvam-30b",
+        default="sarvam-105b",
         description=(
-            "Sarvam chat model. Use sarvam-30b for low-latency voice agents; "
-            "sarvam-105b for complex multi-step reasoning."
+            "Sarvam chat model. sarvam-105b-conversations is Sarvam's chat-tuned "
+            "105B model."
         ),
         json_schema_extra={"examples": SARVAM_LLM_MODELS, "allow_custom_input": True},
+    )
+    base_url: str = Field(
+        default="https://api.sarvam.ai/v1",
+        description="Sarvam API base URL.",
     )
     temperature: float = Field(
         default=0.5,

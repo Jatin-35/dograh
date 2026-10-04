@@ -15,6 +15,11 @@ from api.services.configuration.registry import (
     ServiceProviders,
     strip_vakyam_voice_gender_suffix,
 )
+from api.services.pipecat.sarvam_llm import (
+    SARVAM_DEFAULT_BASE_URL,
+    DograhSarvamLLMService,
+    resolve_sarvam_model,
+)
 from api.services.pipecat.gemini_json_schema_adapter import (
     DograhGeminiJSONSchemaAdapter,
 )
@@ -78,7 +83,7 @@ from pipecat.services.openai.stt import (
 from pipecat.services.openai.tts import OpenAITTSService, OpenAITTSSettings
 from pipecat.services.openrouter.llm import OpenRouterLLMService, OpenRouterLLMSettings
 from pipecat.services.rime.tts import RimeTTSService, RimeTTSSettings
-from pipecat.services.sarvam.llm import SarvamLLMService, SarvamLLMSettings
+from pipecat.services.sarvam.llm import SarvamLLMSettings
 from pipecat.services.sarvam.stt import SarvamSTTService, SarvamSTTSettings
 from pipecat.services.sarvam.tts import SarvamTTSService, SarvamTTSSettings
 from pipecat.services.smallest.stt import SmallestSTTService, SmallestSTTSettings
@@ -1020,8 +1025,12 @@ def create_llm_service_from_provider(
             ),
         )
     elif provider == ServiceProviders.SARVAM.value:
-        return SarvamLLMService(
+        model = resolve_sarvam_model(model)
+        base_url = base_url or SARVAM_DEFAULT_BASE_URL
+        _validate_runtime_service_url(base_url, "base_url")
+        return DograhSarvamLLMService(
             api_key=api_key,
+            base_url=base_url,
             settings=SarvamLLMSettings(
                 model=model,
                 temperature=temperature if temperature is not None else 0.5,
@@ -1308,6 +1317,7 @@ def create_llm_service(user_config, correlation_id: str | None = None):
         kwargs["base_url"] = user_config.llm.base_url
         kwargs["temperature"] = user_config.llm.temperature
     elif provider == ServiceProviders.SARVAM.value:
+        kwargs["base_url"] = getattr(user_config.llm, "base_url", None)
         kwargs["temperature"] = user_config.llm.temperature
 
     return create_llm_service_from_provider(

@@ -94,7 +94,12 @@ SARVAM_STT_LANGUAGES_V3 = SARVAM_STT_LANGUAGES_V25 + (
     "mai-IN",
     "doi-IN",
 )
+# Keep in step with DograhSarvamLLMService._SUPPORTED_MODELS
+# (api/services/pipecat/sarvam_llm.py): offering a model the service rejects
+# turns every call using it into a hard failure at pipeline start. sarvam-30b
+# was the default here after Sarvam withdrew it; a saved sarvam-30b now runs as
+# sarvam-105b (upstream dograh d747b038, 06f8cf79).
 SARVAM_LLM_MODELS = (
-    "sarvam-30b",
     "sarvam-105b",
+    "sarvam-105b-conversations",
 )
