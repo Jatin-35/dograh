@@ -12,7 +12,11 @@ from groq import Groq
 from api.schemas.ai_model_configuration import (
     EffectiveAIModelConfiguration,
 )
-from api.services.configuration.registry import ServiceConfig, ServiceProviders
+from api.services.configuration.registry import (
+    HOPPER_API_BASE_URL,
+    ServiceConfig,
+    ServiceProviders,
+)
 from api.services.mps_service_key_client import mps_service_key_client
 from api.utils.url_security import validate_user_configured_service_url
 
@@ -32,10 +36,22 @@ class APIKeyStatusResponse(TypedDict):
     status: list[APIKeyStatus]
 
 
+# OpenAI-compatible providers validated with the OpenAI client: their name for
+# error messages, and the fixed endpoint of those without a base_url setting.
+_OPENAI_COMPATIBLE_PROVIDER_NAMES = {
+    ServiceProviders.HOPPER.value: "Hopper",
+}
+
+_OPENAI_COMPATIBLE_PROVIDER_BASE_URLS = {
+    ServiceProviders.HOPPER.value: HOPPER_API_BASE_URL,
+}
+
+
 class UserConfigurationValidator:
     def __init__(self):
         self._validator_map = {
             ServiceProviders.OPENAI.value: self._check_openai_api_key,
+            ServiceProviders.HOPPER.value: self._check_openai_api_key,
             ServiceProviders.DEEPGRAM.value: self._check_deepgram_api_key,
             ServiceProviders.GROQ.value: self._check_groq_api_key,
             ServiceProviders.OPENROUTER.value: self._check_openrouter_api_key,
@@ -231,6 +247,7 @@ class UserConfigurationValidator:
 
         if provider in (
             ServiceProviders.OPENAI.value,
+            ServiceProviders.HOPPER.value,
             ServiceProviders.OPENAI_REALTIME.value,
         ):
             return validator(provider, api_key, service_config)
@@ -239,8 +256,11 @@ class UserConfigurationValidator:
     def _check_openai_api_key(
         self, model: str, api_key: str, service_config: Optional[ServiceConfig] = None
     ) -> bool:
+        provider_name = _OPENAI_COMPATIBLE_PROVIDER_NAMES.get(model, "OpenAI")
         client_kwargs: dict[str, str] = {"api_key": api_key}
-        base_url = getattr(service_config, "base_url", None) if service_config else None
+        base_url = (
+            getattr(service_config, "base_url", None) if service_config else None
+        ) or _OPENAI_COMPATIBLE_PROVIDER_BASE_URLS.get(model)
         if base_url:
             client_kwargs["base_url"] = base_url
         client = openai.OpenAI(**client_kwargs)
@@ -250,7 +270,8 @@ class UserConfigurationValidator:
         except openai.AuthenticationError:
             if base_url and "openai.com" not in base_url:
                 raise ValueError(
-                    f"Invalid OpenAI API key. The key was rejected by the API at {base_url}. "
+                    f"Invalid {provider_name} API key. The key was rejected by the API at "
+                    f"{base_url}. "
                     "Please check that your API key is correct and has not been revoked."
                 )
             raise ValueError(
@@ -282,7 +303,8 @@ class UserConfigurationValidator:
         except Exception:
             if base_url:
                 raise ValueError(
-                    f"Failed to validate the OpenAI API key using the API at {base_url}. "
+                    f"Failed to validate the {provider_name} API key using the API at "
+                    f"{base_url}. "
                     "Please verify that the base_url is correct and reachable, and that the "
                     "API key is valid."
                 )

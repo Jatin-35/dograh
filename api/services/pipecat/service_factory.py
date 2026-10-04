@@ -11,6 +11,7 @@ from api.services.configuration.options import (
     DEEPGRAM_FLUX_MULTILINGUAL_LANGUAGE_OPTIONS,
 )
 from api.services.configuration.registry import (
+    HOPPER_API_BASE_URL,
     ServiceProviders,
     strip_vakyam_voice_gender_suffix,
 )
@@ -936,6 +937,14 @@ def create_llm_service_from_provider(
         return GroqLLMService(
             api_key=api_key,
             settings=GroqLLMSettings(model=model, temperature=0.1),
+        )
+    elif provider == ServiceProviders.HOPPER.value:
+        # Hopper serves an OpenAI-compatible API at a fixed endpoint; a
+        # caller's base_url (voicemail/QA configs) never redirects its key.
+        return OpenAILLMService(
+            api_key=api_key,
+            base_url=HOPPER_API_BASE_URL,
+            settings=OpenAILLMSettings(model=model, temperature=0.1),
         )
     elif provider == ServiceProviders.OPENROUTER.value:
         kwargs = {}
