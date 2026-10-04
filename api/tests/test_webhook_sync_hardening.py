@@ -20,6 +20,8 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import json
+
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import select, update
@@ -1008,3 +1010,58 @@ async def test_email_failure_or_no_config_never_raises(monkeypatch):
     with patch.object(email_module.smtplib, "SMTP", side_effect=OSError("refused")):
         assert await email_module.send_email(["a@b.co"], "S", "B") is False
     assert await email_module.send_email([], "S", "B") is False
+
+
+# ---------------------------------------------------------------------------
+# NUL characters from a CRM (PostgreSQL text can't hold U+0000)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_nul_character_in_a_field_is_dropped_not_a_500(env):
+    endpoint = await env.make_endpoint()
+    raw = json.dumps(
+        {"mobile": "9876543210", "name": "Asha\u0000 K", "city": "Pat\u0000na"}
+    )
+    r = await post(endpoint, None, key_headers(endpoint), raw=raw.encode())
+    assert r.status_code == 200 and r.body["created"] == 1
+    (lead,) = await env.leads(endpoint)
+    assert lead.name == "Asha K"
+    assert lead.variables["city"] == "Patna"
+    assert "\u0000" not in json.dumps(lead.raw_payload)
+    (log,) = await env.logs(endpoint)
+    assert log.response_code == 200
+
+
+@pytest.mark.asyncio
+async def test_a_nul_character_in_a_key_or_a_form_post_is_dropped(env):
+    endpoint = await env.make_endpoint()
+    raw = json.dumps({"mob\u0000ile": "9876543210", "no\u0000tes": "x"})
+    r = await post(endpoint, None, key_headers(endpoint), raw=raw.encode())
+    assert r.status_code == 200
+    (lead,) = await env.leads(endpoint)
+    assert lead.phone == "+919876543210" and "notes" in lead.variables
+
+    form = b"mobile=9123456780&name=Ra%00vi"
+    r = await post(
+        endpoint,
+        None,
+        {
+            "X-API-Key": endpoint.secret,
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+        raw=form,
+    )
+    assert r.status_code == 200
+    assert (await env.leads(endpoint))[-1].name == "Ravi"
+
+
+@pytest.mark.asyncio
+async def test_a_raw_nul_byte_in_the_body_still_gets_logged(env):
+    endpoint = await env.make_endpoint()
+    r = await post(
+        endpoint, None, key_headers(endpoint), raw=b'{"mobile": "98765\x0043210"}'
+    )
+    assert r.status_code == 400  # not valid JSON: a control character in a string
+    (log,) = await env.logs(endpoint)
+    assert log.response_code == 400 and "\x00" not in (log.raw_body or "")

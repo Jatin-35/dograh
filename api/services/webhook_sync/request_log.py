@@ -36,7 +36,8 @@ def loggable_body(raw_body: bytes) -> tuple[Optional[str], bool]:
     """The body as text, truncated; returns (text, was_truncated)."""
     if not raw_body:
         return None, False
-    text = raw_body.decode("utf-8", errors="replace")
+    # PostgreSQL text can't hold NUL; drop it so the request is still logged.
+    text = raw_body.decode("utf-8", errors="replace").replace("\x00", "")
     if len(text) > MAX_LOGGED_BODY_CHARS:
         return text[:MAX_LOGGED_BODY_CHARS], True
     return text, False

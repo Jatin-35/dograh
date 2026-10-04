@@ -30,9 +30,29 @@ def _parse_form(text: str) -> dict[str, Any]:
     return form
 
 
+def _without_nul(value: Any) -> Any:
+    """``value`` with NUL characters removed from every string, key or value.
+
+    PostgreSQL text can't hold U+0000, so one stray NUL from a CRM (a
+    copy-pasted or badly exported field) made storing the lead fail with a
+    500 that the CRM retried forever, and the lead was lost.
+    """
+    if isinstance(value, str):
+        return value.replace("\x00", "")
+    if isinstance(value, dict):
+        return {_without_nul(k): _without_nul(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_without_nul(v) for v in value]
+    return value
+
+
 def parse_leads(raw_body: bytes, content_type: Optional[str]) -> list[dict]:
     """One payload per lead. A JSON array means several leads; a JSON object
-    or a form post means one."""
+    or a form post means one. NUL characters are dropped (see _without_nul)."""
+    return _without_nul(_parse_leads(raw_body, content_type))
+
+
+def _parse_leads(raw_body: bytes, content_type: Optional[str]) -> list[dict]:
     if len(raw_body) > MAX_BODY_BYTES:
         raise PayloadError(413, "Request body is too large")
     try:
