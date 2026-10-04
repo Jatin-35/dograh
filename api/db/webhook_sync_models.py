@@ -126,8 +126,8 @@ class WebhookLeadModel(Base):
         Index("ix_webhook_leads_org_received", "organization_id", "received_at"),
         Index("ix_webhook_leads_endpoint_phone", "endpoint_id", "phone"),
         Index("ix_webhook_leads_status", "status"),
-        # A CRM retry (same Idempotency-Key or same CRM lead id) must never
-        # create a second lead, even when retries race each other.
+        # A CRM retry with the same Idempotency-Key must never create a
+        # second lead, even when retries race each other.
         Index(
             "uq_webhook_leads_endpoint_idempotency",
             "endpoint_id",
@@ -135,13 +135,17 @@ class WebhookLeadModel(Base):
             unique=True,
             postgresql_where=text("idempotency_key IS NOT NULL"),
         ),
+        # Not unique: the same CRM lead comes back as a new lead when its
+        # number was corrected or the customer enquires again weeks later.
+        # Retries of one lead are serialized by an advisory lock instead.
         Index(
-            "uq_webhook_leads_endpoint_external_id",
+            "ix_webhook_leads_endpoint_external_id",
             "endpoint_id",
             "external_lead_id",
-            unique=True,
             postgresql_where=text("external_lead_id IS NOT NULL"),
         ),
+        # Opted-out numbers are looked up org-wide on every new lead.
+        Index("ix_webhook_leads_org_phone", "organization_id", "phone"),
     )
 
 

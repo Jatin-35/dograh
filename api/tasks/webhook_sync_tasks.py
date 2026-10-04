@@ -29,3 +29,29 @@ async def cleanup_webhook_sync_data(_ctx) -> dict[str, int]:
             f"cleared {payloads} lead payloads"
         )
     return {"request_logs_deleted": logs, "payloads_cleared": payloads}
+
+
+async def queue_waiting_webhook_leads(_ctx) -> int:
+    """The minute sweep: queue new leads the receiver stored but couldn't
+    queue for calling, settle leads stuck in "calling", and raise alerts for
+    paused calling and CRM callbacks that gave up. Each step runs on its own,
+    so one failing doesn't stop the others."""
+    from api.services.webhook_sync import calling
+
+    queued = 0
+    try:
+        queued = await calling.enqueue_stragglers()
+        if queued:
+            logger.info(f"Webhook Sync sweep: queued {queued} waiting lead(s)")
+    except Exception as e:
+        logger.error(f"Webhook Sync sweep: queueing waiting leads failed: {e}")
+    for step in (
+        calling.close_stuck_calls,
+        calling.alert_paused_calling,
+        calling.alert_failed_callbacks,
+    ):
+        try:
+            await step()
+        except Exception as e:
+            logger.error(f"Webhook Sync sweep: {step.__name__} failed: {e}")
+    return queued

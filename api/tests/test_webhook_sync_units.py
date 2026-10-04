@@ -528,3 +528,101 @@ def test_field_mapping_rejects_unknown_fields_and_too_many_custom():
         FieldMapping(mobile="x")
     with pytest.raises(ValidationError):
         FieldMapping(custom={f"f{i}": "p" for i in range(51)})
+
+
+# ---------------------------------------------------------------------------
+# Mapping preview (the dashboard's mapping screen)
+# ---------------------------------------------------------------------------
+
+
+def test_preview_maps_a_nested_leadsquared_style_sample():
+    from api.services.webhook_sync.preview import preview_mapping
+
+    sample = json.dumps(
+        {
+            "Current": {
+                "ProspectID": "abc-1",
+                "FirstName": "Rahul",
+                "LastName": "Kumar",
+                "Phone": "+91-9876543210",
+                "mx_City": "Patna",
+            }
+        }
+    )
+    result = preview_mapping(
+        sample, "application/json", {"custom": {"city": "Current.mx_City"}}
+    )
+    assert result["outcome"] == "received"
+    assert result["phone"] == "+919876543210"
+    assert result["fields"]["name"] == "Rahul Kumar"
+    assert result["fields"]["external_lead_id"] == "abc-1"
+    assert result["variables"]["city"] == "Patna"
+    assert {"path": "Current.Phone", "value": "+91-9876543210"} in result["paths"]
+
+
+def test_preview_explains_a_missing_or_invalid_phone():
+    from api.services.webhook_sync.preview import preview_mapping
+
+    missing = preview_mapping('{"name": "A"}', "application/json", {})
+    assert missing["outcome"] == "rejected" and "phone" in missing["reason"]
+    invalid = preview_mapping('{"mobile": "12345"}', "application/json", {})
+    assert invalid["outcome"] == "invalid_number" and invalid["phone"] is None
+
+
+def test_preview_accepts_form_data_and_arrays_and_rejects_garbage():
+    from api.services.webhook_sync.preview import preview_mapping
+
+    form = preview_mapping(
+        "mobile=9876543210&name=Asha", "application/x-www-form-urlencoded", {}
+    )
+    assert form["phone"] == "+919876543210" and form["fields"]["name"] == "Asha"
+    bulk = preview_mapping(
+        '[{"mobile": "9876543210"}, {"mobile": "9123456780"}]', None, {}
+    )
+    assert bulk["lead_count"] == 2
+    with pytest.raises(PayloadError):
+        preview_mapping("{not json", "application/json", {})
+
+
+def test_leaf_paths_cover_nesting_lists_and_are_capped():
+    from api.services.webhook_sync.preview import MAX_PATHS, leaf_paths
+
+    paths = leaf_paths({"a": {"b": 1}, "leads": [{"phone": "9"}], "n": None})
+    assert paths == [
+        {"path": "a.b", "value": "1"},
+        {"path": "leads[0].phone", "value": "9"},
+    ]
+    assert len(leaf_paths({f"k{i}": i for i in range(1000)})) == MAX_PATHS
+
+
+def test_leadsquared_mx_prefixed_fields_are_detected():
+    lead = map_lead(
+        {
+            "Current": {
+                "ProspectID": "P-1",
+                "FirstName": "Rahul",
+                "Phone": "9876543210",
+                "mx_City": "Patna",
+                "mx_Language": "Hindi",
+            }
+        }
+    )
+    assert (lead.city, lead.language_preference) == ("Patna", "Hindi")
+    assert lead.variables["city"] == "Patna"
+    # The CRM's own field name stays available too.
+    assert lead.variables["mx_city"] == "Patna"
+
+
+def test_an_exact_field_beats_an_mx_prefixed_one():
+    lead = map_lead({"mobile": "9876543210", "city": "Delhi", "mx_City": "Patna"})
+    assert lead.city == "Delhi"
+
+
+def test_leadsquared_custom_fields_are_also_variables_without_the_prefix():
+    lead = map_lead(
+        {"Phone": "9876543210", "mx_Budget": "50L", "mx_Plan": "Gold", "Plan": "Silver"}
+    )
+    assert lead.variables["budget"] == "50L"
+    assert lead.variables["mx_budget"] == "50L"
+    # A field the CRM sent under the plain name wins.
+    assert lead.variables["plan"] == "Silver"

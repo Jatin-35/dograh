@@ -127,6 +127,7 @@
             "tag": "NEW",
             "pages": [
               "integrations/mcp",
+              "integrations/webhook-sync",
               "integrations/tuner",
               "integrations/paygent"
             ]

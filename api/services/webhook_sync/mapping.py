@@ -152,10 +152,24 @@ def _levels(payload: dict, depth: int = 2) -> list[dict]:
     return levels
 
 
+def _by_key(level: dict) -> dict[str, Any]:
+    """A level's values by normalized key. LeadSquared prefixes custom fields
+    with ``mx_`` (``mx_City``), so each is also reachable without it; an
+    exact key wins over a prefixed one."""
+    by_key: dict[str, Any] = {}
+    for key, value in level.items():
+        norm = _norm_key(key)
+        if str(key).lower().startswith("mx_") and len(norm) > 2:
+            by_key.setdefault(norm[2:], value)
+    for key, value in level.items():
+        by_key[_norm_key(key)] = value
+    return by_key
+
+
 def _detect(payload: dict, standard_field: str) -> Any:
     aliases = _ALIASES[standard_field]
     for level in _levels(payload):
-        by_key = {_norm_key(k): v for k, v in level.items()}
+        by_key = _by_key(level)
         for alias in aliases:
             value = by_key.get(alias)
             if _scalar(value) is not None:
@@ -168,7 +182,7 @@ def _detect_name(payload: dict) -> Optional[str]:
     if name:
         return name
     for level in _levels(payload):
-        by_key = {_norm_key(k): v for k, v in level.items()}
+        by_key = _by_key(level)
         first = _scalar(by_key.get("firstname"))
         last = _scalar(by_key.get("lastname"))
         if first or last:
@@ -221,6 +235,10 @@ def map_lead(payload: dict, field_mapping: Optional[dict] = None) -> MappedLead:
             name = variable_name(key)
             if text is not None and name:
                 variables.setdefault(name, text)
+    # LeadSquared prefixes its custom fields (mx_Budget): also offer each one
+    # under its plain name ({{budget}}), unless the CRM sent that name too.
+    for name in [n for n in variables if n.startswith("mx_") and len(n) > 3]:
+        variables.setdefault(name[3:], variables[name])
     # Explicitly mapped custom fields override detected ones.
     custom = field_mapping.get("custom") or {}
     if isinstance(custom, dict):

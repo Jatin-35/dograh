@@ -1,7 +1,9 @@
 """Webhook Sync endpoint management and read models for the dashboard."""
 
 import re
+from datetime import UTC, datetime
 from typing import Any, Optional
+from zoneinfo import ZoneInfo
 
 from api.db import db_client
 from api.db.webhook_sync_models import WebhookEndpointModel, WebhookLeadModel
@@ -18,6 +20,25 @@ from api.utils.common import get_backend_endpoints
 RECEIVER_PATH = "/api/v1/webhooks/inbound"
 # A value with this many digits in a row is treated as a phone number.
 _LONG_DIGIT_RUN = re.compile(r"\d[\d\s\-().]{8,}\d")
+
+
+DEFAULT_TIMEZONE = "Asia/Kolkata"
+
+
+async def start_of_today(organization_id: int) -> datetime:
+    """Midnight today in the organization's timezone (its preference, else
+    India time like the default calling hours), for the "today" counts."""
+    from api.services.organization_preferences import get_organization_preferences
+
+    name = DEFAULT_TIMEZONE
+    try:
+        preferences = await get_organization_preferences(organization_id)
+        name = preferences.timezone or DEFAULT_TIMEZONE
+        tz = ZoneInfo(name)
+    except Exception:
+        tz = ZoneInfo(DEFAULT_TIMEZONE)
+    now = datetime.now(tz)
+    return now.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(UTC)
 
 
 class WorkflowNotInOrganizationError(Exception):
@@ -63,6 +84,13 @@ async def endpoint_response(
     leads_today: int = 0,
     leads_total: int = 0,
 ) -> WebhookEndpointResponse:
+    calling_state = None
+    leads_on_hold = await db_client.count_webhook_leads_on_hold(
+        endpoint.id, endpoint.organization_id
+    )
+    if endpoint.campaign_id:
+        campaign = await db_client.get_campaign_by_id(endpoint.campaign_id)
+        calling_state = campaign.state if campaign else None
     return WebhookEndpointResponse(
         id=endpoint.id,
         name=endpoint.name,
@@ -73,6 +101,7 @@ async def endpoint_response(
         workflow_id=endpoint.workflow_id,
         workflow_name=workflow_name,
         campaign_id=endpoint.campaign_id,
+        calling_state=calling_state,
         is_active=endpoint.is_active,
         auto_call=endpoint.auto_call,
         field_mapping=_mapping(endpoint.field_mapping),
@@ -80,6 +109,7 @@ async def endpoint_response(
         rate_limit_per_minute=endpoint.rate_limit_per_minute,
         leads_today=leads_today,
         leads_total=leads_total,
+        leads_on_hold=leads_on_hold,
         created_at=endpoint.created_at,
         updated_at=endpoint.updated_at,
     )
@@ -121,6 +151,7 @@ def lead_response(
         received_at=lead.received_at,
         updated_at=lead.updated_at,
         raw_payload=(lead.raw_payload if include_payload and not mask else None),
+        phone_masked=mask,
     )
 
 

@@ -40,6 +40,11 @@ interface FilterBuilderProps {
   autoRefresh?: boolean;
   onAutoRefreshChange?: (enabled: boolean) => void;
   hasAppliedFilters?: boolean;
+  /** Card heading; defaults to the Agent Runs wording. */
+  title?: string;
+  description?: string;
+  /** Preset filters offered under "Templates"; an empty list hides the menu. */
+  templates?: FilterTemplate[];
 }
 
 export const FilterBuilder: React.FC<FilterBuilderProps> = ({
@@ -52,6 +57,9 @@ export const FilterBuilder: React.FC<FilterBuilderProps> = ({
   autoRefresh = false,
   onAutoRefreshChange,
   hasAppliedFilters = false,
+  title = "Filter Workflow Runs",
+  description = "Build custom filters to find specific workflow runs",
+  templates = filterTemplates,
 }) => {
   const [selectedAttribute, setSelectedAttribute] = useState<string>("");
   const [expandedFilters, setExpandedFilters] = useState<Set<number>>(new Set());
@@ -318,12 +326,11 @@ export const FilterBuilder: React.FC<FilterBuilderProps> = ({
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle>Filter Workflow Runs</CardTitle>
-            <CardDescription>
-              Build custom filters to find specific workflow runs
-            </CardDescription>
+            <CardTitle>{title}</CardTitle>
+            <CardDescription>{description}</CardDescription>
           </div>
           <div className="flex items-center gap-2">
+            {templates.length > 0 && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm">
@@ -333,7 +340,7 @@ export const FilterBuilder: React.FC<FilterBuilderProps> = ({
               <DropdownMenuContent align="end" className="w-[250px]">
                 <DropdownMenuLabel>Filter Templates</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                {filterTemplates.map((template) => (
+                {templates.map((template) => (
                   <DropdownMenuItem
                     key={template.id}
                     onClick={() => applyTemplate(template)}
@@ -348,6 +355,7 @@ export const FilterBuilder: React.FC<FilterBuilderProps> = ({
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
+            )}
           </div>
         </div>
       </CardHeader>

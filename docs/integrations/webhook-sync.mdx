@@ -45,15 +45,17 @@ A successful reply:
 ```json
 {
   "success": true,
-  "received": 1, "created": 1, "duplicates": 0, "invalid": 0, "replayed": 0, "rejected": 0,
+  "received": 1, "created": 1, "duplicates": 0, "invalid": 0, "opted_out": 0, "on_hold": 0, "replayed": 0, "rejected": 0,
   "lead_ids": [50],
   "leads": [{"lead_id": 50, "status": "received", "replayed": false}]
 }
 ```
 
-`created` counts new leads that will be called; `duplicates` and `invalid` are
-stored but not called; `replayed` are repeats of a request you already sent;
-`rejected` had no phone number.
+`created` counts new leads that will be called; `duplicates`, `invalid` and
+`opted_out` (numbers that asked not to be called) are stored but not called;
+`replayed` are repeats of a request you already sent; `rejected` had no phone
+number. While the endpoint is paused, new leads are counted as `on_hold`
+instead of `created`, and the reply also has `"paused": true`.
 
 Also accepted:
 
@@ -135,15 +137,196 @@ Indian mobile is stored with status **invalid_number** and is not called.
   id (`lead_id`, `prospect_id`, ...). Repeating a request with the same key or
   lead id returns the original lead with `"replayed": true` and stores nothing
   new. This is safe even if your CRM retries several times at once.
+- **A corrected number**: if the same CRM lead comes back with a different,
+  valid number (say the first one was mistyped), it is stored as a new lead and
+  called on the new number. An earlier lead still waiting to be called is
+  marked **failed** ("Replaced by lead #… with a corrected number"), so the old
+  number isn't called.
+- **The customer enquires again**: the same CRM lead id counts as a repeat for
+  30 days (*Same CRM lead counts as a new enquiry after*, 1–365 days). After
+  that, it is a new lead and is called again.
+
+## Calling
+
+With **Call new leads automatically** on, every new lead (not a duplicate,
+not an invalid number) is called by the endpoint's agent:
+
+- **When:** right away, or after the endpoint's *wait before calling*, and only
+  inside its **calling hours** (default 09:00–21:00 IST, every day). A lead
+  that arrives outside them is called when they next open; its status shows
+  **scheduled** until then.
+- **From which number:** the endpoint's telephony configuration (the
+  organization default unless you pick one). Your numbers' channels and the
+  organization's concurrent-call limit decide how many leads are called at
+  once.
+- **Retries:** an unanswered or busy call is retried after the set gap, up to
+  the set number of attempts. A call that fails for another reason (a provider
+  or number error) is not retried.
+- **Wallet:** each call is checked against, and charged to, your wallet like
+  any other call. With no balance left, the lead is marked **failed** with the
+  reason.
+- **Variables:** every field the CRM sent is available to the agent's prompt,
+  e.g. `{{name}}`, `{{city}}`.
+
+The lead's status follows its calls: **queued** → **calling** → **completed**,
+or **no answer** / **busy** → **scheduled** (retry) → …, or **failed**. Each
+lead links to its calls' transcripts and recordings.
+
+<Note>
+If many calls fail in a row (for example, the telephony account stops
+accepting calls), calling stops automatically to protect your numbers and
+wallet, and the endpoint shows **Calling stopped**. New leads are still
+stored. Fix the cause, then click **Resume calling**.
+</Note>
+
+**Pausing the endpoint** pauses calling, but leads keep arriving, so nothing
+your CRM sends is lost. They are stored **On hold** and are never called on
+their own, not even after you resume. When you resume, BotrixAI asks what to do
+with them, and a banner on the endpoint keeps the choice open:
+
+- **Call all**: every lead on hold is queued and called within the calling
+  hours.
+- **Choose which to call**: opens the leads on hold, where you tick the ones to
+  call (see [Choosing leads](#choosing-leads)).
+- **Don't call any**: they are marked **Skipped**. Their numbers aren't
+  blocked, so a later enquiry from them is called as usual.
+
+Duplicates, invalid numbers and numbers that opted out are handled as usual
+while paused; only new, callable leads go on hold.
+
+**Turning off Call new leads automatically** stops calling: new leads are only
+stored, and calls waiting to go out (first calls and retries) are taken off the
+queue. A call already ringing isn't cut off.
+
+Deleting the endpoint cancels calls that haven't been placed yet.
+
+The endpoint's calls run on a campaign of its own, which doesn't appear on the
+**Campaigns** page: pause, resume and change it from the endpoint.
+
+## Testing without your CRM
+
+On the endpoint's **Setup** tab, **Send a test lead** posts a lead to the
+endpoint exactly as your CRM would, with its secret, whichever authentication
+it uses. Enter your own number to get a real test call (when auto-call is on).
+The reply shows what a CRM would have been told, with a link to the lead.
+
+## Working with a lead
+
+On a lead's page:
+
+- **Call again** queues one more call: for a lead whose calling is over
+  (completed, no answer, busy, failed) or that was never called (auto-call
+  off). It goes out within the calling hours.
+- **Call** / **Don't call** on a lead that is on hold decides that one lead.
+- **Stop calling** blocks the **number**, not just this lead: this lead and
+  every other lead with the number in your organization are marked **Do not
+  call** and their queued calls and retries are cancelled, and any later lead
+  with the number is stored as **Do not call** and never called. A call already
+  ringing isn't cut off, but nothing follows it.
+- **Resend to CRM** sends the result to your CRM again when the delivery gave
+  up.
+
+**Export CSV** on the leads table downloads the leads matching the current
+filters (up to 10,000). Numbers are masked if your organization masks them.
+
+## Choosing leads
+
+Tick leads in the leads table (or **select all** on the page) to act on several
+at once:
+
+- **Call selected** queues a call to each lead that can be called: on hold,
+  skipped, never called, or whose calling is over (completed, no answer, busy,
+  failed). Calls go out within the endpoint's calling hours, without the *wait
+  before calling*, and also when auto-call is off.
+- **Don't call** marks leads on hold (or stored but never queued) as
+  **Skipped**.
+
+Each lead is checked on its own: a lead already being called, a number that
+opted out, or an endpoint that is paused is left as it is, and you're told
+why.
+
+LeadSquared custom fields (`mx_Budget`) are also available to the agent
+without the prefix (`{{budget}}`).
+
+## When a customer asks not to be called
+
+If a customer says "don't call me again" during the call, the number is
+blocked automatically, exactly like **Stop calling**, when the call's outcome
+says so. Set your agent up to record it in either of these ways:
+
+- **Call disposition** `do_not_call` (also recognised: `dnc`, `opt_out`,
+  `do_not_disturb`, `stop_calling`, `unsubscribe`; any capitalisation or
+  spacing), or a call tag with one of these values.
+- **Extracted variable** `do_not_call` (or `opt_out`) set to `true` / `yes`.
+
+The lead shows **Do not call** ("Asked not to be called again (during the
+call)"), and the result sent to your CRM has `"status": "do_not_call"`.
+
+## Alerts
+
+BotrixAI tells you when an endpoint needs attention, instead of leaving it to
+be noticed on the dashboard:
+
+| Alert | When |
+|---|---|
+| Requests failing | 5 requests in a row from your CRM were rejected (wrong secret, bad data). Those leads were **not** stored. |
+| Leads not called | A lead couldn't be called, for example an empty wallet, a deleted agent or no telephony configuration. |
+| Calling paused | Too many calls failed in a row and calling stopped automatically. |
+| Results not delivered | A call result couldn't be delivered to your callback URL after every retry. |
+
+Each alert is listed in the endpoint's **History**, and emailed to the
+endpoint's **Alert emails** (up to 5; if none are set, the person who created
+the endpoint). The same alert is sent at most once every 6 hours.
+
+<Note>
+Emails need SMTP set up for your installation (`SMTP_HOST`, `SMTP_PORT`,
+`SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_SECURITY`). Without it,
+alerts still appear in **History**.
+</Note>
+
+## Sending results back to your CRM
+
+Set a **callback URL** (https) on the endpoint, and each lead's result is
+POSTed to it once its calling is finished: the call connected, or it didn't
+and no attempts are left, or it could not be placed.
+
+```json
+{
+  "event": "lead.call_result",
+  "lead": {"id": 50, "external_lead_id": "LSQ-9", "name": "Rahul Kumar", "phone": "+919876543210", "email": null, "source": "Facebook Ads"},
+  "endpoint": {"id": 3, "name": "LeadSquared"},
+  "result": {
+    "status": "completed",
+    "reason": null,
+    "call_attempts": 1,
+    "disposition": "Interested",
+    "duration_seconds": 104,
+    "extracted": {"budget": "50L"}
+  },
+  "call": {"id": 9682, "recording_url": "…", "transcript_url": "…"}
+}
+```
+
+`result.status` is `completed`, `no_answer`, `busy` or `failed`. `extracted`
+holds what the agent collected during the call.
+
+- **Checking it's from us:** every callback carries the header
+  `X-Botrix-Secret` with the endpoint's secret.
+- **Repeats:** a delivery that fails (a timeout, or a `429`/`5xx` reply) is
+  retried with backoff; `X-Dograh-Delivery-Id` stays the same across retries,
+  so use it to ignore repeats. Other `4xx` replies are not retried.
+- The callback URL must be a public `https://` address.
+
+Each lead's page shows whether its result was delivered.
 
 ## Responses
 
 | Status | Meaning |
 |---|---|
-| `200` | Stored. `leads` lists each lead's id and status |
+| `200` | Stored (also while the endpoint is paused). `leads` lists each lead's id and status |
 | `400` | The body isn't valid JSON or form data |
 | `401` | Missing or wrong secret |
-| `404` | Unknown endpoint, or the endpoint is paused |
+| `404` | Unknown endpoint |
 | `413` | Body over 1 MB, or more than 500 leads in one request |
 | `422` | No phone number in the lead (or in any lead of a bulk request) |
 | `429` | Over the endpoint's rate limit (default 100 requests per minute); retry after the `Retry-After` seconds |

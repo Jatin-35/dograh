@@ -34,6 +34,8 @@ from api.services.campaign.campaign_event_protocol import (
 from api.services.campaign.campaign_billing import reconcile_campaign_wallet
 from api.services.campaign.campaign_event_publisher import CampaignEventPublisher
 from api.services.campaign.circuit_breaker import circuit_breaker
+from api.services.campaign.continuous import is_continuous_campaign
+from api.services.webhook_sync import calling as webhook_sync_calling
 from api.tasks.arq import enqueue_job
 from api.tasks.function_names import FunctionNames
 
@@ -228,7 +230,8 @@ class CampaignOrchestrator:
 
         # Create scheduled retry entry
         retry_delay = retry_config.get("retry_delay_seconds", 120)
-        await self._schedule_retry(queued_run, reason, retry_delay)
+        retry_run = await self._schedule_retry(queued_run, reason, retry_delay)
+        await webhook_sync_calling.retry_scheduled(retry_run, campaign.organization_id)
 
         # Update last activity
         self._last_activity[campaign_id] = datetime.now(UTC)
@@ -269,6 +272,7 @@ class CampaignOrchestrator:
             f"campaign_id: {campaign_id} - Scheduled retry {retry_run.id} for {reason} in {delay_seconds}s, "
             f"retry attempt {retry_run.retry_count}"
         )
+        return retry_run
 
     async def _mark_final_failure(self, queued_run: QueuedRunModel, reason: str):
         """Mark a queued run as finally failed after max retries."""
@@ -530,6 +534,10 @@ class CampaignOrchestrator:
     async def _should_mark_complete(self, campaign: CampaignModel) -> bool:
         """Check if campaign has no activity for 1 hour."""
         campaign_id = campaign.id
+
+        # A continuous campaign is fed as leads arrive; being idle is normal.
+        if is_continuous_campaign(campaign):
+            return False
 
         # Don't mark complete if batch is in progress
         if campaign_id in self._batch_in_progress:

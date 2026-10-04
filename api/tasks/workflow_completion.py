@@ -1,6 +1,7 @@
 from loguru import logger
 from pipecat.utils.run_context import set_current_run_id
 
+from api.services.webhook_sync import calling as webhook_sync_calling
 from api.services.workflow_run_billing import (
     report_completed_workflow_run_platform_usage,
     report_completed_workflow_run_wallet_usage,
@@ -48,5 +49,8 @@ async def process_workflow_completion(
         logger.error(
             f"Error recording wallet usage for workflow {workflow_run_id}: {e}"
         )
+
+    # A Webhook Sync lead follows its call.
+    await webhook_sync_calling.call_finished(workflow_run_id)
 
     logger.info(f"Completed workflow completion processing for run {workflow_run_id}")

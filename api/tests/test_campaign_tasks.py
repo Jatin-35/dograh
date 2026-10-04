@@ -6,7 +6,7 @@ write a specific, identifiable entry into the campaign log so operators
 can tell at a glance why a campaign stopped.
 """
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -38,6 +38,10 @@ class TestProcessCampaignBatchFailureLogs:
             )
             mock_db.increment_campaign_metadata_counter = AsyncMock(return_value=2)
             mock_db.update_campaign = AsyncMock()
+            # An ordinary (not continuous) campaign: a failed batch ends it.
+            mock_db.get_campaign_by_id = AsyncMock(
+                return_value=MagicMock(orchestrator_metadata={})
+            )
             mock_db.append_campaign_log = AsyncMock()
             mock_pub = AsyncMock()
             mock_get_pub.return_value = mock_pub
@@ -77,6 +81,10 @@ class TestProcessCampaignBatchFailureLogs:
             )
             mock_db.increment_campaign_metadata_counter = AsyncMock(return_value=3)
             mock_db.update_campaign = AsyncMock()
+            # An ordinary (not continuous) campaign: a failed batch ends it.
+            mock_db.get_campaign_by_id = AsyncMock(
+                return_value=MagicMock(orchestrator_metadata={})
+            )
             mock_db.append_campaign_log = AsyncMock()
             mock_pub = AsyncMock()
             mock_get_pub.return_value = mock_pub
@@ -115,6 +123,10 @@ class TestProcessCampaignBatchFailureLogs:
                 )
             )
             mock_db.update_campaign = AsyncMock()
+            # An ordinary (not continuous) campaign: a failed batch ends it.
+            mock_db.get_campaign_by_id = AsyncMock(
+                return_value=MagicMock(orchestrator_metadata={})
+            )
             mock_db.append_campaign_log = AsyncMock()
             mock_pub = AsyncMock()
             mock_get_pub.return_value = mock_pub

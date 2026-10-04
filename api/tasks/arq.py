@@ -46,7 +46,10 @@ from api.tasks.campaign_tasks import (
 from api.tasks.knowledge_base_processing import process_knowledge_base_document
 from api.tasks.run_integrations import run_integrations_post_workflow_run
 from api.tasks.webhook_delivery import deliver_webhook, sweep_webhook_deliveries
-from api.tasks.webhook_sync_tasks import cleanup_webhook_sync_data
+from api.tasks.webhook_sync_tasks import (
+    cleanup_webhook_sync_data,
+    queue_waiting_webhook_leads,
+)
 from api.tasks.workflow_completion import process_workflow_completion
 
 
@@ -70,6 +73,8 @@ class WorkerSettings:
         ),
         # Webhook Sync retention: request logs and lead payloads (30 days).
         cron(cleanup_webhook_sync_data, hour=3, minute=15, second=0),
+        # Webhook Sync: queue leads whose immediate queueing failed.
+        cron(queue_waiting_webhook_leads, second=30),
     ]
     redis_settings = REDIS_SETTINGS
     max_jobs = 10

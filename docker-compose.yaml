@@ -281,6 +281,17 @@ services:
       GEMINI_LIVE_CONTEXT_COMPACTION_TRIGGER_TOKENS: "${GEMINI_LIVE_CONTEXT_COMPACTION_TRIGGER_TOKENS:-0}"
       GEMINI_LIVE_COMPRESSION_TRIGGER_TOKENS: "${GEMINI_LIVE_COMPRESSION_TRIGGER_TOKENS:-16000}"
 
+      # Alert emails (Webhook Sync: CRM requests failing, leads not callable,
+      # calling auto-paused, CRM callbacks failing). Optional: without
+      # SMTP_HOST alerts are only recorded in the endpoint's History.
+      # SMTP_SECURITY is starttls (port 587), ssl (port 465) or none.
+      SMTP_HOST: "${SMTP_HOST:-}"
+      SMTP_PORT: "${SMTP_PORT:-587}"
+      SMTP_USERNAME: "${SMTP_USERNAME:-}"
+      SMTP_PASSWORD: "${SMTP_PASSWORD:-}"
+      SMTP_FROM: "${SMTP_FROM:-}"
+      SMTP_SECURITY: "${SMTP_SECURITY:-starttls}"
+
       # Code Editor. The API does not execute anything itself — it calls the
       # handlers container, which owns the sandbox. This URL must be the
       # service name on app-network: the code's own fallback is localhost:8080,

@@ -12,6 +12,7 @@ from loguru import logger
 
 from api.constants import DEPLOYMENT_MODE
 from api.db import db_client
+from api.services.campaign.continuous import campaign_bills_per_call
 from api.db.models import UserModel
 from api.services.configuration.ai_model_configuration import (
     get_effective_ai_model_configuration_for_workflow,
@@ -518,8 +519,9 @@ async def authorize_workflow_run_start(
                 )
 
         # Self-hosted wallet check — independent of the MPS/hosted billing
-        # below, and skipped entirely for campaign calls (see docstring).
-        if campaign_id is None:
+        # below, and skipped for campaign calls (see docstring) except those of
+        # a continuous campaign, which has no up-front reservation.
+        if campaign_id is None or await campaign_bills_per_call(campaign_id):
             org = await db_client.get_organization_by_id(organization_id)
             if org is not None and org.wallet_enabled and workflow.price_per_minute is not None:
                 available = org.wallet_balance - org.credit_limit

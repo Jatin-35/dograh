@@ -39,7 +39,9 @@ async def env(setup_test_database):
     """db_client on the test database; two orgs, each with a user and an
     agent; a fresh Redis client for this test's event loop."""
     engine = create_async_engine(setup_test_database, echo=False)
-    factory = async_sessionmaker(bind=engine, expire_on_commit=False)
+    # Same session settings as production (objects expire on commit), so a
+    # read of an expired, detached object fails here as it would there.
+    factory = async_sessionmaker(bind=engine)
     original = db_client.engine, db_client.async_session
     db_client.engine, db_client.async_session = engine, factory
     rate_limit._redis = None
@@ -82,7 +84,9 @@ async def env(setup_test_database):
             auth_type="api_key",
             secret=f"secret-{uuid.uuid4().hex}",
             is_active=True,
-            auto_call=True,
+            # Receiving is tested here; calling (which queues leads) has its
+            # own tests, which turn this on.
+            auto_call=False,
             field_mapping={},
             call_settings={},
             rate_limit_per_minute=1000,
@@ -246,13 +250,17 @@ async def test_unknown_endpoint_is_404(env):
 
 
 @pytest.mark.asyncio
-async def test_paused_endpoint_is_404_and_stores_nothing(env):
+async def test_paused_endpoint_stores_the_lead_on_hold(env):
+    """A refused CRM may give up on the webhook, losing every later lead; a
+    paused endpoint keeps them on hold, until someone chooses to call them."""
     endpoint = await env.make_endpoint(is_active=False)
     result = await post(endpoint, {"mobile": "9876543210"}, key_headers(endpoint))
-    assert result.status_code == 404
-    assert await env.leads(endpoint) == []
+    assert result.status_code == 200 and result.body["paused"] is True
+    (lead,) = await env.leads(endpoint)
+    assert lead.status == "on_hold"
     (log,) = await env.logs(endpoint)
-    assert (log.response_code, log.error) == (404, "Endpoint is paused")
+    assert log.response_code == 200
+    assert log.error == "Endpoint is paused: stored on hold, not called"
 
 
 # ---------------------------------------------------------------------------
@@ -938,3 +946,86 @@ async def test_audit_log_is_organization_scoped(env):
         endpoint_id=endpoint.id, limit=50, offset=0, user=env.orgs["a"].user
     )
     assert ours.total == 1
+
+
+# ---------------------------------------------------------------------------
+# Dashboard reads
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_lead_stats_count_by_status_per_endpoint_and_org(env):
+    from api.routes import webhook_sync as routes
+
+    first = await env.make_endpoint("a")
+    second = await env.make_endpoint("a")
+    await post(first, {"mobile": "9876543210"}, key_headers(first))
+    await post(first, {"mobile": "9876543210"}, key_headers(first))  # duplicate
+    await post(first, {"mobile": "12345"}, key_headers(first))  # invalid
+    await post(second, {"mobile": "9123456780"}, key_headers(second))
+
+    a = env.orgs["a"].user
+    one = await routes.lead_stats(endpoint_id=first.id, user=a)
+    assert one.by_status == {"received": 1, "duplicate": 1, "invalid_number": 1}
+    assert (one.total, one.today) == (3, 3)
+    everything = await routes.lead_stats(endpoint_id=None, user=a)
+    assert everything.total == 4
+    theirs = await routes.lead_stats(endpoint_id=None, user=env.orgs["b"].user)
+    assert theirs.total == 0
+    with pytest.raises(HTTPException) as exc:
+        await routes.lead_stats(endpoint_id=first.id, user=env.orgs["b"].user)
+    assert exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_audit_entries_carry_the_users_email(env):
+    from api.routes import webhook_sync as routes
+    from api.services.webhook_sync.management import record_audit
+
+    a = env.orgs["a"]
+    email = f"ops-{uuid.uuid4().hex[:8]}@botrix.test"
+    async with env.factory() as session:
+        await session.execute(
+            update(UserModel).where(UserModel.id == a.user.id).values(email=email)
+        )
+        await session.commit()
+    endpoint = await env.make_endpoint("a")
+    await record_audit(endpoint, a.user.id, "created")
+    await record_audit(endpoint, None, "paused")
+    audit = await routes.list_audit_log(
+        endpoint_id=endpoint.id, limit=50, offset=0, user=a.user
+    )
+    emails = {e.action: e.user_email for e in audit.entries}
+    assert emails == {"created": email, "paused": None}
+
+
+@pytest.mark.asyncio
+async def test_request_log_and_lead_responses_carry_dashboard_fields(env):
+    from api.routes import webhook_sync as routes
+
+    endpoint = await env.make_endpoint("a")
+    await post(endpoint, {"mobile": "9876543210"}, key_headers(endpoint))
+    a = env.orgs["a"].user
+    with patch(
+        "api.routes.webhook_sync.should_mask_phone_numbers",
+        AsyncMock(return_value=False),
+    ):
+        logs = await routes.list_request_logs(endpoint.id, limit=50, offset=0, user=a)
+        leads = await routes.list_leads(
+            endpoint_id=endpoint.id,
+            status=None,
+            search=None,
+            received_from=None,
+            received_to=None,
+            limit=50,
+            offset=0,
+            user=a,
+        )
+    assert logs.logs[0].duration_ms is not None
+    assert leads.leads[0].phone_masked is False
+    with patch(
+        "api.routes.webhook_sync.should_mask_phone_numbers",
+        AsyncMock(return_value=True),
+    ):
+        lead = await routes.get_lead(leads.leads[0].id, user=a)
+    assert lead.phone_masked is True and lead.raw_payload is None

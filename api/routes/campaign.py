@@ -15,6 +15,10 @@ from api.db import db_client
 from api.db.models import UserModel
 from api.enums import OrganizationConfigurationKey
 from api.services.auth.depends import get_user
+from api.services.campaign.continuous import (
+    is_managed_elsewhere,
+    reject_if_managed_elsewhere,
+)
 from api.services.campaign.runner import campaign_runner_service
 from api.services.campaign.source_sync import CampaignSourceSyncService
 from api.services.campaign.source_sync_factory import get_sync_service
@@ -472,6 +476,8 @@ async def get_campaigns(
 ) -> CampaignsResponse:
     """Get campaigns for user's organization"""
     campaigns = await db_client.get_campaigns(user.selected_organization_id)
+    # Webhook Sync's always-on campaigns are managed from their endpoint.
+    campaigns = [c for c in campaigns if not is_managed_elsewhere(c)]
 
     # Get workflow names for all campaigns
     workflow_ids = list(set(c.workflow_id for c in campaigns))
@@ -554,6 +560,7 @@ async def start_campaign(
     campaign = await db_client.get_campaign(campaign_id, user.selected_organization_id)
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
+    reject_if_managed_elsewhere(campaign)
 
     # Check Dograh quota before starting campaign (apply per-workflow
     # model_overrides so we evaluate the keys this campaign will use).
@@ -600,6 +607,7 @@ async def pause_campaign(
     campaign = await db_client.get_campaign(campaign_id, user.selected_organization_id)
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
+    reject_if_managed_elsewhere(campaign)
 
     # Pause the campaign using the runner service
     try:
@@ -635,6 +643,7 @@ async def stop_campaign(
     campaign = await db_client.get_campaign(campaign_id, user.selected_organization_id)
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
+    reject_if_managed_elsewhere(campaign)
 
     try:
         await campaign_runner_service.stop_campaign(campaign_id)
@@ -669,6 +678,7 @@ async def update_campaign(
     campaign = await db_client.get_campaign(campaign_id, user.selected_organization_id)
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
+    reject_if_managed_elsewhere(campaign)
 
     if campaign.state in ["completed", "failed"]:
         raise HTTPException(
@@ -921,6 +931,7 @@ async def resume_campaign(
     campaign = await db_client.get_campaign(campaign_id, user.selected_organization_id)
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
+    reject_if_managed_elsewhere(campaign)
 
     # Check Dograh quota before resuming campaign (apply per-workflow
     # model_overrides so we evaluate the keys this campaign will use).

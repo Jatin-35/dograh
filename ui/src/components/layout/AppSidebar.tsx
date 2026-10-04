@@ -21,6 +21,7 @@ import {
   ShieldCheck,
   TrendingUp,
   UserRound,
+  Webhook,
   Workflow,
   Wrench,
 } from "lucide-react";
@@ -108,6 +109,11 @@ const NAV_SECTIONS: SidebarNavSection[] = [
         title: "Campaigns",
         url: "/campaigns",
         icon: Megaphone,
+      },
+      {
+        title: "Webhook Sync",
+        url: "/webhook-sync",
+        icon: Webhook,
       },
       {
         title: "Models",

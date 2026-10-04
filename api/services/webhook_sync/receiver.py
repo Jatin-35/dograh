@@ -3,6 +3,11 @@
 The route stays thin and hands the raw request here. Every request on a
 known endpoint is logged (headers redacted) except rate-limited ones, which
 would otherwise let a runaway sender fill the log table.
+
+A paused endpoint still stores leads (a CRM that is refused may give up on
+the webhook altogether, and the leads would be lost) as ``on_hold``: they are
+not called until someone chooses to call them. Requests failing several times
+in a row raise an alert.
 """
 
 import time
@@ -14,7 +19,9 @@ from pydantic import ValidationError
 
 from api.db import db_client
 from api.schemas.webhook_sync import CallSettings
+from api.services.webhook_sync.alerts import record_request_outcome
 from api.services.webhook_sync.auth import auth_failure
+from api.services.webhook_sync.calling import enqueue_new_leads
 from api.services.webhook_sync.mapping import map_lead
 from api.services.webhook_sync.payload import PayloadError, parse_leads
 from api.services.webhook_sync.phone import normalize_indian_mobile
@@ -26,6 +33,7 @@ from api.services.webhook_sync.request_log import (
 )
 
 IDEMPOTENCY_HEADER = "idempotency-key"
+ON_HOLD_REASON = "Received while the endpoint was paused"
 
 
 @dataclass
@@ -85,12 +93,6 @@ async def receive_webhook(
         except Exception as e:
             logger.warning(f"Webhook Sync: could not store request log: {e}")
 
-    if not endpoint.is_active:
-        await _log(404, "Endpoint is paused")
-        return ReceiveResult(
-            404, {"success": False, "error": "Webhook endpoint is paused"}
-        )
-
     allowed, retry_after = await allow_request(
         endpoint.id, endpoint.rate_limit_per_minute
     )
@@ -107,6 +109,7 @@ async def receive_webhook(
     if failure:
         # The reason goes to the request log only; the client gets a generic 401.
         await _log(401, failure)
+        await record_request_outcome(endpoint, False, failure)
         return ReceiveResult(
             401, {"success": False, "error": "Invalid or missing credentials"}
         )
@@ -115,6 +118,7 @@ async def receive_webhook(
         items = parse_leads(raw_body, lowered.get("content-type"))
     except PayloadError as e:
         await _log(e.status_code, e.message)
+        await record_request_outcome(endpoint, False, e.message)
         return ReceiveResult(e.status_code, {"success": False, "error": e.message})
 
     settings = _call_settings(endpoint.call_settings)
@@ -129,6 +133,12 @@ async def receive_webhook(
                 errors.append({"index": index, "error": "phone is required"})
                 continue
             phone = normalize_indian_mobile(mapped.phone_raw)
+            if not phone:
+                status, reason = "invalid_number", "Not a valid Indian mobile number"
+            elif not endpoint.is_active:
+                status, reason = "on_hold", ON_HOLD_REASON
+            else:
+                status, reason = "received", None
             # A bulk request's Idempotency-Key covers each lead by position.
             key = None
             if idempotency_key:
@@ -139,8 +149,9 @@ async def receive_webhook(
                 endpoint=endpoint,
                 phone=phone,
                 dedupe_window_hours=settings.dedupe_window_hours,
-                status="received" if phone else "invalid_number",
-                status_reason=None if phone else "Not a valid Indian mobile number",
+                reenquiry_days=settings.reenquiry_days,
+                status=status,
+                status_reason=reason,
                 idempotency_key=key,
                 external_lead_id=_clip(mapped.external_lead_id, 255),
                 name=_clip(mapped.name, 255),
@@ -158,11 +169,9 @@ async def receive_webhook(
             f"Webhook Sync: storing leads failed on endpoint {endpoint.id}"
         )
         stored = [lead["lead_id"] for lead in leads]
-        await _log(
-            500,
-            f"Internal error while storing leads: {type(e).__name__}",
-            stored or None,
-        )
+        reason = f"Internal error while storing leads: {type(e).__name__}"
+        await _log(500, reason, stored or None)
+        await record_request_outcome(endpoint, False, reason)
         # A CRM retry is safe: stored leads replay by Idempotency-Key/lead id.
         return ReceiveResult(
             500,
@@ -177,21 +186,42 @@ async def receive_webhook(
             else "No lead in the request has a phone number"
         )
         await _log(422, message)
+        await record_request_outcome(endpoint, False, message)
         body: dict[str, Any] = {"success": False, "error": message}
         if len(items) > 1:
             body.update(_counts(items, leads, errors))
             body["errors"] = errors
         return ReceiveResult(422, body)
 
-    await _log(
-        200, "; ".join(f"#{e['index']}: {e['error']}" for e in errors) or None, lead_ids
-    )
+    notes = [f"#{e['index']}: {e['error']}" for e in errors]
+    if not endpoint.is_active:
+        notes.insert(0, "Endpoint is paused: stored on hold, not called")
+    await _log(200, "; ".join(notes) or None, lead_ids)
+    await record_request_outcome(endpoint, True)
+
+    new_leads = [
+        lead["lead_id"]
+        for lead in leads
+        if not lead["replayed"] and lead["status"] == "received"
+    ]
+    if new_leads and endpoint.is_active:
+        try:
+            await enqueue_new_leads(endpoint, new_leads)
+        except Exception as e:
+            # Stored is what the CRM needs to hear; the minute sweep queues it.
+            logger.error(
+                f"Webhook Sync: queueing new leads on endpoint {endpoint.id} "
+                f"failed; the sweep will retry: {e}"
+            )
     body = {
         "success": True,
         **_counts(items, leads, errors),
         "lead_ids": lead_ids,
         "leads": leads,
     }
+    if not endpoint.is_active:
+        body["paused"] = True
+        body["message"] = "Endpoint is paused: leads are stored on hold and not called"
     if errors:
         body["errors"] = errors
     return ReceiveResult(200, body)
@@ -205,6 +235,8 @@ def _counts(items: list, leads: list[dict], errors: list[dict]) -> dict[str, int
         "created": sum(1 for lead in new if lead["status"] == "received"),
         "duplicates": sum(1 for lead in new if lead["status"] == "duplicate"),
         "invalid": sum(1 for lead in new if lead["status"] == "invalid_number"),
+        "opted_out": sum(1 for lead in new if lead["status"] == "do_not_call"),
+        "on_hold": sum(1 for lead in new if lead["status"] == "on_hold"),
         "replayed": len(leads) - len(new),
         "rejected": len(errors),
     }

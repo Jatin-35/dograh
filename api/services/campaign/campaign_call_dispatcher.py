@@ -20,6 +20,7 @@ from api.services.campaign.errors import (
 )
 from api.services.campaign.rate_limiter import rate_limiter
 from api.services.quota_service import authorize_workflow_run_start
+from api.services.webhook_sync import calling as webhook_sync_calling
 from api.utils.common import get_backend_endpoints
 
 if TYPE_CHECKING:
@@ -161,9 +162,12 @@ class CampaignCallDispatcher:
                 processed_count += 1
                 processed_run_ids.add(queued_run.id)
 
-                # Update campaign processed count
+                # Update campaign processed count. From the campaign re-read
+                # for this call: the one loaded at batch start is stale, and
+                # counting from it made a whole batch add only 1.
                 await db_client.update_campaign(
-                    campaign_id=campaign_id, processed_rows=campaign.processed_rows + 1
+                    campaign_id=campaign_id,
+                    processed_rows=current_campaign.processed_rows + 1,
                 )
 
             except asyncio.CancelledError:
@@ -206,6 +210,12 @@ class CampaignCallDispatcher:
 
             except Exception as e:
                 logger.warning(f"Error processing queued run {queued_run.id}: {e}")
+
+                # A Webhook Sync lead shows why it wasn't called (any failure:
+                # no quota, dialing error, agent or telephony config gone).
+                await webhook_sync_calling.call_not_started(
+                    queued_run, campaign.organization_id, str(e)
+                )
 
                 # Mark the queued run as failed to prevent infinite retry loops
                 try:
@@ -328,6 +338,9 @@ class CampaignCallDispatcher:
             )
             await call_concurrency.bind_workflow_run(concurrency_slot, workflow_run.id)
             slot_bound = True
+            await webhook_sync_calling.call_started(
+                queued_run, workflow_run, campaign.organization_id
+            )
 
             # Store from_number mapping for cleanup on call completion
             await rate_limiter.store_workflow_from_number_mapping(

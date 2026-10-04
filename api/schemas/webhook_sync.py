@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 AuthType = Literal["api_key", "hmac", "url_token"]
 RetryStatus = Literal["no_answer", "busy", "failed"]
 _HHMM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 class FieldMapping(BaseModel):
@@ -93,8 +94,27 @@ class CallSettings(BaseModel):
     retries: RetrySettings = Field(default_factory=RetrySettings)
     # Same phone on the same endpoint within this window → duplicate, no call.
     dedupe_window_hours: int = Field(default=24, ge=0, le=720)
+    # Which telephony configuration places the calls; the org default if unset.
+    telephony_configuration_id: Optional[int] = None
+    # The same CRM lead id within this many days is a repeat of that lead (not
+    # called again); after it, the customer is enquiring again and is called.
+    reenquiry_days: int = Field(default=30, ge=1, le=365)
     # Where to POST the call result back (Phase 4). HTTPS only.
     callback_url: Optional[str] = Field(default=None, max_length=2048)
+    # Who is emailed when the endpoint needs attention; empty means the
+    # person who created the endpoint.
+    alert_emails: List[str] = Field(default_factory=list)
+
+    @field_validator("alert_emails")
+    @classmethod
+    def _emails(cls, value: List[str]) -> List[str]:
+        cleaned = sorted({v.strip().lower() for v in value if v and v.strip()})
+        if len(cleaned) > 5:
+            raise ValueError("At most 5 alert emails")
+        for email in cleaned:
+            if len(email) > 254 or not _EMAIL.match(email):
+                raise ValueError(f"Not a valid email address: {email}")
+        return cleaned
 
     @field_validator("callback_url")
     @classmethod
@@ -136,6 +156,10 @@ class WebhookEndpointResponse(BaseModel):
     workflow_id: int
     workflow_name: Optional[str] = None
     campaign_id: Optional[int] = None
+    # State of the campaign that calls the leads: running, or paused (the
+    # endpoint is paused, or the circuit breaker stopped calling after too
+    # many failed calls). None until the first lead is queued.
+    calling_state: Optional[str] = None
     is_active: bool
     auto_call: bool
     field_mapping: FieldMapping
@@ -143,6 +167,8 @@ class WebhookEndpointResponse(BaseModel):
     rate_limit_per_minute: int
     leads_today: int = 0
     leads_total: int = 0
+    # Leads stored while the endpoint was paused, waiting for a decision.
+    leads_on_hold: int = 0
     created_at: datetime
     updated_at: datetime
 
@@ -173,11 +199,107 @@ class WebhookLeadResponse(BaseModel):
     updated_at: datetime
     # Only on the single-lead read, and hidden when numbers are masked.
     raw_payload: Optional[Any] = None
+    # True when the organization masks phone numbers (payload withheld).
+    phone_masked: bool = False
+    # The CRM callback for this lead (only on the single-lead read).
+    callback: Optional["LeadCallbackResponse"] = None
+
+
+class LeadCallbackResponse(BaseModel):
+    # pending (being sent / retrying), succeeded, or dead_letter (gave up)
+    status: str
+    attempts: int
+    last_status_code: Optional[int] = None
+    last_error: Optional[str] = None
+    updated_at: Optional[datetime] = None
 
 
 class WebhookLeadListResponse(BaseModel):
     leads: List[WebhookLeadResponse]
     total: int
+
+
+class TestLeadRequest(BaseModel):
+    phone: str = Field(..., min_length=1, max_length=32)
+    name: Optional[str] = Field(default=None, max_length=255)
+
+
+LeadAction = Literal["call", "skip"]
+
+
+class BulkLeadActionRequest(BaseModel):
+    lead_ids: List[int] = Field(..., min_length=1, max_length=500)
+    action: LeadAction
+
+
+class OnHoldActionRequest(BaseModel):
+    action: LeadAction
+
+
+class LeadActionSkipped(BaseModel):
+    lead_id: int
+    reason: str
+
+
+class BulkLeadActionResponse(BaseModel):
+    """What happened to each lead: ``done`` were called (queued) or skipped;
+    ``not_done`` lists the others with why."""
+
+    action: LeadAction
+    done: List[int]
+    not_done: List[LeadActionSkipped] = Field(default_factory=list)
+
+
+class TestLeadResponse(BaseModel):
+    # What the endpoint answered, exactly as a CRM would see it.
+    status_code: int
+    body: Dict[str, Any]
+    lead_id: Optional[int] = None
+
+
+class WebhookSyncStatsResponse(BaseModel):
+    days: int
+    leads: int
+    callable: int
+    called: int
+    connected: int
+    # connected / called; None until something was called
+    connect_rate: Optional[float] = None
+    median_seconds_to_first_call: Optional[float] = None
+    requests: int
+    request_errors: int
+    # CRM callbacks by delivery status (pending, succeeded, dead_letter)
+    callbacks: Dict[str, int]
+
+
+class WebhookLeadStatsResponse(BaseModel):
+    total: int
+    today: int
+    by_status: Dict[str, int]
+
+
+class MappingPreviewRequest(BaseModel):
+    # The sample exactly as the CRM sends it (JSON, or form data).
+    sample: str = Field(..., min_length=1, max_length=1_000_000)
+    content_type: Optional[str] = Field(default="application/json", max_length=255)
+    field_mapping: FieldMapping = Field(default_factory=FieldMapping)
+
+
+class PayloadPath(BaseModel):
+    path: str
+    value: str
+
+
+class MappingPreviewResponse(BaseModel):
+    lead_count: int
+    phone_raw: Optional[str] = None
+    phone: Optional[str] = None
+    # received, invalid_number, or rejected (no phone number found)
+    outcome: str
+    reason: Optional[str] = None
+    fields: Dict[str, Optional[str]]
+    variables: Dict[str, str]
+    paths: List[PayloadPath]
 
 
 class WebhookRequestLogResponse(BaseModel):
@@ -194,6 +316,7 @@ class WebhookRequestLogResponse(BaseModel):
     error: Optional[str] = None
     ip: Optional[str] = None
     lead_ids: Optional[List[int]] = None
+    duration_ms: Optional[int] = None
     received_at: datetime
 
 
@@ -209,6 +332,7 @@ class WebhookAuditLogResponse(BaseModel):
     endpoint_id: Optional[int] = None
     endpoint_name: Optional[str] = None
     user_id: Optional[int] = None
+    user_email: Optional[str] = None
     # created, updated, paused, resumed, secret_regenerated, deleted
     action: str
     changes: Optional[Dict[str, Any]] = None

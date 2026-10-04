@@ -19,6 +19,7 @@ from api.services.campaign.campaign_event_publisher import (
 )
 from api.services.campaign.circuit_breaker import circuit_breaker
 from api.services.campaign.rate_limiter import rate_limiter
+from api.services.webhook_sync import calling as webhook_sync_calling
 from api.tasks.arq import enqueue_job
 from api.tasks.function_names import FunctionNames
 
@@ -193,6 +194,13 @@ async def _process_status_update(workflow_run_id: int, status: StatusCallbackReq
                 is_failure=is_failure,
                 workflow_run_id=workflow_run_id if is_failure else None,
                 reason=normalized_status.value if is_failure else None,
+            )
+
+        if workflow_run.campaign_id and not already_reported:
+            # Before the retry is requested, so the orchestrator's "scheduled"
+            # lands after this, not before.
+            await webhook_sync_calling.call_not_connected(
+                workflow_run, normalized_status.value
             )
 
         if (

@@ -12,6 +12,7 @@ from loguru import logger
 
 from api.constants import DEPLOYMENT_MODE
 from api.db import db_client
+from api.services.campaign.continuous import campaign_bills_per_call
 from api.enums import WorkflowBillingMode
 from api.services.managed_model_services import get_mps_correlation_id
 from api.services.mps_service_key_client import mps_service_key_client
@@ -163,7 +164,9 @@ async def report_workflow_run_wallet_usage(workflow_run) -> None:
         if org is None or not org.wallet_enabled:
             return
 
-        if campaign_id is not None:
+        # A continuous campaign reserved nothing up front, so its calls are
+        # debited one by one like direct calls.
+        if campaign_id is not None and not await campaign_bills_per_call(campaign_id):
             await db_client.wallet_record_campaign_call_cost(
                 organization_id=organization_id,
                 campaign_id=campaign_id,
