@@ -242,10 +242,11 @@ class TestRefusalShape:
         )
         assert response.status_code == 200
         body = json.loads(response.body.decode())
-        assert body["success"] is False
-        assert body["message"]
+        # Exactly SmartFlo's schema: no extra keys (``additionalProperties:
+        # false``), and wss_url must match ^wss://.+ even on a refusal.
+        assert body == {"success": False, "wss_url": "wss://declined.invalid/"}
 
-    def test_every_rejection_reason_produces_a_message(self):
+    def test_every_rejection_reason_produces_the_same_refusal(self):
         import json
 
         for error in (
@@ -257,8 +258,7 @@ class TestRefusalShape:
         ):
             response = TataSmartfloProvider.generate_validation_error_response(error)
             body = json.loads(response.body.decode())
-            assert body["success"] is False
-            assert body["message"], f"no message for {error}"
+            assert body == {"success": False, "wss_url": "wss://declined.invalid/"}, error
 
     @pytest.mark.asyncio
     async def test_admission_returns_the_url_under_the_documented_key(self):
