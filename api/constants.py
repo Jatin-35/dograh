@@ -208,13 +208,23 @@ TUNER_BASE_URL = os.getenv("TUNER_BASE_URL", "https://api.usetuner.ai")
 
 # In-product AI assistant (chat-driven workflow authoring over Dograh's own
 # MCP tools). Deployment-wide, BYO credentials — separate from any per-org
-# LLM configuration. All five must be set for the feature to be enabled; see
-# api/services/workflow_gen/config.py.
+# LLM configuration. The provider plus its own settings must be set for the
+# feature to be enabled; see api/services/workflow_gen/config.py.
 WF_GEN_LLM_PROVIDER = os.getenv("WF_GEN_LLM_PROVIDER")
 WF_GEN_AZURE_OPENAI_API_KEY = os.getenv("WF_GEN_AZURE_OPENAI_API_KEY")
 WF_GEN_AZURE_OPENAI_ENDPOINT = os.getenv("WF_GEN_AZURE_OPENAI_ENDPOINT")
 WF_GEN_AZURE_OPENAI_DEPLOYMENT = os.getenv("WF_GEN_AZURE_OPENAI_DEPLOYMENT")
 WF_GEN_AZURE_OPENAI_API_VERSION = os.getenv("WF_GEN_AZURE_OPENAI_API_VERSION")
+# WF_GEN_LLM_PROVIDER=openai_compatible: any OpenAI-compatible Chat Completions
+# endpoint, e.g. Amazon Bedrock (base URL
+# https://bedrock-runtime.<region>.amazonaws.com/openai/v1, a Bedrock API key,
+# model global.openai.gpt-6-luna). Key, base URL and model are required.
+WF_GEN_OPENAI_API_KEY = os.getenv("WF_GEN_OPENAI_API_KEY")
+WF_GEN_OPENAI_BASE_URL = os.getenv("WF_GEN_OPENAI_BASE_URL")
+WF_GEN_OPENAI_MODEL = os.getenv("WF_GEN_OPENAI_MODEL")
+# Optional. GPT-6 models default to "none": in Chat Completions they only call
+# functions with reasoning_effort "none", and Scout always sends tools.
+WF_GEN_OPENAI_REASONING_EFFORT = os.getenv("WF_GEN_OPENAI_REASONING_EFFORT")
 # Loopback base URL the assistant uses to reach this same server's own MCP
 # endpoint. A real HTTP connection, not an in-process shortcut — an
 # httpx.ASGITransport connection to a Streamable HTTP FastMCP app breaks the

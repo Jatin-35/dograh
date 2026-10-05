@@ -269,6 +269,13 @@ services:
       WF_GEN_AZURE_OPENAI_ENDPOINT: "${WF_GEN_AZURE_OPENAI_ENDPOINT:-}"
       WF_GEN_AZURE_OPENAI_DEPLOYMENT: "${WF_GEN_AZURE_OPENAI_DEPLOYMENT:-}"
       WF_GEN_AZURE_OPENAI_API_VERSION: "${WF_GEN_AZURE_OPENAI_API_VERSION:-}"
+      # Or WF_GEN_LLM_PROVIDER=openai_compatible with these (e.g. Amazon
+      # Bedrock: base URL https://bedrock-runtime.ap-south-1.amazonaws.com/openai/v1,
+      # a Bedrock API key, model global.openai.gpt-6-luna).
+      WF_GEN_OPENAI_API_KEY: "${WF_GEN_OPENAI_API_KEY:-}"
+      WF_GEN_OPENAI_BASE_URL: "${WF_GEN_OPENAI_BASE_URL:-}"
+      WF_GEN_OPENAI_MODEL: "${WF_GEN_OPENAI_MODEL:-}"
+      WF_GEN_OPENAI_REASONING_EFFORT: "${WF_GEN_OPENAI_REASONING_EFFORT:-}"
 
       # Gemini Live cost controls. Gemini bills the whole accumulated context
       # every model turn and holds spoken history as audio, so a long call pays

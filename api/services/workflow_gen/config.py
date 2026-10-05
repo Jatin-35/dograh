@@ -12,17 +12,28 @@ from api.constants import (
     WF_GEN_AZURE_OPENAI_DEPLOYMENT,
     WF_GEN_AZURE_OPENAI_ENDPOINT,
     WF_GEN_LLM_PROVIDER,
+    WF_GEN_OPENAI_API_KEY,
+    WF_GEN_OPENAI_BASE_URL,
+    WF_GEN_OPENAI_MODEL,
 )
 
-SUPPORTED_PROVIDERS = {"azure_openai"}
+AZURE_OPENAI = "azure_openai"
+# Any OpenAI-compatible Chat Completions endpoint (Amazon Bedrock's
+# /openai/v1 for GPT-6 Luna, for one).
+OPENAI_COMPATIBLE = "openai_compatible"
+SUPPORTED_PROVIDERS = {AZURE_OPENAI, OPENAI_COMPATIBLE}
 
 
 def is_workflow_gen_configured() -> bool:
-    if WF_GEN_LLM_PROVIDER not in SUPPORTED_PROVIDERS:
-        return False
-    return bool(
-        WF_GEN_AZURE_OPENAI_API_KEY
-        and WF_GEN_AZURE_OPENAI_ENDPOINT
-        and WF_GEN_AZURE_OPENAI_DEPLOYMENT
-        and WF_GEN_AZURE_OPENAI_API_VERSION
-    )
+    if WF_GEN_LLM_PROVIDER == AZURE_OPENAI:
+        return bool(
+            WF_GEN_AZURE_OPENAI_API_KEY
+            and WF_GEN_AZURE_OPENAI_ENDPOINT
+            and WF_GEN_AZURE_OPENAI_DEPLOYMENT
+            and WF_GEN_AZURE_OPENAI_API_VERSION
+        )
+    if WF_GEN_LLM_PROVIDER == OPENAI_COMPATIBLE:
+        return bool(
+            WF_GEN_OPENAI_API_KEY and WF_GEN_OPENAI_BASE_URL and WF_GEN_OPENAI_MODEL
+        )
+    return False

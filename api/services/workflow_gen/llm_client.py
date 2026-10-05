@@ -1,4 +1,5 @@
-"""Azure OpenAI chat client for the in-product AI assistant.
+"""Chat client for the in-product AI assistant: Azure OpenAI, or any
+OpenAI-compatible endpoint (Amazon Bedrock's /openai/v1 for GPT-6 Luna).
 
 Plain `openai` SDK usage — mirrors the construction already proven in
 `api/services/gen_ai/embedding/azure_openai_service.py`, plus retry/timeout
@@ -13,7 +14,7 @@ from typing import Any
 
 import httpx
 from loguru import logger
-from openai import APIConnectionError, APITimeoutError, AsyncAzureOpenAI
+from openai import APIConnectionError, APITimeoutError, AsyncAzureOpenAI, AsyncOpenAI
 from openai.types.chat import ChatCompletion
 
 from api.constants import (
@@ -21,8 +22,16 @@ from api.constants import (
     WF_GEN_AZURE_OPENAI_API_VERSION,
     WF_GEN_AZURE_OPENAI_DEPLOYMENT,
     WF_GEN_AZURE_OPENAI_ENDPOINT,
+    WF_GEN_LLM_PROVIDER,
+    WF_GEN_OPENAI_API_KEY,
+    WF_GEN_OPENAI_BASE_URL,
+    WF_GEN_OPENAI_MODEL,
+    WF_GEN_OPENAI_REASONING_EFFORT,
 )
-from api.services.workflow_gen.config import is_workflow_gen_configured
+from api.services.workflow_gen.config import (
+    OPENAI_COMPATIBLE,
+    is_workflow_gen_configured,
+)
 from api.services.workflow_gen.transcript import PROVIDER_MAX_CONTENT_CHARS
 
 # Generous because this is a *read* timeout on a non-streaming request: nothing
@@ -52,7 +61,7 @@ class WorkflowGenNotConfiguredError(Exception):
     def __init__(self):
         super().__init__(
             "The in-product AI assistant isn't configured on this deployment "
-            "(WF_GEN_LLM_PROVIDER / WF_GEN_AZURE_OPENAI_* env vars)."
+            "(WF_GEN_LLM_PROVIDER plus WF_GEN_AZURE_OPENAI_* or WF_GEN_OPENAI_* env vars)."
         )
 
 
@@ -60,13 +69,41 @@ class WorkflowGenLLMError(Exception):
     """The LLM call failed after exhausting all retries."""
 
 
-_client: AsyncAzureOpenAI | None = None
+_client: AsyncAzureOpenAI | AsyncOpenAI | None = None
 
 
-def _get_client() -> AsyncAzureOpenAI:
+def _model() -> str:
+    """The model (Azure: the deployment) each request names."""
+    if WF_GEN_LLM_PROVIDER == OPENAI_COMPATIBLE:
+        return WF_GEN_OPENAI_MODEL or ""
+    return WF_GEN_AZURE_OPENAI_DEPLOYMENT or ""
+
+
+def _model_params() -> dict[str, Any]:
+    """Extra request fields the configured model needs.
+
+    GPT-6 models (gpt-6-luna, Bedrock's global.openai.gpt-6-luna) are
+    reasoning models that, in Chat Completions, only call functions with
+    reasoning_effort "none"; Scout always sends tools, so that is the default
+    unless WF_GEN_OPENAI_REASONING_EFFORT says otherwise.
+    """
+    if WF_GEN_LLM_PROVIDER != OPENAI_COMPATIBLE:
+        return {}
+    effort = WF_GEN_OPENAI_REASONING_EFFORT or ("none" if "gpt-6" in _model() else None)
+    return {"reasoning_effort": effort} if effort else {}
+
+
+def _get_client() -> AsyncAzureOpenAI | AsyncOpenAI:
     global _client
     if not is_workflow_gen_configured():
         raise WorkflowGenNotConfiguredError()
+    if _client is None and WF_GEN_LLM_PROVIDER == OPENAI_COMPATIBLE:
+        _client = AsyncOpenAI(
+            api_key=WF_GEN_OPENAI_API_KEY,
+            base_url=WF_GEN_OPENAI_BASE_URL,
+            timeout=httpx.Timeout(REQUEST_TIMEOUT_SECONDS, connect=CONNECT_TIMEOUT_SECONDS),
+            max_retries=0,  # the loop in `complete` owns retrying (see below)
+        )
     if _client is None:
         _client = AsyncAzureOpenAI(
             api_key=WF_GEN_AZURE_OPENAI_API_KEY,
@@ -146,10 +183,11 @@ async def complete(
         attempts = attempt + 1
         try:
             return await client.chat.completions.create(
-                model=WF_GEN_AZURE_OPENAI_DEPLOYMENT,
+                model=_model(),
                 messages=messages,
                 tools=tools,
                 tool_choice="auto",
+                **_model_params(),
             )
         except Exception as e:  # noqa: BLE001
             last_exc = e
