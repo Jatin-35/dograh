@@ -3,6 +3,7 @@
 import random
 
 from api.db.models import WorkflowRunModel
+from api.services.pipecat.service_factory import llm_provider_kwargs
 from api.services.workflow.dto import QANodeData
 
 
@@ -77,11 +78,9 @@ async def resolve_user_llm_config(
         api_key = random.choice(api_key)
     model = llm_config.get("model", "gpt-4.1")
 
-    kwargs = {}
-    if provider == "azure":
-        kwargs["endpoint"] = llm_config.get("endpoint", "")
-    elif provider == "openrouter" and llm_config.get("base_url"):
-        kwargs["base_url"] = llm_config["base_url"]
+    # Same endpoint and credentials as live calls (e.g. an OpenAI provider with
+    # Amazon Bedrock's base_url must not fall back to api.openai.com).
+    kwargs = llm_provider_kwargs(provider, llm_config.get)
 
     return provider, model, api_key, kwargs
 

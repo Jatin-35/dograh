@@ -1315,38 +1315,51 @@ def create_realtime_llm_service(user_config, audio_config: "AudioConfig"):
         )
 
 
+def llm_provider_kwargs(provider: str, get) -> dict:
+    """The provider-specific keyword arguments for create_llm_service_from_provider.
+
+    ``get(name)`` returns a field of the saved LLM configuration (or None). Shared
+    by live calls and post-call QA, so both reach the same endpoint with the same
+    credentials (e.g. an OpenAI-compatible base_url such as Amazon Bedrock's).
+    """
+    kwargs = {}
+    if provider == ServiceProviders.OPENAI.value:
+        kwargs["base_url"] = get("base_url")
+    elif provider == ServiceProviders.OPENROUTER.value:
+        kwargs["base_url"] = get("base_url")
+    elif provider == ServiceProviders.AZURE.value:
+        kwargs["endpoint"] = get("endpoint")
+    elif provider == ServiceProviders.SPEACHES.value:
+        kwargs["base_url"] = get("base_url")
+    elif provider == ServiceProviders.HUGGINGFACE.value:
+        kwargs["base_url"] = get("base_url")
+        kwargs["bill_to"] = get("bill_to")
+    elif provider == ServiceProviders.AWS_BEDROCK.value:
+        kwargs["aws_access_key"] = get("aws_access_key")
+        kwargs["aws_secret_key"] = get("aws_secret_key")
+        kwargs["aws_region"] = get("aws_region")
+    elif provider == ServiceProviders.GOOGLE_VERTEX.value:
+        kwargs["project_id"] = get("project_id")
+        kwargs["location"] = get("location")
+        kwargs["credentials"] = get("credentials")
+    elif provider == ServiceProviders.MINIMAX.value:
+        kwargs["base_url"] = get("base_url")
+        kwargs["temperature"] = get("temperature")
+    elif provider == ServiceProviders.SARVAM.value:
+        kwargs["base_url"] = get("base_url")
+        kwargs["temperature"] = get("temperature")
+    return kwargs
+
+
 def create_llm_service(user_config, correlation_id: str | None = None):
     """Create and return appropriate LLM service based on user configuration."""
     provider = user_config.llm.provider
     model = user_config.llm.model
     api_key = user_config.llm.api_key
 
-    kwargs = {}
-    if provider == ServiceProviders.OPENAI.value:
-        kwargs["base_url"] = user_config.llm.base_url
-    elif provider == ServiceProviders.OPENROUTER.value:
-        kwargs["base_url"] = user_config.llm.base_url
-    elif provider == ServiceProviders.AZURE.value:
-        kwargs["endpoint"] = user_config.llm.endpoint
-    elif provider == ServiceProviders.SPEACHES.value:
-        kwargs["base_url"] = user_config.llm.base_url
-    elif provider == ServiceProviders.HUGGINGFACE.value:
-        kwargs["base_url"] = user_config.llm.base_url
-        kwargs["bill_to"] = user_config.llm.bill_to
-    elif provider == ServiceProviders.AWS_BEDROCK.value:
-        kwargs["aws_access_key"] = user_config.llm.aws_access_key
-        kwargs["aws_secret_key"] = user_config.llm.aws_secret_key
-        kwargs["aws_region"] = user_config.llm.aws_region
-    elif provider == ServiceProviders.GOOGLE_VERTEX.value:
-        kwargs["project_id"] = user_config.llm.project_id
-        kwargs["location"] = user_config.llm.location
-        kwargs["credentials"] = user_config.llm.credentials
-    elif provider == ServiceProviders.MINIMAX.value:
-        kwargs["base_url"] = user_config.llm.base_url
-        kwargs["temperature"] = user_config.llm.temperature
-    elif provider == ServiceProviders.SARVAM.value:
-        kwargs["base_url"] = getattr(user_config.llm, "base_url", None)
-        kwargs["temperature"] = user_config.llm.temperature
+    kwargs = llm_provider_kwargs(
+        provider, lambda name: getattr(user_config.llm, name, None)
+    )
 
     return create_llm_service_from_provider(
         provider,

@@ -250,3 +250,49 @@ def test_real_openai_still_validates_by_listing_models(monkeypatch):
     cfg = OpenAIConfig(api_key="sk-test", model="gpt-6-luna")
     assert UserConfigurationValidator()._validate_service(cfg, "llm") == []
     assert calls.get("list") and "chat" not in calls  # no paid request
+
+
+async def _qa_resolve(llm):
+    from unittest.mock import patch
+
+    from api.services.workflow.qa import llm_config
+
+    async def fake_effective(**kwargs):
+        return SimpleNamespace(model_dump=lambda exclude_none: {"llm": llm})
+
+    run = SimpleNamespace(
+        initial_context={},
+        definition=None,
+        workflow=SimpleNamespace(organization_id=1, workflow_configurations={}),
+    )
+    with patch(
+        "api.services.configuration.ai_model_configuration."
+        "get_effective_ai_model_configuration_for_workflow",
+        fake_effective,
+    ):
+        return await llm_config.resolve_user_llm_config(run)
+
+
+@pytest.mark.asyncio
+async def test_post_call_qa_uses_the_agents_base_url_not_api_openai_com():
+    """QA once dropped the base_url, sending a Bedrock key to api.openai.com (401)."""
+    bedrock = "https://bedrock-runtime.ap-south-1.amazonaws.com/openai/v1"
+    provider, model, api_key, kwargs = await _qa_resolve(
+        {"provider": "openai", "model": "global.openai.gpt-6-luna",
+         "api_key": "ABSKtest", "base_url": bedrock}
+    )
+    assert (provider, model, api_key) == ("openai", "global.openai.gpt-6-luna", "ABSKtest")
+    assert kwargs == {"base_url": bedrock}
+    service = create_llm_service_from_provider(provider, model, api_key, **kwargs)
+    assert str(service._client.base_url).rstrip("/") == bedrock
+
+
+@pytest.mark.asyncio
+async def test_post_call_qa_gets_the_same_settings_as_live_calls():
+    llm = {"provider": "aws_bedrock", "model": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+           "aws_access_key": "AKIA", "aws_secret_key": "s", "aws_region": "ap-south-1"}
+    _, _, _, kwargs = await _qa_resolve(llm)
+    assert kwargs == {"aws_access_key": "AKIA", "aws_secret_key": "s", "aws_region": "ap-south-1"}
+    _, _, _, kwargs = await _qa_resolve({"provider": "azure", "model": "gpt-4.1",
+                                         "api_key": "k", "endpoint": "https://x.openai.azure.com"})
+    assert kwargs == {"endpoint": "https://x.openai.azure.com"}
