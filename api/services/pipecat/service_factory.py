@@ -1,3 +1,4 @@
+import re
 from typing import TYPE_CHECKING
 from urllib.parse import urlencode, urlparse, urlunparse
 
@@ -937,6 +938,17 @@ def create_llm_service_from_provider(
                 settings=OpenAILLMSettings(
                     model=model,
                     extra={"reasoning_effort": "none"},
+                ),
+                **kwargs,
+            )
+        if re.search(r"gpt-5\.\d", model):
+            # GPT-5.1 and later (e.g. Bedrock's "in.openai.gpt-5.6-luna") reject
+            # "minimal" and take "none" instead, the fastest setting for voice.
+            return OpenAILLMService(
+                api_key=api_key,
+                settings=OpenAILLMSettings(
+                    model=model,
+                    extra={"reasoning_effort": "none", "verbosity": "low"},
                 ),
                 **kwargs,
             )

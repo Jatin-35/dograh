@@ -51,6 +51,15 @@ def test_gpt5_and_older_models_are_unchanged():
     assert gpt41["temperature"] == 0.1 and "reasoning_effort" not in gpt41
 
 
+def test_newer_gpt5_models_get_none_not_minimal():
+    """GPT-5.1+ (e.g. Bedrock's in.openai.gpt-5.6-luna) reject "minimal"."""
+    for model in ("in.openai.gpt-5.6-luna", "gpt-5.1", "gpt-5.2-mini"):
+        params = _params(model)
+        assert (params["reasoning_effort"], params["verbosity"]) == ("none", "low"), model
+    for model in ("gpt-5", "gpt-5-mini", "gpt-5-nano"):
+        assert _params(model)["reasoning_effort"] == "minimal", model
+
+
 def test_the_model_is_offered_in_the_settings_dropdown():
     examples = OpenAIConfig.model_json_schema()["properties"]["model"]["examples"]
     assert "gpt-6-luna" in examples
