@@ -924,6 +924,22 @@ def create_llm_service_from_provider(
         if base_url:
             _validate_runtime_service_url(base_url, "base_url")
             kwargs["base_url"] = base_url
+        if "gpt-6" in model:
+            # GPT-6 models are reasoning models. In Chat Completions (which the
+            # pipeline uses) they only call functions with reasoning_effort
+            # "none", which is also the fastest for voice; "minimal" (used for
+            # gpt-5 below) is not one of their values, and temperature is left
+            # out as on other reasoning models. Matched anywhere in the id, so
+            # Amazon Bedrock's "global.openai.gpt-6-luna" (through its
+            # OpenAI-compatible /openai/v1 endpoint) is included.
+            return OpenAILLMService(
+                api_key=api_key,
+                settings=OpenAILLMSettings(
+                    model=model,
+                    extra={"reasoning_effort": "none"},
+                ),
+                **kwargs,
+            )
         if "gpt-5" in model:
             return OpenAILLMService(
                 api_key=api_key,

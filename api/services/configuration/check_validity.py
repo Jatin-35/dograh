@@ -47,6 +47,17 @@ _OPENAI_COMPATIBLE_PROVIDER_BASE_URLS = {
 }
 
 
+def _error_message(error: Exception) -> str:
+    """The provider's own error text from an OpenAI client error."""
+    body = getattr(error, "body", None)
+    if isinstance(body, dict):
+        inner = body.get("error") if isinstance(body.get("error"), dict) else body
+        message = inner.get("message")
+        if isinstance(message, str) and message:
+            return message[:500]
+    return str(error)[:500]
+
+
 class UserConfigurationValidator:
     def __init__(self):
         self._validator_map = {
@@ -265,8 +276,25 @@ class UserConfigurationValidator:
             client_kwargs["base_url"] = base_url
         client = openai.OpenAI(**client_kwargs)
         try:
-            client.models.list()
+            try:
+                client.models.list()
+            except openai.NotFoundError:
+                # Some OpenAI-compatible APIs have no models endpoint (Amazon
+                # Bedrock's /openai/v1 answers 404). Check the key with the
+                # smallest real request for the configured model instead.
+                if not base_url:
+                    raise
+                self._probe_openai_compatible_chat(client, service_config)
             return True
+        except openai.PermissionDeniedError as e:
+            # The key is valid but may not use this model: on Bedrock, model
+            # access or the AWS Marketplace subscription is missing. Show the
+            # provider's own reason; it says what to fix.
+            detail = _error_message(e)
+            raise ValueError(
+                f"The {provider_name} API at {base_url or 'api.openai.com'} accepted the "
+                f"key but refused access: {detail}"
+            )
         except openai.AuthenticationError:
             if base_url and "openai.com" not in base_url:
                 raise ValueError(
@@ -289,12 +317,15 @@ class UserConfigurationValidator:
                 "Could not connect to the OpenAI API. Please check your network connection "
                 "and try again."
             )
-        except openai.APIError:
+        except openai.APIError as e:
             if base_url:
+                # Include the provider's reason: e.g. Bedrock answers "The provided
+                # model identifier is invalid" for a display name like "GPT-6 Luna".
                 raise ValueError(
                     f"The OpenAI-compatible API at {base_url} returned an error while "
                     "validating the API key. Please verify that the base_url is correct, "
-                    "the service is available, and the API key is valid."
+                    "the model ID is exact, the service is available, and the API key "
+                    f"is valid. Provider said: {_error_message(e)}"
                 )
             raise ValueError(
                 "The OpenAI API returned an error while validating the API key. "
@@ -311,6 +342,23 @@ class UserConfigurationValidator:
             raise ValueError(
                 "Failed to validate the OpenAI API key. Please try again later."
             )
+
+    @staticmethod
+    def _probe_openai_compatible_chat(client, service_config) -> None:
+        """A one-token chat request with the configured model; raises the
+        client's error if the key or the model access is refused."""
+        model = getattr(service_config, "model", None) if service_config else None
+        if not model:
+            return
+        extra: dict = {}
+        if "gpt-6" in model:
+            extra["reasoning_effort"] = "none"  # see the factory's gpt-6 branch
+        client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": "ping"}],
+            max_completion_tokens=16,
+            **extra,
+        )
 
     def _check_deepgram_api_key(self, model: str, api_key: str) -> bool:
         try:

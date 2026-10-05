@@ -333,6 +333,7 @@ AZURE_REALTIME_PROVIDER_MODEL_CONFIG = provider_model_config(
 
 OPENAI_MODELS = [
     "gpt-4.1",
+    "gpt-6-luna",
     "gpt-4.1-mini",
     "gpt-4.1-nano",
     "gpt-5",
