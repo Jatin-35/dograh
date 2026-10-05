@@ -208,7 +208,9 @@ async def append_workflow_gen_message(
         except ValueError as e:
             yield _sse({"type": "error", "data": {"code": "internal", "message": str(e)}}, -1)
         except PendingActionRequiredError as e:
-            yield _sse({"type": "error", "data": {"code": "internal", "message": str(e)}}, -1)
+            # Its own code so the panel can reload the session and show the
+            # card it is waiting on, rather than leave the user stuck.
+            yield _sse({"type": "error", "data": {"code": "pending_action", "message": str(e)}}, -1)
         except WorkflowGenChatSessionRevisionConflictError as e:
             yield _sse(
                 {

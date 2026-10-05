@@ -4,7 +4,12 @@
 // api/services/workflow_gen/agent_loop.py exactly — keep the two in sync.
 // ---------------------------------------------------------------------------
 
-export type WorkflowGenErrorCode = "llm_failure" | "tool_failure" | "validation_failed" | "internal";
+export type WorkflowGenErrorCode =
+    | "llm_failure"
+    | "tool_failure"
+    | "validation_failed"
+    | "internal"
+    | "pending_action";
 
 export type WorkflowGenEvent =
     | { type: "status"; data: { message: string } }

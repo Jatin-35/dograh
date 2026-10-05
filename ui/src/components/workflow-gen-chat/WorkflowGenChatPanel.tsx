@@ -7,7 +7,7 @@ import {
     useExternalStoreRuntime,
 } from "@assistant-ui/react";
 import { ArrowUp, Loader2, Sparkles, Square, X } from "lucide-react";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -245,6 +245,9 @@ export function WorkflowGenChatPanel({
         onBusyChange?.(busy);
     }, [busy, onBusyChange]);
 
+    // Read inside `onNew`, which is created before `runtime` exists.
+    const runtimeRef = useRef<ReturnType<typeof useExternalStoreRuntime> | null>(null);
+
     const runtime = useExternalStoreRuntime<WorkflowGenThreadItem>({
         messages: thread,
         convertMessage,
@@ -253,10 +256,14 @@ export function WorkflowGenChatPanel({
         onNew: async (message) => {
             const textPart = message.content.find((part) => part.type === "text");
             if (textPart && textPart.type === "text") {
-                await sendMessage(textPart.text);
+                const sent = await sendMessage(textPart.text);
+                // Refused while an action awaits a decision: give the text back
+                // so a long message isn't lost while the user resolves the card.
+                if (sent === false) runtimeRef.current?.thread.composer.setText(textPart.text);
             }
         },
     });
+    runtimeRef.current = runtime;
 
     const isEditingExistingWorkflow = workflowId != null;
 

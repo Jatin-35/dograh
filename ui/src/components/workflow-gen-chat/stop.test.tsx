@@ -82,7 +82,7 @@ describe("Stop", () => {
     it("cancels the reply, shows Stopped, raises no error, and refreshes the revision", async () => {
         const { result } = await loaded();
 
-        let sending!: Promise<void>;
+        let sending!: Promise<boolean>;
         act(() => {
             sending = result.current.sendMessage("add a transfer tool");
         });
@@ -104,7 +104,7 @@ describe("Stop", () => {
 
     it("sends the next message with the refreshed revision, so it isn't refused", async () => {
         const { result } = await loaded();
-        let sending!: Promise<void>;
+        let sending!: Promise<boolean>;
         act(() => {
             sending = result.current.sendMessage("first");
         });
@@ -143,7 +143,7 @@ describe("Stop", () => {
         act(() => result.current.stop()); // nothing in flight
         expect(h.getSession).not.toHaveBeenCalled();
 
-        let sending!: Promise<void>;
+        let sending!: Promise<boolean>;
         act(() => {
             sending = result.current.sendMessage("hi");
         });
@@ -170,7 +170,7 @@ describe("Stop", () => {
     it("if refreshing after Stop fails, the panel still recovers", async () => {
         h.getSession.mockResolvedValue({ error: { detail: "nope" } });
         const { result } = await loaded();
-        let sending!: Promise<void>;
+        let sending!: Promise<boolean>;
         act(() => {
             sending = result.current.sendMessage("hi");
         });
@@ -181,5 +181,52 @@ describe("Stop", () => {
         });
         expect(result.current.sendingMessage).toBe(false);
         expect(result.current.session?.revision).toBe(3); // unchanged, no crash
+    });
+});
+
+describe("a message refused because an action awaits a decision", () => {
+    it("reloads the session to show the pending card and reports the text as not sent", async () => {
+        const pendingSession = {
+            ...SESSION,
+            revision: 9,
+            status: "awaiting_confirmation",
+            pending_action: { action_id: "a1", action_type: "replace_in_node", preview: {} },
+        };
+        h.getSession.mockResolvedValue({ data: pendingSession });
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async () => {
+                const body = new ReadableStream<Uint8Array>({
+                    start(controller) {
+                        controller.enqueue(
+                            frame({
+                                type: "error",
+                                data: { code: "pending_action", message: "awaiting your confirmation" },
+                                revision: -1,
+                            }),
+                        );
+                        controller.close();
+                    },
+                });
+                return new Response(body, { status: 200 });
+            }),
+        );
+        const { result } = await loaded();
+        expect(result.current.hasPendingAction).toBe(false); // the stale view
+
+        let sent!: boolean;
+        await act(async () => {
+            sent = await result.current.sendMessage("a long message");
+        });
+
+        expect(sent).toBe(false);
+        expect(h.getSession).toHaveBeenCalledWith({ path: { session_id: 7 } });
+        expect(result.current.hasPendingAction).toBe(true);
+        const last = result.current.thread[result.current.thread.length - 1];
+        expect(last).toMatchObject({ kind: "approval", actionId: "a1", resolved: false });
+        // The refused text is not left in the thread as if it had been sent.
+        expect(result.current.thread.some((i) => i.kind === "user")).toBe(false);
+        expect(result.current.session?.revision).toBe(9);
+        expect(h.toastError).toHaveBeenCalledWith(expect.stringContaining("wasn't sent"));
     });
 });

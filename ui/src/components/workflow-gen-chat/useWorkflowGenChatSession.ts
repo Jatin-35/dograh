@@ -180,7 +180,15 @@ export function useWorkflowGenChatSession({
     /** Start a fresh standalone session and make it active ("New thread"). */
     const startNewSession = useCallback(() => loadSession({ forceNew: true }), [loadSession]);
 
+    // Set when the server refuses a message because an action is still awaiting
+    // a decision; `sendMessage` then reloads the session to show that card.
+    const refusedForPendingRef = useRef(false);
+
     const handleEvent = useCallback((event: WorkflowGenEvent) => {
+        if (event.type === "error" && event.data.code === "pending_action") {
+            refusedForPendingRef.current = true;
+            return;
+        }
         if (event.type === "status") {
             setStatusMessage(event.data.message);
             // Append to the turn's step group so the work stays visible after
@@ -247,11 +255,27 @@ export function useWorkflowGenChatSession({
         }
     }, [session]);
 
-    const sendMessage = useCallback(
-        async (text: string) => {
-            const trimmed = text.trim();
-            if (!session || !trimmed) return;
+    /** Re-read the session and rebuild the thread from it, so the card the
+     * server is waiting on is on screen (last in the thread) and the composer
+     * locks until it is resolved. */
+    const reloadPendingCard = useCallback(async () => {
+        if (!session) return;
+        const response = await getWorkflowGenSessionApiV1WorkflowGenSessionsSessionIdGet({
+            path: { session_id: session.id },
+        });
+        if (response.error || !response.data) return;
+        setSession(response.data);
+        setThread(threadFromSession(response.data));
+    }, [session]);
 
+    /** Sends one user turn. Resolves false when the server refused it because
+     * an action still awaits a decision, so the caller can give the text back. */
+    const sendMessage = useCallback(
+        async (text: string): Promise<boolean> => {
+            const trimmed = text.trim();
+            if (!session || !trimmed) return true;
+
+            refusedForPendingRef.current = false;
             setThread((prev) => appendStep([...prev, { id: `user-${Date.now()}`, kind: "user", text: trimmed }], THINKING));
             setSendingMessage(true);
             try {
@@ -268,8 +292,15 @@ export function useWorkflowGenChatSession({
                 setStatusMessage(null);
                 setThread(settleSteps);
             }
+            if (refusedForPendingRef.current) {
+                refusedForPendingRef.current = false;
+                await reloadPendingCard();
+                toast.error("Your message wasn't sent: confirm or cancel the proposed change above first.");
+                return false;
+            }
+            return true;
         },
-        [session, streamFrom, afterStop],
+        [session, streamFrom, afterStop, reloadPendingCard],
     );
 
     const confirmPendingAction = useCallback(

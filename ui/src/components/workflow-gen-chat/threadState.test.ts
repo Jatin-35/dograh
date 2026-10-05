@@ -221,6 +221,43 @@ describe("threadFromSession — reopening a thread", () => {
         expect(open[0]).toMatchObject({ actionId: "orphaned" });
     });
 
+    it("leaves only the server's pending card open, never an older one", () => {
+        // The regression: an earlier declined approval replayed as open, so the
+        // user cancelled that one (a server no-op), the composer unlocked, and
+        // the real pending action stayed hidden while every message was refused.
+        const thread = threadFromSession(
+            session({
+                events: [userEvent("first"), approvalEvent("old"), userEvent("second"), approvalEvent("current")],
+                messages: [
+                    { role: "user", content: "first" },
+                    { role: "user", content: "second" },
+                ],
+                pending: { action_id: "current", action_type: "save_workflow" },
+            }),
+        );
+        const open = thread.filter((i) => i.kind === "approval" && !i.resolved);
+        expect(open).toHaveLength(1);
+        expect(open[0]).toMatchObject({ actionId: "current" });
+    });
+
+    it("adds the pending card when only older approvals replayed", () => {
+        const thread = threadFromSession(
+            session({
+                events: [userEvent("first"), approvalEvent("old"), userEvent("second")],
+                messages: [
+                    { role: "user", content: "first" },
+                    { role: "user", content: "second" },
+                ],
+                pending: { action_id: "aged-out", action_type: "replace_in_node", preview: {} },
+            }),
+        );
+        const open = thread.filter((i) => i.kind === "approval" && !i.resolved);
+        expect(open).toHaveLength(1);
+        expect(open[0]).toMatchObject({ actionId: "aged-out" });
+        // The open card is the last thing in the thread, where the user looks.
+        expect(thread[thread.length - 1]).toMatchObject({ actionId: "aged-out" });
+    });
+
     it("does not add a second card when the pending one already replayed", () => {
         const thread = threadFromSession(
             session({

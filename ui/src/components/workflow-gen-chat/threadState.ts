@@ -140,12 +140,23 @@ export function threadFromEvents(session: WorkflowGenChatSessionResponse): Workf
         return items.map((item) => (item.kind === "approval" ? { ...item, resolved: true } : item));
     }
 
+    // Only the card matching `pending_action` is still open. Earlier approvals
+    // that were declined (no event of their own) or approved without a
+    // `workflow_ready` would otherwise replay as open too: the user cancels one
+    // of those, the server ignores it as already resolved, the composer
+    // unlocks, and the real pending card stays hidden while every message is
+    // refused.
+    const pendingId = (session.pending_action as PendingAction).action_id;
+    const settled = items.map((item) =>
+        item.kind === "approval" && item.actionId !== pendingId ? { ...item, resolved: true } : item,
+    );
+
     // The server says something is awaiting a decision, so a card must be on
     // screen to make it. If the event that produced it aged out of the capped
     // log, rebuild it from `pending_action` — otherwise the composer looks
     // usable while the server rejects every message, with no way out at all.
-    const alreadyShown = items.some((item) => item.kind === "approval" && !item.resolved);
-    return alreadyShown ? items : [...items, approvalFromPendingAction(session)!];
+    const alreadyShown = settled.some((item) => item.kind === "approval" && !item.resolved);
+    return alreadyShown ? settled : [...settled, approvalFromPendingAction(session)!];
 }
 
 type PendingAction = {
