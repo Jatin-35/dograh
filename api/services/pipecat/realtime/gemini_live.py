@@ -287,6 +287,26 @@ class DograhGeminiLiveLLMService(GeminiLiveLLMService):
         await self._await_outgoing_connection_stopped(outgoing_task)
         await self._connect(session_resumption_handle=None)
 
+    async def _reconnect(self) -> None:
+        """Resume once; if Google refuses the resume, reconnect fresh.
+
+        Upstream retries the same resumption handle on every attempt. After
+        Google drops a session (1011), gemini-3.8-live can refuse every resume
+        of it with 1011 for minutes while its server still holds the dead
+        connection (google-gemini/gemini-live-api-examples#60), so all three
+        attempts failed and the call ended (run 667). The second attempt now
+        starts a fresh session and reseeds it from LLMContext through the
+        compaction-refresh path, which also holds the caller's audio meanwhile.
+        """
+        if self._session_resumption_handle and self._consecutive_failures >= 2:
+            logger.warning(
+                f"{self}: resuming the Gemini Live session was refused; "
+                "reconnecting fresh and reseeding the conversation"
+            )
+            self._session_resumption_handle = None
+            self._awaiting_context_compaction_seed = True
+        await super()._reconnect()
+
     # ------------------------------------------------------------------
     # Superseded connections must not trigger reconnects (run-442)
     # ------------------------------------------------------------------
