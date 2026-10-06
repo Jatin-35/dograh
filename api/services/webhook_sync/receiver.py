@@ -103,6 +103,17 @@ async def receive_webhook(
             {"Retry-After": str(retry_after)},
         )
 
+    if not raw_body.strip():
+        # A CRM verifying the URL (LeadSquared requires 200 "even when no
+        # payload is passed"). Nothing is created, so no credentials are
+        # needed, and it isn't counted as a failure for alerts. Logged so the
+        # check shows in the endpoint's request log.
+        await _log(200, "Empty body: treated as a URL check, nothing created")
+        return ReceiveResult(
+            200,
+            {"success": True, "received": 0, "message": "Endpoint is ready; no leads in an empty request."},
+        )
+
     failure = auth_failure(
         endpoint.auth_type, endpoint.secret, headers, query, raw_body
     )

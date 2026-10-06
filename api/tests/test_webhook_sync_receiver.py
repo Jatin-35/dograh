@@ -633,6 +633,41 @@ async def test_http_route_end_to_end(env):
     assert streamed.status_code == 413
 
 
+@pytest.mark.asyncio
+async def test_leadsquared_url_check_passes(env):
+    """LeadSquared won't save a webhook ("Webhook URL is invalid") unless the
+    URL answers HEAD with 200, and 200 even with no payload."""
+    from api.app import app
+
+    endpoint = await env.make_endpoint()
+    url = f"/api/v1/webhooks/inbound/{endpoint.endpoint_uuid}"
+    transport = httpx.ASGITransport(app=app)
+    with patch(
+        "api.services.webhook_sync.receiver.record_request_outcome", new=AsyncMock()
+    ) as outcome:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            head = await client.head(url)
+            get = await client.get(url)
+            unknown = await client.head("/api/v1/webhooks/inbound/not-a-real-endpoint")
+            # No credentials, as a CRM's check sends none.
+            empty = await client.post(url, content=b"", headers={"Content-Type": "application/json"})
+            blank = await client.post(url, content=b"  \n", headers={"Content-Type": "application/json"})
+            still_guarded = await client.post(url, json={"name": "Rahul", "mobile": "9876543210"})
+
+    assert head.status_code == 200 and get.status_code == 200
+    # Same answer for any id: the check reveals nothing about which exist.
+    assert unknown.status_code == 200
+    assert empty.status_code == 200 and empty.json()["received"] == 0
+    assert blank.status_code == 200
+    assert await env.leads(endpoint) == []
+    # A URL check is not a failed request, so it can't trigger failure alerts...
+    assert [c.args[1] for c in outcome.await_args_list] == [False]  # only the unauthenticated lead
+    # ...but a request carrying a lead still needs credentials.
+    assert still_guarded.status_code == 401
+    checks = [log for log in await env.logs(endpoint) if log.response_code == 200]
+    assert len(checks) == 2 and "URL check" in checks[0].error
+
+
 # ---------------------------------------------------------------------------
 # Management API (organization-scoped)
 # ---------------------------------------------------------------------------

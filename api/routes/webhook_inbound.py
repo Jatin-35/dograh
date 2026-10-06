@@ -23,6 +23,17 @@ def _too_large() -> JSONResponse:
     )
 
 
+@router.api_route("/{endpoint_uuid}", methods=["GET", "HEAD"])
+async def webhook_handshake(endpoint_uuid: str) -> JSONResponse:
+    """Answer a CRM's reachability check with 200.
+
+    LeadSquared refuses to save a webhook ("Webhook URL is invalid") unless the
+    URL answers HEAD with 200. Nothing is looked up, so this reveals nothing
+    about which endpoints exist; leads still arrive only by POST.
+    """
+    return JSONResponse({"success": True, "message": "Send leads to this URL with POST."})
+
+
 @router.post("/{endpoint_uuid}")
 async def receive_lead_webhook(endpoint_uuid: str, request: Request) -> JSONResponse:
     """Accept one lead (JSON object or form post) or several (JSON array).
