@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
     cleanMapping,
@@ -263,12 +264,35 @@ export function MappingEditor({ value, onChange, endpointId }: MappingEditorProp
                 <CardHeader>
                     <CardTitle>Extra call variables</CardTitle>
                     <CardDescription>
-                        Every plain field the CRM sends already becomes a variable (a field called{" "}
-                        <code>Lead Source</code> is <code>{"{{lead_source}}"}</code>). Add one here to give a nested
-                        field a name your agent&apos;s prompt uses.
+                        {value.only_mapped ? (
+                            <>
+                                Only the fields above and the variables you add here reach the agent; everything else
+                                the CRM sends is left out.
+                            </>
+                        ) : (
+                            <>
+                                Every plain field the CRM sends already becomes a variable (a field called{" "}
+                                <code>Lead Source</code> is <code>{"{{lead_source}}"}</code>). Add one here to give a
+                                nested field a name your agent&apos;s prompt uses.
+                            </>
+                        )}
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
+                    <div className="flex items-start justify-between gap-4 rounded-md border p-3">
+                        <div className="space-y-0.5">
+                            <Label htmlFor={`${listId}-only-mapped`}>Only keep mapped fields</Label>
+                            <p className="text-xs text-muted-foreground">
+                                Drop every other field the CRM sends (LeadSquared sends about 70). The original
+                                payload stays on the lead&apos;s page for 30 days.
+                            </p>
+                        </div>
+                        <Switch
+                            id={`${listId}-only-mapped`}
+                            checked={Boolean(value.only_mapped)}
+                            onCheckedChange={(checked) => onChange({ ...value, only_mapped: checked })}
+                        />
+                    </div>
                     {customEntries.map(([name, path], index) => (
                         <div key={index} className="grid grid-cols-[1fr_1fr_auto] items-center gap-2">
                             <Input

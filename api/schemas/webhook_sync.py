@@ -28,6 +28,9 @@ class FieldMapping(BaseModel):
     language_preference: Optional[str] = Field(default=None, max_length=255)
     # Extra call variables: {"product": "data.product"} → {{product}}.
     custom: Dict[str, str] = Field(default_factory=dict)
+    # Keep only the standard fields and the custom ones above as call
+    # variables, instead of every field the CRM sent (LeadSquared sends ~70).
+    only_mapped: bool = False
 
     @field_validator("custom")
     @classmethod

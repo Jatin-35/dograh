@@ -626,3 +626,76 @@ def test_leadsquared_custom_fields_are_also_variables_without_the_prefix():
     assert lead.variables["mx_budget"] == "50L"
     # A field the CRM sent under the plain name wins.
     assert lead.variables["plan"] == "Silver"
+
+
+# A real LeadSquared lead-creation webhook (6 Oct 2026), trimmed of nothing:
+# about 70 fields, of which the agent needs a handful.
+_LEADSQUARED_LEAD = {
+    "ProspectID": "df783132-b696-416d-9269-dbe0d7d43a2e",
+    "ProspectAutoId": "1033845",
+    "FirstName": "sunil webhook test",
+    "LastName": None,
+    "EmailAddress": None,
+    "Origin": "API",
+    "Phone": "+91-9876543210",
+    "Mobile": None,
+    "Source": "Contact Us",
+    "ProspectStage": "Raw",
+    "Score": "0",
+    "EngagementScore": "0",
+    "OwnerId": "80381a1d-dfd1-11ee-8d08-0261eba56ddf",
+    "CreatedOn": "2026-10-06 17:45:19",
+    "mx_Query_type": "Household",
+    "NotableEvent": "Created",
+    "mx_Alternate_Email_Address": "tree@qwerty.com",
+    "mx_Enquired_City": "Raipur",
+    "mx_Enquired_State": "Chattisgarh",
+    "OwnerIdEmailAddress": "Care@vectus.in",
+    "Account_CompanyName": "Vectus Polymers Private Limited",
+    "Account_Address": "Vectus Polymers Private Limited{mxnewline}A101 Sector 83",
+    "Org_ShortCode": "73348",
+    "CanUpdate": "true",
+}
+
+_VECTUS_MAPPING = {
+    "phone": "Phone",
+    "name": "FirstName",
+    "city": "mx_Enquired_City",
+    "source": "Source",
+    "custom": {"state": "mx_Enquired_State", "query_type": "mx_Query_type"},
+}
+
+
+def test_by_default_every_crm_field_becomes_a_variable():
+    lead = map_lead(_LEADSQUARED_LEAD, _VECTUS_MAPPING)
+    assert lead.variables["state"] == "Chattisgarh"
+    # The clutter comes through too.
+    assert lead.variables["owneridemailaddress"] == "Care@vectus.in"
+    assert "account_companyname" in lead.variables
+
+
+def test_only_mapped_keeps_just_the_mapped_fields():
+    lead = map_lead(_LEADSQUARED_LEAD, {**_VECTUS_MAPPING, "only_mapped": True})
+    assert lead.variables == {
+        "state": "Chattisgarh",
+        "query_type": "Household",
+        "name": "sunil webhook test",
+        "source": "Contact Us",
+        "city": "Raipur",
+    }
+    # The lead itself is still read in full: the phone still reaches the call.
+    assert lead.phone_raw == "+91-9876543210"
+    assert normalize_indian_mobile(lead.phone_raw) == "+919876543210"
+
+
+def test_only_mapped_with_nothing_mapped_keeps_the_detected_basics():
+    lead = map_lead(_LEADSQUARED_LEAD, {"only_mapped": True})
+    assert set(lead.variables) <= {"name", "email", "source", "city", "language_preference"}
+    assert lead.variables["name"] == "sunil webhook test"
+    assert lead.phone_raw == "+91-9876543210"
+
+
+def test_the_switch_is_saved_with_the_mapping_and_off_by_default():
+    assert FieldMapping().only_mapped is False
+    saved = FieldMapping.model_validate({**_VECTUS_MAPPING, "only_mapped": True})
+    assert saved.model_dump(exclude_none=True)["only_mapped"] is True

@@ -95,6 +95,17 @@ describe("cleanMapping", () => {
     });
 });
 
+describe("cleanMapping only_mapped", () => {
+    it("keeps the switch only when it is on", () => {
+        expect(cleanMapping({ phone: "Phone", custom: {}, only_mapped: true })).toEqual({
+            phone: "Phone",
+            custom: {},
+            only_mapped: true,
+        });
+        expect(cleanMapping({ phone: "Phone", custom: {}, only_mapped: false })).toEqual({ phone: "Phone", custom: {} });
+    });
+});
+
 describe("curlExample", () => {
     const url = "https://voice-app.example/api/v1/webhooks/inbound/abc";
 

@@ -228,17 +228,18 @@ def map_lead(payload: dict, field_mapping: Optional[dict] = None) -> MappedLead:
             setattr(lead, standard_field, value)
 
     variables: dict[str, str] = {}
-    # Every plain field the CRM sent, so prompts can use any of them.
-    for level in reversed(_levels(payload)):
-        for key, value in level.items():
-            text = _scalar(value)
-            name = variable_name(key)
-            if text is not None and name:
-                variables.setdefault(name, text)
-    # LeadSquared prefixes its custom fields (mx_Budget): also offer each one
-    # under its plain name ({{budget}}), unless the CRM sent that name too.
-    for name in [n for n in variables if n.startswith("mx_") and len(n) > 3]:
-        variables.setdefault(name[3:], variables[name])
+    if not field_mapping.get("only_mapped"):
+        # Every plain field the CRM sent, so prompts can use any of them.
+        for level in reversed(_levels(payload)):
+            for key, value in level.items():
+                text = _scalar(value)
+                name = variable_name(key)
+                if text is not None and name:
+                    variables.setdefault(name, text)
+        # LeadSquared prefixes its custom fields (mx_Budget): also offer each one
+        # under its plain name ({{budget}}), unless the CRM sent that name too.
+        for name in [n for n in variables if n.startswith("mx_") and len(n) > 3]:
+            variables.setdefault(name[3:], variables[name])
     # Explicitly mapped custom fields override detected ones.
     custom = field_mapping.get("custom") or {}
     if isinstance(custom, dict):

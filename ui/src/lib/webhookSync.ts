@@ -37,9 +37,11 @@ export interface FieldMapping {
     city?: string | null;
     language_preference?: string | null;
     custom: Record<string, string>;
+    /** Keep only the standard fields and `custom` as call variables. */
+    only_mapped?: boolean;
 }
 
-export type StandardField = Exclude<keyof FieldMapping, "custom">;
+export type StandardField = Exclude<keyof FieldMapping, "custom" | "only_mapped">;
 
 export interface CallingHours {
     start: string;
@@ -604,6 +606,7 @@ export function cleanMapping(mapping: FieldMapping): FieldMapping {
     for (const [name, path] of Object.entries(mapping.custom ?? {})) {
         if (name.trim() && path.trim()) cleaned.custom[name.trim()] = path.trim();
     }
+    if (mapping.only_mapped) cleaned.only_mapped = true;
     return cleaned;
 }
 

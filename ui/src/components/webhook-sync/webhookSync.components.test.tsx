@@ -334,6 +334,24 @@ describe("MappingEditor", () => {
         expect(onChange).toHaveBeenLastCalledWith({ custom: { field_1: "" } });
     });
 
+    it("turns on 'Only keep mapped fields' and previews with it", async () => {
+        api.previewMapping.mockResolvedValue({ lead_count: 1, outcome: "received", fields: {}, variables: {}, paths: [] });
+        const onChange = vi.fn();
+        const { MappingEditor } = await import("./MappingEditor");
+        const { rerender } = render(<MappingEditor value={{ phone: "Phone", custom: {} }} onChange={onChange} />);
+
+        const toggle = screen.getByRole("switch", { name: "Only keep mapped fields" });
+        expect(toggle.getAttribute("aria-checked")).toBe("false");
+        fireEvent.click(toggle);
+        expect(onChange).toHaveBeenLastCalledWith({ phone: "Phone", custom: {}, only_mapped: true });
+
+        rerender(<MappingEditor value={{ phone: "Phone", custom: {}, only_mapped: true }} onChange={onChange} />);
+        expect(screen.getByText(/everything else the CRM sends is left out/)).toBeTruthy();
+        fireEvent.change(screen.getByPlaceholderText(/FirstName/), { target: { value: '{"Phone":"+91-9876543210"}' } });
+        await waitFor(() => expect(api.previewMapping).toHaveBeenCalled());
+        expect(api.previewMapping.mock.calls.at(-1)![2]).toEqual({ phone: "Phone", custom: {}, only_mapped: true });
+    });
+
     it("pulls in the last request's body, skipping rejected ones", async () => {
         const logs: RequestLog[] = [
             { id: 2, endpoint_id: 3, method: "POST", headers: {}, raw_body: '{"x":1}', body_truncated: false, response_code: 401, received_at: "" },
