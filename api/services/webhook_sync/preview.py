@@ -66,6 +66,8 @@ def preview_mapping(
         "outcome": outcome,
         "reason": reason,
         "fields": fields,
-        "variables": mapped.variables,
+        # As the call will get them: calling adds the cleaned number as
+        # {{phone_number}} (call_context), so show it here too.
+        "variables": {**mapped.variables, "phone_number": phone} if phone else mapped.variables,
         "paths": leaf_paths(first),
     }

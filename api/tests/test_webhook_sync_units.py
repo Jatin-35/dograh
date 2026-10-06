@@ -567,6 +567,23 @@ def test_preview_explains_a_missing_or_invalid_phone():
     assert missing["outcome"] == "rejected" and "phone" in missing["reason"]
     invalid = preview_mapping('{"mobile": "12345"}', "application/json", {})
     assert invalid["outcome"] == "invalid_number" and invalid["phone"] is None
+    # No callable number, so no {{phone_number}} for the agent either.
+    assert "phone_number" not in invalid["variables"]
+
+
+def test_preview_lists_the_phone_number_the_agent_will_get():
+    """Calling adds the cleaned number as {{phone_number}}; the preview shows
+    it so its list matches what the agent gets (only-mapped included)."""
+    from api.services.webhook_sync.preview import preview_mapping
+
+    sample = json.dumps({**_LEADSQUARED_LEAD, "Phone": "+91-9056789012"})
+    result = preview_mapping(
+        sample, "application/json", {**_VECTUS_MAPPING, "only_mapped": True}
+    )
+    assert result["variables"]["phone_number"] == "+919056789012"
+    assert set(result["variables"]) == {
+        "state", "query_type", "name", "source", "city", "phone_number"
+    }
 
 
 def test_preview_accepts_form_data_and_arrays_and_rejects_garbage():
