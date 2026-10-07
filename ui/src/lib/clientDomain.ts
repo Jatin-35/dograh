@@ -85,6 +85,32 @@ export function clientRedirectTarget(input: ClientDomainInput): string | null {
     return new URL(here, input.clientUrl).toString();
 }
 
+/** Query parameter marking a page reached through a guard redirect. Each
+ * domain keeps its own sign-in, so one browser can be signed in as a client on
+ * one domain and a superuser on another; without this the two would send each
+ * other back and forth forever. */
+export const HOP_PARAM = "dg_hop";
+
+/** `target` with the hop marker added. */
+export function withHop(target: string): string {
+    const url = new URL(target);
+    url.searchParams.set(HOP_PARAM, "1");
+    return url.toString();
+}
+
+/** Whether this page was reached through a guard redirect. */
+export function arrivedByHop(search: string): boolean {
+    return new URLSearchParams(search).has(HOP_PARAM);
+}
+
+/** `search` without the hop marker (so it isn't carried any further). */
+export function withoutHop(search: string): string {
+    const params = new URLSearchParams(search);
+    params.delete(HOP_PARAM);
+    const rest = params.toString();
+    return rest ? `?${rest}` : "";
+}
+
 /** The Stack user id in an access token (its unverified `sub` claim). */
 export function subjectOfAccessToken(token: string): string | null {
     try {

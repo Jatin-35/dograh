@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { clientRedirectTarget, isClientDomain, readCookie, subjectOfAccessToken } from "./clientDomain";
+import {
+    arrivedByHop,
+    clientRedirectTarget,
+    isClientDomain,
+    readCookie,
+    subjectOfAccessToken,
+    withHop,
+    withoutHop,
+} from "./clientDomain";
 
 const URLS = {
     adminUrl: "https://admin-voice.botrixai.com",
@@ -110,5 +118,16 @@ describe("isClientDomain", () => {
         expect(isClientDomain("voicedashboard.botrixai.com", URLS.clientUrl)).toBe(true);
         expect(isClientDomain("admin-voice.botrixai.com", URLS.clientUrl)).toBe(false);
         expect(isClientDomain("voicedashboard.botrixai.com", undefined)).toBe(false);
+    });
+});
+
+describe("hop marker", () => {
+    it("adds, detects and removes it without touching other parameters", () => {
+        const target = withHop("https://voicedashboard.botrixai.com/workflow/7?tab=runs");
+        expect(target).toBe("https://voicedashboard.botrixai.com/workflow/7?tab=runs&dg_hop=1");
+        expect(arrivedByHop("?tab=runs&dg_hop=1")).toBe(true);
+        expect(arrivedByHop("?tab=runs")).toBe(false);
+        expect(withoutHop("?tab=runs&dg_hop=1")).toBe("?tab=runs");
+        expect(withoutHop("?dg_hop=1")).toBe("");
     });
 });
