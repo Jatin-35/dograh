@@ -225,3 +225,52 @@ describe("GET /impersonate", () => {
         expect(freshSets[0].secure).toBe(false);
     });
 });
+
+describe("GET /impersonate marks which account is impersonated", () => {
+    const markerOf = (response: Response) =>
+        response.headers
+            .getSetCookie()
+            .map(parseSetCookie)
+            .find((c) => c.name === "botrix-impersonating");
+
+    it("records the impersonated Stack user for the app domain", async () => {
+        const response = await GET(
+            makeRequest(
+                "https://app.dograh.com/impersonate?refresh_token=rt&impersonated_user=8c7d58be-ca97-49d2-b67d-5abfd8310963",
+            ),
+        );
+        const marker = markerOf(response)!;
+        expect(marker.value).toBe("8c7d58be-ca97-49d2-b67d-5abfd8310963");
+        expect(marker.maxAge).toBeGreaterThan(0);
+        expect(marker.domain).toBeUndefined(); // this host only
+        expect(marker.secure).toBe(true);
+    });
+
+    it("clears an old marker when no account is given, or a malformed one", async () => {
+        for (const query of ["", "&impersonated_user=bad%3Bvalue"]) {
+            const marker = markerOf(
+                await GET(makeRequest(`https://app.dograh.com/impersonate?refresh_token=rt${query}`)),
+            )!;
+            expect(marker.value).toBe("");
+            expect(marker.maxAge).toBe(0);
+        }
+    });
+});
+
+describe("GET /impersonate on the client dashboard domain", () => {
+    it("refuses to start an impersonated session there", async () => {
+        vi.stubEnv("NEXT_PUBLIC_CLIENT_URL", "https://voicedashboard.botrixai.com");
+        try {
+            const response = await GET(
+                makeRequest("https://voicedashboard.botrixai.com/impersonate?refresh_token=rt&impersonated_user=u1"),
+            );
+            expect(response.status).toBe(404);
+            expect(response.headers.getSetCookie()).toEqual([]); // no session planted
+            // The app domain still works.
+            const ok = await GET(makeRequest("https://voice-app.botrixai.com/impersonate?refresh_token=rt"));
+            expect(ok.status).toBe(307);
+        } finally {
+            vi.unstubAllEnvs();
+        }
+    });
+});

@@ -5,6 +5,7 @@ import { getAuthUserApiV1UserAuthUserGet } from "@/client/sdk.gen";
 import { getWorkflowCountApiV1WorkflowCountGet } from "@/client/sdk.gen";
 import { impersonateApiV1SuperuserImpersonatePost } from "@/client/sdk.gen";
 import { detailFromError } from "@/lib/apiError";
+import { subjectOfAccessToken } from "@/lib/clientDomain";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -238,6 +239,12 @@ export async function impersonateAsSuperadmin(params: {
   const impersonateUrl = new URL('/impersonate', appBaseUrl);
   impersonateUrl.searchParams.set('refresh_token', refreshToken);
   impersonateUrl.searchParams.set('redirect_path', finalRedirect);
+  // Which account is being impersonated, so the app domain keeps this session
+  // (a client signing in there themselves is sent to the client domain).
+  const impersonatedUser = resp.data?.access_token ? subjectOfAccessToken(resp.data.access_token) : null;
+  if (impersonatedUser) {
+    impersonateUrl.searchParams.set('impersonated_user', impersonatedUser);
+  }
 
   if (openInNewTab) {
     if (!targetWindow) {

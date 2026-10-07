@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getStackConfig } from "@/lib/auth/config";
+import { IMPERSONATION_COOKIE, isClientDomain } from "@/lib/clientDomain";
 
 /**
  * Helper route that receives a Stack refresh token via query parameters, wipes
@@ -123,6 +124,12 @@ export async function GET(request: NextRequest) {
         ?.trim() ?? request.headers.get("host") ?? request.nextUrl.host;
     const externalOrigin = `${isSecure ? "https" : "http"}://${forwardedHost}`;
 
+    // Impersonation never happens on the client dashboard domain: nothing
+    // admin renders there, and an impersonated session must not land there.
+    if (isClientDomain(new URL(externalOrigin).hostname, process.env.NEXT_PUBLIC_CLIENT_URL)) {
+        return new Response("Not found", { status: 404 });
+    }
+
     const fallbackRedirectUrl = new URL("/workflow/create", externalOrigin);
     let redirectUrl = fallbackRedirectUrl.toString();
     try {
@@ -183,6 +190,19 @@ export async function GET(request: NextRequest) {
             maxAge: 60 * 60 * 24 * 365,
             secure: isSecure,
             partitioned: isSecure,
+        }),
+    );
+
+    // Which account this session impersonates. ClientDomainGuard keeps a
+    // session on the app domain only while its user matches this, so a client
+    // signing in there themselves is still sent to the client domain. Cleared
+    // when absent so an old marker can't vouch for a later session.
+    const impersonatedUser = searchParams.get("impersonated_user") ?? "";
+    const validUser = /^[A-Za-z0-9_-]{1,128}$/.test(impersonatedUser);
+    setCookieHeaders.push(
+        serializeSetCookie(IMPERSONATION_COOKIE, validUser ? impersonatedUser : "", {
+            maxAge: validUser ? 60 * 60 * 24 * 365 : 0,
+            secure: isSecure,
         }),
     );
 

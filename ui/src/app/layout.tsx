@@ -6,6 +6,7 @@ import { Suspense } from "react";
 
 import ChatwootWidget from "@/components/ChatwootWidget";
 import AppLayout from "@/components/layout/AppLayout";
+import { ClientDomainGuard } from "@/components/layout/ClientDomainGuard";
 import PostHogIdentify from "@/components/PostHogIdentify";
 import { SentryErrorBoundary } from "@/components/SentryErrorBoundary";
 import SpinLoader from "@/components/SpinLoader";
@@ -75,6 +76,7 @@ export default function RootLayout({
                     <TelephonyConfigWarningsProvider>
                       <OnboardingProvider>
                         <PostHogIdentify />
+                        <ClientDomainGuard />
                         <AppLayout>
                           {children}
                         </AppLayout>

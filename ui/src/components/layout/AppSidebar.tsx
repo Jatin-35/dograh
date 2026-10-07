@@ -29,7 +29,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import React from "react";
 
-import { getAuthUserApiV1UserAuthUserGet } from "@/client/sdk.gen";
 import { BrandLogo } from "@/components/BrandLogo";
 import { SidebarTeamSwitcher } from "@/components/layout/SidebarTeamSwitcher";
 import ThemeToggle from "@/components/ThemeSwitcher";
@@ -65,7 +64,10 @@ import { useTelephonyConfigWarnings } from "@/context/TelephonyConfigWarningsCon
 import { useLatestReleaseVersion } from "@/hooks/useLatestReleaseVersion";
 import type { LocalUser } from "@/lib/auth";
 import { useAuth } from "@/lib/auth";
+import { isClientDomain } from "@/lib/clientDomain";
 import { cn, hasAdminPermission } from "@/lib/utils";
+
+import { useIsSuperuser } from "./useIsSuperuser";
 type SidebarNavItem = {
   title: string;
   url: string;
@@ -199,24 +201,10 @@ export function AppSidebar() {
     vonageMissingSignatureSecretCount > 0;
   const isCollapsed = !isMobile && state === "collapsed";
 
-  // Super Admin nav item is only shown to superusers — fetched once per
-  // session rather than trusting the auth cookie's user object, which
-  // doesn't carry is_superuser.
-  const [isSuperuser, setIsSuperuser] = React.useState(false);
-  const hasFetchedSuperuser = React.useRef(false);
-  React.useEffect(() => {
-    if (authLoading || !user || hasFetchedSuperuser.current) return;
-    hasFetchedSuperuser.current = true;
-    (async () => {
-      const accessToken = await getAccessToken();
-      const response = await getAuthUserApiV1UserAuthUserGet({
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      if (response.data?.is_superuser) {
-        setIsSuperuser(true);
-      }
-    })();
-  }, [authLoading, user, getAccessToken]);
+  // Super Admin nav item is only shown to superusers — asked of the server
+  // (the auth cookie's user object doesn't carry is_superuser), again for
+  // every user who signs in on this tab.
+  const isSuperuser = useIsSuperuser(user, authLoading, getAccessToken);
 
   // Full nav also applies while impersonating a client to build their
   // workflow: an impersonated session authenticates as the client's own
@@ -238,7 +226,17 @@ export function AppSidebar() {
     }
   }, []);
 
-  const hasFullAccess = isSuperuser || hasAdminPermission(permissions) || isOnImpersonationDomain;
+  // Nothing admin renders on the client dashboard domain, superuser or not
+  // (ClientDomainGuard also moves a superuser off it). Read via effect, as above.
+  const [isOnClientDomain, setIsOnClientDomain] = React.useState(false);
+  React.useEffect(() => {
+    setIsOnClientDomain(isClientDomain(window.location.hostname, process.env.NEXT_PUBLIC_CLIENT_URL));
+  }, []);
+  const showsAdmin = isSuperuser && !isOnClientDomain;
+
+  // An organization's own admins keep the full menu here: the client domain
+  // is where their own agents are built. Only superadmin screens are kept off.
+  const hasFullAccess = showsAdmin || hasAdminPermission(permissions) || isOnImpersonationDomain;
 
   const navSections = NAV_SECTIONS.map(section => ({
     ...section,
@@ -248,7 +246,7 @@ export function AppSidebar() {
         (customToolsShown || !item.hiddenUnlessCustomToolsShown),
     ),
   })).concat(
-    isSuperuser
+    showsAdmin
       ? [
           {
             label: "ADMIN",
