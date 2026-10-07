@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -212,11 +213,13 @@ class _TextChatCaptureProcessor(FrameProcessor):
         self,
         response_window: _ResponseWindowState,
         context: LLMContext,
+        on_event: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         super().__init__()
         self.last_activity_at = time.monotonic()
         self.activity_count = 0
         self.events: list[dict[str, Any]] = []
+        self._on_event = on_event
         self._response_window = response_window
         self._context = context
 
@@ -225,13 +228,14 @@ class _TextChatCaptureProcessor(FrameProcessor):
         self.activity_count += 1
 
     def _append_event(self, event_type: str, payload: dict[str, Any]) -> None:
-        self.events.append(
-            {
-                "type": event_type,
-                "created_at": datetime.now(UTC).isoformat(),
-                "payload": jsonable_encoder(payload),
-            }
-        )
+        event = {
+            "type": event_type,
+            "created_at": datetime.now(UTC).isoformat(),
+            "payload": jsonable_encoder(payload),
+        }
+        self.events.append(event)
+        if self._on_event:
+            self._on_event(event)
 
     async def process_frame(self, frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
@@ -244,6 +248,7 @@ class _TextChatCaptureProcessor(FrameProcessor):
             text = frame.text.strip()
             if text:
                 self._response_window.outputs.append(text)
+                self._append_event("bot_speech", {"text": text})
                 if append_to_context:
                     self._context.add_message({"role": "assistant", "content": text})
             return
@@ -422,6 +427,7 @@ async def execute_text_chat_pending_turn(
     workflow_id: int,
     session_data: dict[str, Any],
     checkpoint: dict[str, Any] | None,
+    on_event: Callable[[dict[str, Any]], None] | None = None,
 ) -> TextChatTurnExecutionResult:
     turns = list(session_data.get("turns") or [])
     if not turns or turns[-1].get("status") != "pending":
@@ -534,7 +540,9 @@ async def execute_text_chat_pending_turn(
         _deserialize_text_chat_checkpoint_messages(base_checkpoint["messages"])
     )
     response_window = _ResponseWindowState()
-    capture_processor = _TextChatCaptureProcessor(response_window, context)
+    capture_processor = _TextChatCaptureProcessor(
+        response_window, context, on_event=on_event
+    )
 
     node_transition_events = capture_processor.events
 
@@ -545,18 +553,15 @@ async def execute_text_chat_pending_turn(
         previous_node_name: str | None,
         allow_interrupt: bool = False,
     ) -> None:
-        node_transition_events.append(
+        capture_processor._append_event(
+            "node_transition",
             {
-                "type": "node_transition",
-                "created_at": datetime.now(UTC).isoformat(),
-                "payload": {
-                    "node_id": node_id,
-                    "node_name": node_name,
-                    "previous_node_id": previous_node_id,
-                    "previous_node_name": previous_node_name,
-                    "allow_interrupt": allow_interrupt,
-                },
-            }
+                "node_id": node_id,
+                "node_name": node_name,
+                "previous_node_id": previous_node_id,
+                "previous_node_name": previous_node_name,
+                "allow_interrupt": allow_interrupt,
+            },
         )
 
     embeddings_api_key = None
@@ -620,6 +625,8 @@ async def execute_text_chat_pending_turn(
     @assistant_context_aggregator.event_handler("on_assistant_turn_stopped")
     async def on_assistant_turn_stopped(_aggregator, message):
         response_window.note_assistant_turn_stopped(message.content or "")
+        if text := (message.content or "").strip():
+            capture_processor._append_event("bot_speech", {"text": text})
 
     # Text chat has no wire transport; reuse the neutral 16 kHz config shape
     # from the browser pipeline so TTS/recording helpers still have sane defaults.

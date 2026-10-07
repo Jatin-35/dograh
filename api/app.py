@@ -70,7 +70,16 @@ async def lifespan(app: FastAPI):
 
         # Shutdown sequence - this runs when FastAPI is shutting down
         logger.info("Starting graceful shutdown...")
-        await sync_manager.stop()
+        from api.services.workflow.text_chat_stream import (
+            finish_streaming_text_chat_turns,
+        )
+
+        # Let streaming chat replies finish and hand off their completion work
+        # before the worker goes away.
+        try:
+            await finish_streaming_text_chat_turns()
+        finally:
+            await sync_manager.stop()
 
 
 app = FastAPI(
@@ -113,6 +122,7 @@ app.add_middleware(
     allow_credentials=cors_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Workflow-Run-Id"],
 )
 
 
