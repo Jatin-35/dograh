@@ -182,6 +182,9 @@ services:
       # install only needs PUBLIC_BASE_URL + PUBLIC_HOST in .env.
       PUBLIC_BASE_URL: "${PUBLIC_BASE_URL:-}"
       PUBLIC_HOST: "${PUBLIC_HOST:-}"
+      # Where organization invitation links open (the client-dashboard domain).
+      # Falls back to PUBLIC_BASE_URL when unset.
+      CLIENT_APP_URL: "${CLIENT_APP_URL:-}"
 
       # Optional explicit override of the public URL the backend builds webhook /
       # embed links from. Defaults to PUBLIC_BASE_URL. When the value is non-public

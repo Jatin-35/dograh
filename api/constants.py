@@ -37,6 +37,11 @@ BACKEND_API_ENDPOINT = (
     os.getenv("BACKEND_API_ENDPOINT") or PUBLIC_BASE_URL or "http://localhost:8000"
 )
 UI_APP_URL = os.getenv("UI_APP_URL", "http://localhost:3010")
+# Where organization invitation links open: the client-dashboard domain on a
+# domain-separated deployment (e.g. https://voicedashboard.example.com). Its own
+# setting so moving the API's public address can't break invite links; falls
+# back to PUBLIC_BASE_URL, then UI_APP_URL.
+CLIENT_APP_URL = os.getenv("CLIENT_APP_URL") or None
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 REDIS_URL = os.environ["REDIS_URL"]

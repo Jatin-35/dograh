@@ -245,5 +245,50 @@ class StackAuth:
         except (aiohttp.ClientError, ValueError) as exc:
             raise StackAuthTeamError("Stack Auth team invitation failed") from exc
 
+    async def list_team_invitations(self, team_id: str) -> list[dict[str, Any]]:
+        """The team's pending (unaccepted, unexpired) invitations."""
+        url = (
+            os.environ.get("STACK_AUTH_API_URL")
+            + "/api/v1/team-invitations"
+        )
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    url, headers=self._server_headers(), params={"team_id": team_id}
+                ) as response:
+                    if response.status >= 400:
+                        body = await response.text()
+                        raise StackAuthTeamError(
+                            f"Stack Auth listing invitations failed ({response.status}): {body}"
+                        )
+                    data = await response.json()
+                    return list(data.get("items") or [])
+        except (aiohttp.ClientError, ValueError) as exc:
+            raise StackAuthTeamError("Stack Auth listing invitations failed") from exc
+
+    async def revoke_team_invitation(self, team_id: str, invitation_id: str) -> None:
+        """Withdraw a pending invitation so its link stops working."""
+        url = (
+            os.environ.get("STACK_AUTH_API_URL")
+            + f"/api/v1/team-invitations/{invitation_id}"
+        )
+        # No body, so no Content-Type: Stack rejects a DELETE that declares
+        # JSON and sends none ("Invalid JSON in request body").
+        headers = {
+            k: v for k, v in self._server_headers().items() if k != "Content-Type"
+        }
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.delete(
+                    url, headers=headers, params={"team_id": team_id}
+                ) as response:
+                    if response.status >= 400:
+                        body = await response.text()
+                        raise StackAuthTeamError(
+                            f"Stack Auth revoking an invitation failed ({response.status}): {body}"
+                        )
+        except aiohttp.ClientError as exc:
+            raise StackAuthTeamError("Stack Auth revoking an invitation failed") from exc
+
 
 stackauth = StackAuth()

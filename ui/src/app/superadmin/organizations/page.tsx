@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { CopyButton } from "@/components/CopyButton";
+import { OrganizationInvitationsDialog } from "@/components/superadmin/OrganizationInvitationsDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -83,6 +84,8 @@ export default function OrganizationsPage() {
     // Per-row status-change in-flight guard
     const [statusUpdatingId, setStatusUpdatingId] = useState<number | null>(null);
     const [scoutUpdatingId, setScoutUpdatingId] = useState<number | null>(null);
+    // Organization whose invitations are open, if any.
+    const [inviteOrg, setInviteOrg] = useState<SuperadminOrganization | null>(null);
 
     // "managed" = orgs you provisioned via the panel (they carry a contact
     // email); "all" = every org on the platform, incl. auto-created / legacy.
@@ -366,6 +369,14 @@ export default function OrganizationsPage() {
                                                     )}
                                                 </TableCell>
                                                 <TableCell className="text-right">
+                                                    <div className="flex justify-end gap-2">
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => setInviteOrg(org)}
+                                                    >
+                                                        Invite
+                                                    </Button>
                                                     {org.status === "suspended" ? (
                                                         <Button
                                                             variant="outline"
@@ -393,6 +404,7 @@ export default function OrganizationsPage() {
                                                             )}
                                                         </Button>
                                                     )}
+                                                    </div>
                                                 </TableCell>
                                             </TableRow>
                                         );
@@ -408,6 +420,8 @@ export default function OrganizationsPage() {
                     )}
                 </CardContent>
             </Card>
+
+            <OrganizationInvitationsDialog organization={inviteOrg} onClose={() => setInviteOrg(null)} />
 
             <Dialog open={createOpen} onOpenChange={(open) => !isCreating && setCreateOpen(open)}>
                 <DialogContent>

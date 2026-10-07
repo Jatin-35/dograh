@@ -21,6 +21,9 @@ SUPERUSER_ONLY = [
     ("PATCH", "/api/v1/superuser/organizations/5/status", {"status": "active"}),
     ("PATCH", "/api/v1/superuser/organizations/5/scout", {"enabled": True}),
     ("GET", "/api/v1/superuser/workflows", None),
+    ("GET", "/api/v1/superuser/organizations/5/invitations", None),
+    ("POST", "/api/v1/superuser/organizations/5/invitations", {"email": "a@b.co"}),
+    ("DELETE", "/api/v1/superuser/organizations/5/invitations/inv-1", None),
     ("GET", "/api/v1/wallet/organizations/5", None),
     ("PATCH", "/api/v1/wallet/organizations/5", {}),
     ("POST", "/api/v1/wallet/organizations/5/topup", {"amount": 1000}),
@@ -78,7 +81,12 @@ async def test_every_get_superuser_route_is_covered():
         for method in route.methods
     }
     listed = {
-        (m, p.replace("/5", "/{organization_id}").replace("/workflows/1/", "/workflows/{workflow_id}/"))
+        (
+            m,
+            p.replace("/5", "/{organization_id}")
+            .replace("/workflows/1/", "/workflows/{workflow_id}/")
+            .replace("/inv-1", "/{invitation_id}"),
+        )
         for m, p, _ in SUPERUSER_ONLY
     }
     assert protected <= listed, sorted(protected - listed)

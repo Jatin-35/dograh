@@ -1,4 +1,5 @@
 import { client } from "@/client/client.gen";
+import { detailFromError } from "@/lib/apiError";
 
 /**
  * Thin wrappers over the superuser organization endpoints.
@@ -93,4 +94,58 @@ export async function updateSuperadminOrganizationScout(
         );
     }
     return data;
+}
+
+export interface OrganizationInvitation {
+    id: string;
+    email: string | null;
+    expires_at: string | null;
+}
+
+interface InvitationsResponse {
+    invitations: OrganizationInvitation[];
+    /** Where links sent now open. */
+    link_opens_at: string;
+}
+
+/** Pending invitations into an organization. */
+export async function listOrganizationInvitations(organizationId: number): Promise<InvitationsResponse> {
+    const { data, error } = await client.get<InvitationsResponse>({
+        url: `/api/v1/superuser/organizations/${organizationId}/invitations`,
+    });
+    if (error || !data) {
+        throw new Error(detailFromError(error, "Failed to load invitations"));
+    }
+    return data;
+}
+
+interface SentInvitation {
+    email: string;
+    /** Where the emailed link opens. */
+    link_opens_at: string;
+}
+
+/** Email a fresh invitation (replaces a pending one to the same address). */
+export async function sendOrganizationInvitation(
+    organizationId: number,
+    email: string,
+): Promise<SentInvitation> {
+    const { data, error } = await client.post<SentInvitation>({
+        url: `/api/v1/superuser/organizations/${organizationId}/invitations`,
+        body: { email },
+    });
+    if (error || !data) {
+        throw new Error(detailFromError(error, "Failed to send the invitation"));
+    }
+    return data;
+}
+
+/** Withdraw a pending invitation so its link stops working. */
+export async function revokeOrganizationInvitation(organizationId: number, invitationId: string): Promise<void> {
+    const { error } = await client.delete({
+        url: `/api/v1/superuser/organizations/${organizationId}/invitations/${invitationId}`,
+    });
+    if (error) {
+        throw new Error(detailFromError(error, "Failed to revoke the invitation"));
+    }
 }

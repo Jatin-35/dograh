@@ -7,21 +7,27 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from loguru import logger
 from pydantic import BaseModel
 
-from api.constants import PUBLIC_BASE_URL, UI_APP_URL
 from api.db import db_client
 from api.db.models import UserModel
 from api.enums import OrganizationConfigurationKey, OrganizationStatus
 from api.services.auth.depends import get_superuser
-from api.services.organization_context import (
-    is_scout_enabled_in_configuration,
-    scout_enabled_from_configuration_value,
-    set_scout_enabled_for_organization,
-)
 from api.services.auth.stack_auth import (
     StackAuthSessionError,
     StackAuthTeamError,
     StackAuthUserSearchError,
     stackauth,
+)
+from api.services.organization_context import (
+    is_scout_enabled_in_configuration,
+    scout_enabled_from_configuration_value,
+    set_scout_enabled_for_organization,
+)
+from api.services.organization_invitations import (
+    InvitationError,
+    invite_callback_url,
+    list_invitations,
+    revoke_invitation,
+    send_invitation,
 )
 
 router = APIRouter(prefix="/superuser", tags=["superuser"])
@@ -116,6 +122,27 @@ class CreateOrganizationRequest(BaseModel):
 class CreateOrganizationResponse(BaseModel):
     organization: SuperuserOrganizationResponse
     invitation_sent: bool
+
+
+class OrganizationInvitationResponse(BaseModel):
+    id: str
+    email: Optional[str]
+    expires_at: Optional[str]
+
+
+class OrganizationInvitationsResponse(BaseModel):
+    invitations: List[OrganizationInvitationResponse]
+    # Where links sent now open, so the page can show it.
+    link_opens_at: str
+
+
+class SendOrganizationInvitationRequest(BaseModel):
+    email: str
+
+
+class SendOrganizationInvitationResponse(BaseModel):
+    email: str
+    link_opens_at: str
 
 
 class SuperuserWorkflowResponse(BaseModel):
@@ -390,13 +417,12 @@ async def create_organization(
 
     # 3. Email the client an invitation. A failure here is non-fatal — the org
     #    exists and the client can be re-invited later; surface it to the UI.
-    callback_base = PUBLIC_BASE_URL or UI_APP_URL
     invitation_sent = True
     try:
         await stackauth.send_team_invitation(
             team_id=team_id,
             email=email,
-            callback_url=f"{callback_base.rstrip('/')}/handler/team-invitation",
+            callback_url=invite_callback_url(),
         )
     except StackAuthTeamError as exc:
         invitation_sent = False
@@ -459,6 +485,75 @@ async def update_organization_status(
         user_count=user_count,
         scout_enabled=await is_scout_enabled_in_configuration(organization_id),
     )
+
+
+async def _organization_team(organization_id: int) -> str:
+    organization = await db_client.get_organization_by_id(organization_id)
+    if organization is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Organization with ID {organization_id} not found.",
+        )
+    return organization.provider_id
+
+
+def _stack_failure(exc: StackAuthTeamError) -> HTTPException:
+    # The auth provider's own reason (e.g. an untrusted callback domain) is
+    # what tells the superadmin what to fix.
+    return HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+
+
+@router.get("/organizations/{organization_id}/invitations")
+async def list_organization_invitations(
+    organization_id: int,
+    user: UserModel = Depends(get_superuser),
+) -> OrganizationInvitationsResponse:
+    """Pending invitations into an organization. Requires superuser privileges."""
+    team_id = await _organization_team(organization_id)
+    try:
+        invitations = await list_invitations(team_id)
+    except StackAuthTeamError as exc:
+        raise _stack_failure(exc) from exc
+    return OrganizationInvitationsResponse(
+        invitations=[OrganizationInvitationResponse(**i) for i in invitations],
+        link_opens_at=invite_callback_url(),
+    )
+
+
+@router.post("/organizations/{organization_id}/invitations")
+async def send_organization_invitation(
+    organization_id: int,
+    request: SendOrganizationInvitationRequest,
+    user: UserModel = Depends(get_superuser),
+) -> SendOrganizationInvitationResponse:
+    """Email someone a fresh invitation into an organization, replacing any
+    pending one to the same address. Requires superuser privileges."""
+    team_id = await _organization_team(organization_id)
+    try:
+        result = await send_invitation(team_id, request.email)
+    except InvitationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except StackAuthTeamError as exc:
+        raise _stack_failure(exc) from exc
+    return SendOrganizationInvitationResponse(**result)
+
+
+@router.delete("/organizations/{organization_id}/invitations/{invitation_id}")
+async def revoke_organization_invitation(
+    organization_id: int,
+    invitation_id: str,
+    user: UserModel = Depends(get_superuser),
+) -> dict:
+    """Withdraw a pending invitation so its link stops working. Requires
+    superuser privileges."""
+    team_id = await _organization_team(organization_id)
+    try:
+        await revoke_invitation(team_id, invitation_id)
+    except InvitationError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except StackAuthTeamError as exc:
+        raise _stack_failure(exc) from exc
+    return {"revoked": True}
 
 
 @router.patch("/organizations/{organization_id}/scout")
