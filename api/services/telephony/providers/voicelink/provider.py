@@ -789,7 +789,12 @@ class VoiceLinkProvider(TelephonyProvider):
             "event": "transfer",
             "stream_sid": active_call.stream_sid,
             "call_sid": active_call.call_sid,
-            "target": normalize_customer_number(destination) or destination,
+            # The tool chose an exact format (e.g. a landline's 0): send it
+            # untouched. Otherwise reduce it to the bare 10-digit form the
+            # carrier needs for mobiles.
+            "target": destination
+            if kwargs.get("exact_destination")
+            else normalize_customer_number(destination) or destination,
         }
 
         logger.info(

@@ -25,6 +25,7 @@ from api.enums import ToolCategory, WorkflowRunMode
 from api.services.pipecat.audio_playback import play_audio, play_audio_loop
 from api.services.telephony.call_transfer_manager import get_call_transfer_manager
 from api.services.telephony.factory import get_telephony_provider_for_run
+from api.services.telephony.number_format import format_transfer_number
 from api.services.telephony.transfer_event_protocol import TransferContext
 from api.services.workflow.tools.calculator import get_calculator_tools, safe_calculator
 from api.services.workflow.tools.custom_tool import (
@@ -707,6 +708,15 @@ class CustomToolManager:
                     )
                     return
 
+                # The tool's Number format: send the number in the exact shape
+                # its line needs (e.g. a landline's 0) instead of letting the
+                # provider rewrite it. None = "auto", the provider decides.
+                exact_destination = format_transfer_number(
+                    destination, config.get("number_format")
+                )
+                if exact_destination:
+                    destination = exact_destination
+
                 original_call_sid = workflow_run.gathered_context.get("call_id")
 
                 # Generate a unique transfer ID for tracking this transfer
@@ -748,6 +758,7 @@ class CustomToolManager:
                         transfer_id=transfer_id,
                         conference_name=conference_name,
                         timeout=timeout_seconds,
+                        exact_destination=bool(exact_destination),
                     )
                 except Exception as e:
                     logger.error(f"Transfer provider failed: {e}")

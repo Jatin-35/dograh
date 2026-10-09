@@ -237,6 +237,14 @@ class TransferCallConfig(BaseModel):
             "+1234567890, PJSIP/1234, or {{initial_context.transfer_destination}}."
         ),
     )
+    number_format: Literal["auto", "keep_zero", "with_91", "with_plus_91", "as_typed"] = Field(
+        default="auto",
+        description=(
+            "How the number is sent to the telephony provider: auto (the provider's "
+            "own handling; VoiceLink sends 10 digits), keep_zero (0 + 10 digits, e.g. "
+            "landlines), with_91, with_plus_91, or as_typed (exactly as entered)."
+        ),
+    )
     messageType: Literal["none", "custom", "audio"] = Field(
         default="none", description="Type of message to play before transfer."
     )

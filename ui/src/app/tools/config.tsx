@@ -14,6 +14,7 @@ import type {
     TransferCallConfig,
     TransferCallToolDefinition,
 } from "@/client/types.gen";
+import type { TransferNumberFormat } from "@/lib/transferNumberFormat";
 
 export type ToolCategory = "http_api" | "end_call" | "transfer_call" | "calculator" | "native" | "integration" | "mcp";
 
@@ -34,6 +35,8 @@ export interface TransferResolverConfig {
 export interface ExtendedTransferCallConfig extends TransferCallConfig {
     destination_source?: TransferDestinationSource;
     resolver?: TransferResolverConfig | null;
+    /** How the number is sent to the provider (see lib/transferNumberFormat). */
+    number_format?: TransferNumberFormat;
 }
 
 export interface ToolCategoryConfig {

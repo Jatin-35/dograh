@@ -16,8 +16,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import {
+    previewTransferNumber,
+    TRANSFER_NUMBER_FORMATS,
+    type TransferNumberFormat,
+} from "@/lib/transferNumberFormat";
 
 import {
     type EndCallMessageType,
@@ -56,6 +62,8 @@ export interface TransferCallToolConfigProps {
     onParametersChange: (parameters: ToolParameter[]) => void;
     presetParameters: PresetToolParameter[];
     onPresetParametersChange: (parameters: PresetToolParameter[]) => void;
+    numberFormat: TransferNumberFormat;
+    onNumberFormatChange: (format: TransferNumberFormat) => void;
 }
 
 export function TransferCallToolConfig({
@@ -90,7 +98,11 @@ export function TransferCallToolConfig({
     onParametersChange,
     presetParameters,
     onPresetParametersChange,
+    numberFormat,
+    onNumberFormatChange,
 }: TransferCallToolConfigProps) {
+    const willDial =
+        destinationSource === "static" ? previewTransferNumber(destination, numberFormat) : null;
     return (
         <Card>
             <CardHeader>
@@ -234,7 +246,7 @@ export function TransferCallToolConfig({
                                     <p>Use a fixed number, SIP endpoint, or context template.</p>
                                     <ul className="list-disc pl-4 space-y-1">
                                         <li>SIP endpoint, e.g. PJSIP/1234</li>
-                                        <li>E.164 phone number, e.g. +1234567890</li>
+                                        <li>Phone number, e.g. 9876543210 or 08043061549 (see Number format below)</li>
                                         <li>
                                             Template variable, e.g. {"{{initial_context.transfer_destination}}"}
                                         </li>
@@ -344,6 +356,37 @@ export function TransferCallToolConfig({
                             </div>
                         </TabsContent>
                     </Tabs>
+
+                    <div className="grid gap-2">
+                        <Label htmlFor="transfer-number-format">Number format</Label>
+                        <p className="text-xs text-muted-foreground">
+                            How the number is sent to your telephony provider. Some numbers only connect in one
+                            shape, e.g. landlines need their 0.
+                        </p>
+                        <Select
+                            value={numberFormat}
+                            onValueChange={(v) => onNumberFormatChange(v as TransferNumberFormat)}
+                        >
+                            <SelectTrigger id="transfer-number-format" className="w-72">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {TRANSFER_NUMBER_FORMATS.map((f) => (
+                                    <SelectItem key={f.value} value={f.value}>
+                                        {f.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                            {TRANSFER_NUMBER_FORMATS.find((f) => f.value === numberFormat)?.hint}
+                        </p>
+                        {willDial && (
+                            <p className="text-sm">
+                                Will dial (VoiceLink): <span className="font-mono">{willDial}</span>
+                            </p>
+                        )}
+                    </div>
                 </div>
             </CardContent>
         </Card>

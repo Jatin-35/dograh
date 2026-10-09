@@ -42,6 +42,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { TOOL_DOCUMENTATION_URLS } from "@/constants/documentation";
 import { detailFromError } from "@/lib/apiError";
 import { useAuth } from "@/lib/auth";
+import { type TransferNumberFormat } from "@/lib/transferNumberFormat";
 
 import {
     createMcpDefinition,
@@ -130,6 +131,7 @@ export default function ToolDetailPage() {
     const [transferDestination, setTransferDestination] = useState("");
     const [transferMessageType, setTransferMessageType] = useState<EndCallMessageType>("none");
     const [transferTimeout, setTransferTimeout] = useState(30);
+    const [transferNumberFormat, setTransferNumberFormat] = useState<TransferNumberFormat>("auto");
     const [transferAudioRecordingId, setTransferAudioRecordingId] = useState("");
     const [transferResolverUrl, setTransferResolverUrl] = useState("");
     const [transferResolverCredentialUuid, setTransferResolverCredentialUuid] = useState("");
@@ -216,6 +218,7 @@ export default function ToolDetailPage() {
                 setCustomMessage(config.customMessage || "");
                 setTransferAudioRecordingId(config.audioRecordingId || "");
                 setTransferTimeout(config.timeout ?? 30);
+                setTransferNumberFormat((config.number_format as TransferNumberFormat | undefined) ?? "auto");
                 setTransferResolverUrl(resolver?.url || "");
                 setTransferResolverCredentialUuid(resolver?.credential_uuid || "");
                 setTransferResolverHeaders(headersToRows(resolver?.headers));
@@ -244,6 +247,7 @@ export default function ToolDetailPage() {
                 setCustomMessage("");
                 setTransferAudioRecordingId("");
                 setTransferTimeout(30);
+                setTransferNumberFormat("auto");
                 setTransferResolverUrl("");
                 setTransferResolverCredentialUuid("");
                 setTransferResolverHeaders([]);
@@ -505,6 +509,7 @@ export default function ToolDetailPage() {
                     customMessage: transferMessageType === "custom" ? customMessage : undefined,
                     audioRecordingId: transferMessageType === "audio" ? transferAudioRecordingId || undefined : undefined,
                     timeout: transferTimeout,
+                    number_format: transferNumberFormat,
                     resolver: transferDestinationSource === "dynamic"
                         ? {
                             type: "http",
@@ -857,6 +862,8 @@ const data = await response.json();`;
                             recordings={recordings}
                             timeout={transferTimeout}
                             onTimeoutChange={setTransferTimeout}
+                            numberFormat={transferNumberFormat}
+                            onNumberFormatChange={setTransferNumberFormat}
                             resolverUrl={transferResolverUrl}
                             onResolverUrlChange={setTransferResolverUrl}
                             resolverCredentialUuid={transferResolverCredentialUuid}
