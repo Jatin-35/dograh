@@ -334,6 +334,41 @@ describe("MappingEditor", () => {
         expect(onChange).toHaveBeenLastCalledWith({ custom: { field_1: "" } });
     });
 
+    it("builds a value translation table, including a paste from Excel", async () => {
+        const onChange = vi.fn();
+        const { MappingEditor } = await import("./MappingEditor");
+        render(<MappingEditor value={{ custom: {} }} onChange={onChange} />);
+
+        fireEvent.click(screen.getByText("Add a translation table"));
+        expect((screen.getByLabelText("Field") as HTMLInputElement).value).toBe("source");
+
+        fireEvent.paste(screen.getByLabelText("CRM sends"), {
+            clipboardData: { getData: () => "Contact us\tWebsite\r\nFB Leads ad\tFacebook\nlandingpage\tWebsite\n" },
+        });
+        expect(onChange).toHaveBeenLastCalledWith({
+            custom: {},
+            value_maps: { source: { "Contact us": "Website", "FB Leads ad": "Facebook", landingpage: "Website" } },
+        });
+        expect(screen.getAllByLabelText("CRM sends")).toHaveLength(3);
+
+        // A half-typed row stays on screen but isn't sent until complete.
+        fireEvent.click(screen.getByText("Add row"));
+        fireEvent.change(screen.getAllByLabelText("CRM sends")[3], { target: { value: "Whats app" } });
+        expect(screen.getAllByLabelText("CRM sends")).toHaveLength(4);
+        expect(onChange.mock.calls.at(-1)![0].value_maps.source).not.toHaveProperty("Whats app");
+        fireEvent.change(screen.getAllByLabelText("Update as")[3], { target: { value: "WhatsApp" } });
+        expect(onChange.mock.calls.at(-1)![0].value_maps.source["Whats app"]).toBe("WhatsApp");
+    });
+
+    it("shows saved translations and follows a discard from outside", async () => {
+        const { MappingEditor } = await import("./MappingEditor");
+        const saved = { custom: {}, value_maps: { source: { "Contact us": "Website" } } };
+        const { rerender } = render(<MappingEditor value={saved} onChange={vi.fn()} />);
+        expect((screen.getByLabelText("CRM sends") as HTMLInputElement).value).toBe("Contact us");
+        rerender(<MappingEditor value={{ custom: {} }} onChange={vi.fn()} />);
+        expect(screen.queryByLabelText("CRM sends")).toBeNull();
+    });
+
     it("turns on 'Only keep mapped fields' and previews with it", async () => {
         api.previewMapping.mockResolvedValue({ lead_count: 1, outcome: "received", fields: {}, variables: {}, paths: [] });
         const onChange = vi.fn();

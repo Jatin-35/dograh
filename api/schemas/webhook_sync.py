@@ -31,6 +31,29 @@ class FieldMapping(BaseModel):
     # Keep only the standard fields and the custom ones above as call
     # variables, instead of every field the CRM sent (LeadSquared sends ~70).
     only_mapped: bool = False
+    # Translate a field's values before the lead is stored and called:
+    # {"source": {"Contact us": "Website", "landingpage": "Website"}}.
+    # Matching ignores case, spaces and punctuation; other values pass through.
+    value_maps: Dict[str, Dict[str, str]] = Field(default_factory=dict)
+
+    @field_validator("value_maps")
+    @classmethod
+    def _limit_value_maps(
+        cls, value: Dict[str, Dict[str, str]]
+    ) -> Dict[str, Dict[str, str]]:
+        if len(value) > 20:
+            raise ValueError("At most 20 translated fields")
+        for field_name, rules in value.items():
+            if not field_name.strip() or len(field_name) > 64:
+                raise ValueError("Translated field names are 1-64 chars")
+            if len(rules) > 200:
+                raise ValueError(f"At most 200 translations for {field_name}")
+            for incoming, outgoing in rules.items():
+                if not incoming.strip() or len(incoming) > 255:
+                    raise ValueError("Values to translate are 1-255 chars")
+                if not outgoing.strip() or len(outgoing) > 500:
+                    raise ValueError("Translated values are 1-500 chars")
+        return value
 
     @field_validator("custom")
     @classmethod

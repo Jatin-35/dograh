@@ -22,6 +22,7 @@ import {
 } from "@/lib/webhookSync";
 
 import { LeadStatusBadge } from "./shared";
+import { ValueMapsCard } from "./ValueMapsCard";
 
 /** "5:20 PM · 200 · {"Current":{"Phone"…" — a recent request, recognizably. */
 function requestLabel(log: RequestLog): string {
@@ -349,6 +350,17 @@ export function MappingEditor({ value, onChange, endpointId }: MappingEditorProp
                     )}
                 </CardContent>
             </Card>
+
+            <ValueMapsCard
+                value={value.value_maps}
+                onChange={(value_maps) => onChange({ ...value, value_maps })}
+                fieldSuggestions={Object.keys(preview?.variables ?? {}).filter((name) => name !== "phone_number")}
+                previewValue={(field) => {
+                    if (!preview) return undefined;
+                    const name = field.trim().toLowerCase().replace(/[^0-9a-z]+/g, "_").replace(/^_+|_+$/g, "");
+                    return preview.variables[name] ?? preview.fields[name] ?? undefined;
+                }}
+            />
         </div>
     );
 }

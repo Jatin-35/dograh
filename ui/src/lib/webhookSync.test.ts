@@ -106,6 +106,22 @@ describe("cleanMapping only_mapped", () => {
     });
 });
 
+describe("cleanMapping value_maps", () => {
+    it("trims, drops incomplete rows and empty tables", () => {
+        expect(
+            cleanMapping({
+                custom: {},
+                value_maps: {
+                    " source ": { " Contact us ": " Website ", "FB Leads ad": "", "": "x" },
+                    city: { "": "" },
+                    "  ": { a: "b" },
+                },
+            }),
+        ).toEqual({ custom: {}, value_maps: { source: { "Contact us": "Website" } } });
+        expect(cleanMapping({ custom: {}, value_maps: {} })).toEqual({ custom: {} });
+    });
+});
+
 describe("curlExample", () => {
     const url = "https://voice-app.example/api/v1/webhooks/inbound/abc";
 

@@ -190,6 +190,32 @@ def _detect_name(payload: dict) -> Optional[str]:
     return None
 
 
+def _value_maps(field_mapping: dict) -> dict[str, dict[str, str]]:
+    """``value_maps`` by variable name, each keyed by normalized incoming value
+    (so ``Whats app`` matches a rule for ``WhatsApp``)."""
+    raw = field_mapping.get("value_maps") or {}
+    maps: dict[str, dict[str, str]] = {}
+    if not isinstance(raw, dict):
+        return maps
+    for field_name, rules in raw.items():
+        name = variable_name(field_name)
+        if not name or not isinstance(rules, dict):
+            continue
+        lookup = maps.setdefault(name, {})
+        for incoming, outgoing in rules.items():
+            key = _norm_key(incoming)
+            text = _scalar(outgoing)
+            if key and text is not None:
+                lookup[key] = text
+    return maps
+
+
+def _translate(value: Optional[str], rules: Optional[dict[str, str]]) -> Optional[str]:
+    if value is None or not rules:
+        return value
+    return rules.get(_norm_key(value), value)
+
+
 def _set_last(variables: dict[str, str], name: str, value: str) -> None:
     """Set a variable and move it to the end (the end survives the cap)."""
     variables.pop(name, None)
@@ -212,6 +238,7 @@ class MappedLead:
 def map_lead(payload: dict, field_mapping: Optional[dict] = None) -> MappedLead:
     """Extract standard fields and call variables from one lead payload."""
     field_mapping = field_mapping or {}
+    value_maps = _value_maps(field_mapping)
     lead = MappedLead()
 
     for standard_field in STANDARD_FIELDS:
@@ -225,7 +252,7 @@ def map_lead(payload: dict, field_mapping: Optional[dict] = None) -> MappedLead:
         if standard_field == "phone":
             lead.phone_raw = value
         else:
-            setattr(lead, standard_field, value)
+            setattr(lead, standard_field, _translate(value, value_maps.get(standard_field)))
 
     variables: dict[str, str] = {}
     if not field_mapping.get("only_mapped"):
@@ -248,6 +275,10 @@ def map_lead(payload: dict, field_mapping: Optional[dict] = None) -> MappedLead:
             text = _as_text(get_path(payload, path)) if path else None
             if name and text is not None:
                 _set_last(variables, name, text)
+    # Translated values (standard fields were translated above).
+    for name, rules in value_maps.items():
+        if name in variables:
+            variables[name] = _translate(variables[name], rules)
     # Standard fields under their standard names.
     for standard_field in ("name", "email", "source", "city", "language_preference"):
         value = getattr(lead, standard_field)

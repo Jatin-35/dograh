@@ -39,9 +39,11 @@ export interface FieldMapping {
     custom: Record<string, string>;
     /** Keep only the standard fields and `custom` as call variables. */
     only_mapped?: boolean;
+    /** Per field, what the CRM sends → what we store and the agent gets. */
+    value_maps?: Record<string, Record<string, string>>;
 }
 
-export type StandardField = Exclude<keyof FieldMapping, "custom" | "only_mapped">;
+export type StandardField = Exclude<keyof FieldMapping, "custom" | "only_mapped" | "value_maps">;
 
 export interface CallingHours {
     start: string;
@@ -607,6 +609,25 @@ export function cleanMapping(mapping: FieldMapping): FieldMapping {
         if (name.trim() && path.trim()) cleaned.custom[name.trim()] = path.trim();
     }
     if (mapping.only_mapped) cleaned.only_mapped = true;
+    const valueMaps = cleanValueMaps(mapping.value_maps);
+    if (Object.keys(valueMaps).length > 0) cleaned.value_maps = valueMaps;
+    return cleaned;
+}
+
+/** Value translations with blank fields and incomplete rows removed. */
+export function cleanValueMaps(
+    maps: Record<string, Record<string, string>> | undefined,
+): Record<string, Record<string, string>> {
+    const cleaned: Record<string, Record<string, string>> = {};
+    for (const [field, rules] of Object.entries(maps ?? {})) {
+        const name = field.trim();
+        if (!name) continue;
+        const kept: Record<string, string> = {};
+        for (const [from, to] of Object.entries(rules ?? {})) {
+            if (from.trim() && to.trim()) kept[from.trim()] = to.trim();
+        }
+        if (Object.keys(kept).length > 0) cleaned[name] = { ...(cleaned[name] ?? {}), ...kept };
+    }
     return cleaned;
 }
 

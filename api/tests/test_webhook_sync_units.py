@@ -194,6 +194,79 @@ def test_variable_names_are_prompt_safe():
     assert variable_name("---") == ""
 
 
+# A client's lead-source table: what the CRM sends → what the agent hears.
+_SOURCE_TABLE = {
+    "Contact us": "Website",
+    "Indiamart": "Indiamart",
+    "trade india": "trade india",
+    "FB Leads ad": "Facebook",
+    "Inbound toll free": "Toll free",
+    "landingpage": "Website",
+    "Whats app": "Whats app",
+}
+
+
+@pytest.mark.parametrize(
+    "sent, expected",
+    [
+        ("Contact us", "Website"),
+        ("contact US", "Website"),
+        ("FB Leads ad", "Facebook"),
+        ("Landing Page", "Website"),
+        ("WhatsApp", "Whats app"),
+        ("Inbound toll-free", "Toll free"),
+        ("Google Ads", "Google Ads"),  # no rule: passes through
+    ],
+)
+def test_values_are_translated_for_the_lead_and_the_agent(sent, expected):
+    payload = {"mobile": "9876543210", "Lead source": sent}
+    lead = map_lead(payload, {"value_maps": {"source": _SOURCE_TABLE}})
+    assert lead.source == expected
+    assert lead.variables["source"] == expected
+
+
+def test_any_variable_can_be_translated_including_mapped_ones():
+    payload = {"mobile": "9876543210", "Product": "SS-T", "deep": {"plan": "p1"}}
+    lead = map_lead(
+        payload,
+        {
+            "custom": {"plan": "deep.plan"},
+            "value_maps": {
+                "Product": {"ss-t": "Steel tank"},
+                "plan": {"P1": "Gold plan"},
+                "city": {"Patna": "Bihar"},  # absent from the payload: ignored
+            },
+        },
+    )
+    assert lead.variables["product"] == "Steel tank"
+    assert lead.variables["plan"] == "Gold plan"
+    assert lead.city is None and "city" not in lead.variables
+
+
+def test_value_maps_are_validated():
+    assert FieldMapping(value_maps={"source": _SOURCE_TABLE}).value_maps
+    with pytest.raises(ValidationError):
+        FieldMapping(value_maps={"source": {"   ": "Website"}})
+    with pytest.raises(ValidationError):
+        FieldMapping(value_maps={"source": {"Contact us": ""}})
+    with pytest.raises(ValidationError):
+        FieldMapping(value_maps={f"f{i}": {"a": "b"} for i in range(21)})
+    with pytest.raises(ValidationError):
+        FieldMapping(value_maps={"source": {f"v{i}": "x" for i in range(201)}})
+
+
+def test_preview_shows_translated_values():
+    from api.services.webhook_sync.preview import preview_mapping
+
+    result = preview_mapping(
+        json.dumps({"mobile": "9876543210", "Lead source": "FB Leads ad"}),
+        "application/json",
+        {"value_maps": {"source": _SOURCE_TABLE}},
+    )
+    assert result["fields"]["source"] == "Facebook"
+    assert result["variables"]["source"] == "Facebook"
+
+
 # ---------------------------------------------------------------------------
 # Payload parsing
 # ---------------------------------------------------------------------------

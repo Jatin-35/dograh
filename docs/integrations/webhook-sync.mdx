@@ -122,6 +122,25 @@ The lead's standard fields are **phone** (required), **name**, **email**,
   prompt can use, e.g. `{{city}}`, `{{budget}}`. A field named `Lead Source`
   becomes `{{lead_source}}`.
 
+### Value translations
+
+Your CRM's labels aren't always what the agent should say. Under **Field
+mapping → Value translations**, add a table for a field (for example `source`)
+with what the CRM sends and what to use instead:
+
+| CRM sends | Update as |
+|---|---|
+| Contact us | Website |
+| landingpage | Website |
+| FB Leads ad | Facebook |
+| Inbound toll free | Toll free |
+
+The lead is stored with the translated value, the dashboard shows it, and the
+agent gets it as `{{source}}`. Matching ignores case, spaces and punctuation
+(`Whats app` matches `WhatsApp`), and a value with no row is kept as sent. Any
+field or call variable can have a table (up to 20 fields, 200 rows each). You
+can paste two columns copied from Excel straight into a **CRM sends** box.
+
 ### Phone numbers
 
 Numbers are stored as `+91XXXXXXXXXX`. Spaces, dashes and the `+91`, `91`, `0`
