@@ -356,8 +356,10 @@ describe("MappingEditor", () => {
         fireEvent.change(screen.getAllByLabelText("CRM sends")[3], { target: { value: "Whats app" } });
         expect(screen.getAllByLabelText("CRM sends")).toHaveLength(4);
         expect(onChange.mock.calls.at(-1)![0].value_maps.source).not.toHaveProperty("Whats app");
+        expect(screen.getByText(/1 row is missing a value/)).toBeTruthy();
         fireEvent.change(screen.getAllByLabelText("Update as")[3], { target: { value: "WhatsApp" } });
         expect(onChange.mock.calls.at(-1)![0].value_maps.source["Whats app"]).toBe("WhatsApp");
+        expect(screen.queryByText(/missing a value/)).toBeNull();
     });
 
     it("shows saved translations and follows a discard from outside", async () => {

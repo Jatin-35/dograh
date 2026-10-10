@@ -103,6 +103,7 @@ export function ValueMapsCard({ value, onChange, fieldSuggestions, previewValue 
             <CardContent className="space-y-4">
                 {tables.map((table, tableIndex) => {
                     const current = table.field ? previewValue(table.field) : undefined;
+                    const incomplete = table.rows.filter((row) => !row.from.trim() !== !row.to.trim()).length;
                     return (
                         <div key={tableIndex} className="space-y-2 rounded-md border p-3">
                             <div className="flex flex-wrap items-center gap-2">
@@ -185,6 +186,15 @@ export function ValueMapsCard({ value, onChange, fieldSuggestions, previewValue 
                                     </Button>
                                 </div>
                             ))}
+                            {!table.field.trim() && (
+                                <p className="text-sm text-destructive">Name the field, or this table won&apos;t be saved.</p>
+                            )}
+                            {incomplete > 0 && (
+                                <p className="text-sm text-destructive">
+                                    {incomplete === 1 ? "1 row is" : `${incomplete} rows are`} missing a value on one
+                                    side and won&apos;t be saved until both are filled.
+                                </p>
+                            )}
                             <div className="flex flex-wrap items-center gap-3">
                                 <Button
                                     variant="outline"
