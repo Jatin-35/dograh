@@ -169,8 +169,8 @@ def build_index(rows: list[dict[str, str]], *, strict_aliases: bool = True,
     records = []
     for r in place_rows:
         keys = _place_keys(r["City"]) | _place_keys(r["District"])
-        for source, extra in A.EXTRA_PLACE_KEYS.items():
-            if source in keys:
+        for alias_source, extra in A.EXTRA_PLACE_KEYS.items():
+            if alias_source in keys:
                 keys |= set(extra)
         states = {norm(r["State"])}
         for k in keys:

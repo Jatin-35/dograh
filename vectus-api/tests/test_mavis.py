@@ -160,3 +160,10 @@ def test_household_goes_to_the_moulding_reps(product):
     for city in ("Noida", "Noida-M"):
         r = lookup(ix, Lookup(product=product, city=city))
         assert r["status"] == "found" and r["salesperson"] == "Akhilesh Singh", r
+
+
+def test_the_index_reports_where_its_data_came_from():
+    # /health shows this; a loop variable once overwrote it with a place name.
+    assert build_index(KB_ROWS).source == "kb"
+    ix = build_index(mavis.to_kb_rows(MAVIS, KB_ROWS), strict_aliases=False, source="mavis")
+    assert ix.source == "mavis"
