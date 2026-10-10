@@ -26,7 +26,7 @@ _KNOWN_PRODUCTS = {"water tank": A.WATER_TANK, "moundling": A.MOULDING}
 
 # Suffixes the KB appends to City/District to keep otherwise-equal names apart.
 # The information they carry is already in the Product or State field.
-_MOULDING_MARK = re.compile(r"\s*-\s*m$", re.I)
+_MOULDING_MARK = re.compile(r"\s*-\s*m(ould)?$", re.I)  # KB "Noida -M", Mavis "Noida-Mould"
 _TERRITORY_MARK = re.compile(r"-(v|g)$", re.I)  # Madurai-V / Mysore-G
 _STATE_TAG = re.compile(r"\s+(bihar|up|cg|hp|mh|rj)$", re.I)
 _OTHER_TAG = re.compile(r"\s+gpp$", re.I)
@@ -123,17 +123,36 @@ class Index:
     fuzzy_names: dict[str, dict[str, set[str]]]      # product -> folded name -> keys
     lead_rows: int
     ambiguous_keys: dict[str, set[str]]              # key -> states it spans
+    source: str = "kb"                               # "kb" | "mavis"
 
     @property
     def contacts(self) -> int:
         return len({r.contact for r in self.records})
 
 
-def load_index(path: str | Path) -> Index:
-    text = Path(path).read_text(encoding="utf-8")
-    rows = _parse(text)
+def read_kb_rows(path: str | Path) -> list[dict[str, str]]:
+    """The KB file's records, as field dicts."""
+    rows = _parse(Path(path).read_text(encoding="utf-8"))
     if not rows:
         raise KBError(f"no records found in {path}")
+    return rows
+
+
+def load_index(path: str | Path) -> Index:
+    return build_index(read_kb_rows(path))
+
+
+def build_index(rows: list[dict[str, str]], *, strict_aliases: bool = True,
+                source: str = "kb") -> Index:
+    """Validate records and build the lookup index.
+
+    ``strict_aliases`` refuses to start when an alias points at a place the
+    records no longer have — right for the hand-maintained KB file. A live
+    Mavis refresh passes False: a place dropped upstream must not take the
+    service down, so the stale alias is logged instead.
+    """
+    if not rows:
+        raise KBError("no records")
 
     for i, row in enumerate(rows, 1):
         missing = [f for f in _FIELDS if not row.get(f)]
@@ -183,12 +202,18 @@ def load_index(path: str | Path) -> Index:
         fuzzy_names={p: dict(v) for p, v in fuzzy_names.items()},
         lead_rows=len(rows) - len(place_rows),
         ambiguous_keys=_ambiguous_keys(by_key),
+        source=source,
     )
-    _validate_aliases(index)
+    try:
+        _validate_aliases(index)
+    except KBError as exc:
+        if strict_aliases:
+            raise
+        log.warning("%s", exc)
     _report_near_duplicates(index)
     _report_conflicts(place_rows, names)
-    log.info("loaded %d place records, %d lead-type rows excluded, %d contacts",
-             len(records), index.lead_rows, index.contacts)
+    log.info("loaded %d place records from %s, %d lead-type rows excluded, %d contacts",
+             len(records), source, index.lead_rows, index.contacts)
     return index
 
 

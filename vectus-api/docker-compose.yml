@@ -10,6 +10,11 @@ services:
     environment:
       VECTUS_API_KEY: ${VECTUS_API_KEY:?set VECTUS_API_KEY in vectus-api/.env}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # Live area-manager table in LeadSquared (Mavis). Leave unset to serve
+      # only the bundled KB file.
+      MAVIS_URL: ${MAVIS_URL:-}
+      MAVIS_API_KEY: ${MAVIS_API_KEY:-}
+      MAVIS_REFRESH_HOURS: ${MAVIS_REFRESH_HOURS:-6}
     # QA-verified: runs read-only with every capability dropped; ~40 MB RSS.
     read_only: true
     tmpfs: [/tmp]

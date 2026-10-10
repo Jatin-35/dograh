@@ -10,19 +10,22 @@ better than an error page. 401/422 remain for a misconfigured caller.
 
 from __future__ import annotations
 
+import asyncio
 import hmac
 import json
 import logging
 import os
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from .data import load_index
+from . import mavis
+from .data import KBError, build_index, load_index
 from .matching import Lookup, lookup
 from .schemas import LookupRequest
 
@@ -30,18 +33,58 @@ KB_PATH = os.environ.get(
     "VECTUS_KB_PATH", str(Path(__file__).resolve().parent.parent / "data" / "Vectus_KB_Revised.txt")
 )
 API_KEY = os.environ.get("VECTUS_API_KEY", "")
+# Live area-manager table (LeadSquared Mavis). Unset = serve the KB file only.
+MAVIS_URL = os.environ.get("MAVIS_URL", "")
+MAVIS_API_KEY = os.environ.get("MAVIS_API_KEY", "")
+MAVIS_REFRESH_HOURS = float(os.environ.get("MAVIS_REFRESH_HOURS", "6"))
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
                     format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger("vectus.api")
 
 
+def _load_from_mavis():
+    rows = mavis.load_rows(MAVIS_URL, MAVIS_API_KEY, KB_PATH)
+    return build_index(rows, strict_aliases=False, source="mavis")
+
+
+async def refresh_index(app: FastAPI) -> bool:
+    """Swap in a fresh Mavis index; keep serving the current one on any failure."""
+    try:
+        index = await asyncio.to_thread(_load_from_mavis)
+    except (mavis.MavisError, KBError) as exc:
+        app.state.refresh_error = str(exc)
+        log.warning("Mavis refresh failed, still serving %s data: %s",
+                    app.state.index.source, exc)
+        return False
+    app.state.index = index
+    app.state.loaded_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    app.state.refresh_error = None
+    return True
+
+
+async def _refresh_loop(app: FastAPI) -> None:
+    while True:
+        await asyncio.sleep(MAVIS_REFRESH_HOURS * 3600)
+        await refresh_index(app)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if not API_KEY:
         raise RuntimeError("VECTUS_API_KEY is not set; refusing to start without auth")
-    app.state.index = load_index(KB_PATH)  # raises KBError on a bad KB
+    # The KB file always loads first: it is the fallback, and a bad KB must
+    # still stop startup (raises KBError).
+    app.state.index = load_index(KB_PATH)
+    app.state.loaded_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    app.state.refresh_error = None
+    task = None
+    if MAVIS_URL and MAVIS_API_KEY:
+        await refresh_index(app)
+        task = asyncio.create_task(_refresh_loop(app))
     yield
+    if task:
+        task.cancel()
 
 
 # redirect_slashes off: "/lookup/" would otherwise answer 307, and Dograh's HTTP
@@ -78,7 +121,9 @@ def _check_key(key: str | None) -> None:
 @app.get("/health/", include_in_schema=False)
 async def health(request: Request):
     ix = request.app.state.index
-    return {"status": "ok", "records": len(ix.records), "contacts": ix.contacts}
+    return {"status": "ok", "records": len(ix.records), "contacts": ix.contacts,
+            "source": ix.source, "loaded_at": request.app.state.loaded_at,
+            "refresh_error": request.app.state.refresh_error}
 
 
 @app.post("/lookup")

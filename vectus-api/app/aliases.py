@@ -45,6 +45,12 @@ PRODUCT_ALIASES: dict[str, str] = {
     "vectus puff": WATER_TANK, "vectus granito": WATER_TANK, "vectus silk": WATER_TANK,
     "vectus smart": WATER_TANK, "vectus safe": WATER_TANK, "vectus tenx": WATER_TANK,
     "moundling": MOULDING,
+    # Household products are served by the moulding reps (Mavis "-Mould" rows);
+    # the Vectus prompt sends "Household" for them.
+    "household": MOULDING,
+    "household products": MOULDING,
+    "household items": MOULDING,
+    "ghar ka product": MOULDING,
     "moulding": MOULDING,
     "mouldings": MOULDING,
     "molding": MOULDING,
