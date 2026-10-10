@@ -122,9 +122,11 @@ I hope this helps!"""
 
     def test_malformed_json_returns_raw(self):
         """Malformed JSON returns raw content."""
-        input_str = '{"key": "value"'  # Missing closing brace
+        # Cut off inside a string. A reply missing only its closing brace is
+        # repaired instead (see TestTruncatedObject).
+        input_str = '{"key": "val'
         result = parse_llm_json(input_str)
-        assert result == {"raw": '{"key": "value"'}
+        assert result == {"raw": '{"key": "val'}
 
     def test_complex_real_world_example(self):
         """Test with a realistic LLM output example."""
@@ -229,3 +231,45 @@ class TestExtractJsonArray:
     def test_brackets_in_strings(self):
         result = _extract_json_array('["a[b]c"]')
         assert result == ["a[b]c"]
+
+
+class TestTruncatedObject:
+    """Replies that stop just before their closing braces (Hopper gemma-4-31b)."""
+
+    def test_reply_missing_final_brace(self):
+        # Verbatim from Hopper gemma-4-31b, finish_reason "stop", every time.
+        reply = (
+            '{\n"area_manager_name": null,\n"area_manager_number": null,\n'
+            '"requirement": "bulk requirement",\n"city": null'
+        )
+        assert parse_llm_json(reply) == {
+            "area_manager_name": None,
+            "area_manager_number": None,
+            "requirement": "bulk requirement",
+            "city": None,
+        }
+
+    def test_nested_closers_and_trailing_comma(self):
+        reply = '{"city": "Ranchi", "products": ["tank", "pipe"], "meta": {"ok": true},'
+        assert parse_llm_json(reply) == {
+            "city": "Ranchi",
+            "products": ["tank", "pipe"],
+            "meta": {"ok": True},
+        }
+
+    def test_nested_list_is_not_returned_instead_of_the_object(self):
+        assert parse_llm_json('{"products": ["tank"], "city": "Durg"') == {
+            "products": ["tank"],
+            "city": "Durg",
+        }
+
+    def test_cut_inside_a_string_stays_raw(self):
+        reply = '{"city": "Ran'
+        assert parse_llm_json(reply) == {"raw": reply}
+
+    def test_cut_after_a_key_stays_raw(self):
+        reply = '{"city": "Ranchi", "state"'
+        assert parse_llm_json(reply) == {"raw": reply}
+
+    def test_hindi_values_survive(self):
+        assert parse_llm_json('{"requirement": "टंकी चाहिए"') == {"requirement": "टंकी चाहिए"}
