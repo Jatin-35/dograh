@@ -63,7 +63,9 @@ SARVAM_LANGUAGES = (
     "te-IN",
     "as-IN",
 )
-SARVAM_STT_MODELS = ("saarika:v2.5", "saaras:v3")
+# Keep in step with api/services/pipecat/sarvam_stt.py. Sarvam retired
+# saarika:v2.5 and saaras:v2.5; a config still saved with one runs on saaras:v3.
+SARVAM_STT_MODELS = ("saaras:v4", "saaras:v3")
 # saarika:v2.5 language codes (unknown = auto-detect)
 SARVAM_STT_LANGUAGES_V25 = (
     "unknown",

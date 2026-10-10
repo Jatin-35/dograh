@@ -16,6 +16,10 @@ from api.services.configuration.registry import (
     ServiceProviders,
     strip_vakyam_voice_gender_suffix,
 )
+from api.services.pipecat.sarvam_stt import (
+    DograhSarvamSTTService,
+    resolve_sarvam_stt_model,
+)
 from api.services.pipecat.sarvam_llm import (
     SARVAM_DEFAULT_BASE_URL,
     DograhSarvamLLMService,
@@ -85,7 +89,7 @@ from pipecat.services.openai.tts import OpenAITTSService, OpenAITTSSettings
 from pipecat.services.openrouter.llm import OpenRouterLLMService, OpenRouterLLMSettings
 from pipecat.services.rime.tts import RimeTTSService, RimeTTSSettings
 from pipecat.services.sarvam.llm import SarvamLLMSettings
-from pipecat.services.sarvam.stt import SarvamSTTService, SarvamSTTSettings
+from pipecat.services.sarvam.stt import SarvamSTTSettings
 from pipecat.services.sarvam.tts import SarvamTTSService, SarvamTTSSettings
 from pipecat.services.smallest.stt import SmallestSTTService, SmallestSTTSettings
 from pipecat.services.smallest.tts import SmallestTTSService, SmallestTTSSettings
@@ -361,13 +365,14 @@ def create_stt_service(
         else:
             # Unmapped BCP-47 codes pass through; Sarvam accepts them per https://docs.sarvam.ai/api-reference-docs/speech-to-text/transcribe
             pipecat_language = language
-        return SarvamSTTService(
+        return DograhSarvamSTTService(
             api_key=user_config.stt.api_key,
             settings=SarvamSTTSettings(
-                model=user_config.stt.model,
+                model=resolve_sarvam_stt_model(user_config.stt.model),
                 language=pipecat_language,
             ),
             sample_rate=audio_config.transport_in_sample_rate,
+            keyterms=keyterms,
         )
     elif user_config.stt.provider == ServiceProviders.SPEACHES.value:
         language = getattr(user_config.stt, "language", None)

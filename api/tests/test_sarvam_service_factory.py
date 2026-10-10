@@ -222,7 +222,7 @@ class TestSarvamSTTServiceFactory:
         )
 
         with patch(
-            "api.services.pipecat.service_factory.SarvamSTTService"
+            "api.services.pipecat.service_factory.DograhSarvamSTTService"
         ) as mock_service:
             create_stt_service(user_config, audio_config)
 
