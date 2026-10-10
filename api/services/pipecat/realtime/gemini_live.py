@@ -23,11 +23,11 @@ import contextvars
 import os
 from typing import Any
 
-from google.genai.types import Content, LiveServerMessage, Part
+from google.genai.types import ActivityEnd, Content, LiveServerMessage, Part
 from loguru import logger
 
 from api.services.pipecat.gemini_json_schema_adapter import (
-    DograhGeminiJSONSchemaAdapter,
+    DograhGeminiLiveJSONSchemaAdapter,
 )
 from api.services.pipecat.realtime.static_greeting import format_static_greeting_prompt
 from pipecat.frames.frames import (
@@ -89,9 +89,11 @@ class DograhGeminiLiveLLMService(GeminiLiveLLMService):
     # Route tool schemas through Gemini's ``parameters_json_schema`` field so
     # MCP/imported tools that use JSON Schema keywords (``const``, ``not``,
     # nested ``anyOf``) rejected by the strict ``Schema`` model are accepted.
-    # Mirrors the non-realtime ``DograhGoogleLLMService`` fix;
-    # ``DograhGeminiLiveVertexLLMService`` inherits this via MRO.
-    adapter_class = DograhGeminiJSONSchemaAdapter
+    # Mirrors the non-realtime ``DograhGoogleLLMService`` fix. The Live variant
+    # also sends tool-call history as text when a fresh session is seeded (see
+    # DograhGeminiLiveJSONSchemaAdapter). ``DograhGeminiLiveVertexLLMService``
+    # and the 3.8 service inherit this via MRO.
+    adapter_class = DograhGeminiLiveJSONSchemaAdapter
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -498,6 +500,35 @@ class DograhGeminiLiveLLMService(GeminiLiveLLMService):
             await self._run_pending_node_transition_function_calls()
             # Fall through to super for the actual push.
         await super().process_frame(frame, direction)
+
+    async def _handle_user_stopped_speaking(self, frame):
+        """End the user's turn, doing nothing that needs a session while there is none.
+
+        Ported from pipecat b3f3730e. The pinned version guards the
+        activity-end send but not the turn_complete that tells a freshly seeded
+        session to use its context. When the caller stops speaking during the
+        reconnect a node change makes, that send hit ``None`` and raised, and
+        the flag had already been cleared, so the new session never got the
+        signal. Returning early keeps the flag for the next turn, by which time
+        the session exists.
+        """
+        self._user_is_speaking = False
+        self._user_audio_preroll_buffer = bytearray()
+        await self.start_ttfb_metrics()
+
+        if not self._session:
+            return
+
+        if self._vad_disabled and self._ready_for_realtime_input:
+            try:
+                await self._session.send_realtime_input(activity_end=ActivityEnd())
+            except Exception as e:
+                await self._handle_send_error(e)
+        if self._needs_initial_turn_complete_message:
+            self._needs_initial_turn_complete_message = False
+            # Without this, the model ignores the context it was seeded with
+            # before the user started speaking.
+            await self._session.send_client_content(turn_complete=True)
 
     async def _send_user_audio(self, frame):
         if self._user_is_muted:

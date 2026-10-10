@@ -7,6 +7,7 @@ from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from api.services.configuration.registry import ServiceProviders
 from api.services.pipecat.gemini_json_schema_adapter import (
     DograhGeminiJSONSchemaAdapter,
+    DograhGeminiLiveJSONSchemaAdapter,
 )
 from api.services.pipecat.realtime.gemini_live import DograhGeminiLiveLLMService
 from api.services.pipecat.realtime.gemini_live_vertex import (
@@ -127,10 +128,13 @@ def test_google_vertex_llm_service_factory_uses_dograh_service_class():
 
 
 def test_gemini_live_service_classes_use_dograh_gemini_adapter_class():
-    assert DograhGeminiLiveLLMService.adapter_class is DograhGeminiJSONSchemaAdapter
+    # The Live adapter is the JSON Schema adapter plus tool history as text.
+    assert issubclass(DograhGeminiLiveJSONSchemaAdapter, DograhGeminiJSONSchemaAdapter)
+    assert DograhGeminiLiveLLMService.adapter_class is DograhGeminiLiveJSONSchemaAdapter
     # Vertex Live inherits adapter_class from DograhGeminiLiveLLMService via MRO.
     assert (
-        DograhGeminiLiveVertexLLMService.adapter_class is DograhGeminiJSONSchemaAdapter
+        DograhGeminiLiveVertexLLMService.adapter_class
+        is DograhGeminiLiveJSONSchemaAdapter
     )
 
 
