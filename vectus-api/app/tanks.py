@@ -788,8 +788,8 @@ def _listing(tanks: list[Tank], label: str, ignored: dict, brand_info: dict) -> 
                f"Features: {'; '.join(t.features) or 'not listed'}. "
                "Answer only the customer's question from this.")
     elif more:
-        msg += (f" There are {more} more; say these names and ask which capacity, colour or "
-                f"layers the customer prefers.")
+        msg += (f" Also: {', '.join(t.name for t in tanks[len(shown):])}. Say these names and "
+                "ask which capacity, colour or layers the customer prefers.")
     else:
         msg += " Say these names briefly and ask which one the customer prefers."
     out = {"status": "found", **brand_info, "count": len(tanks),
@@ -938,7 +938,7 @@ def find(catalog: Catalog, *, brand=None, state=None, model=None, capacity=None,
             out = _listing([tank], f.label(), ignored, brand_info)
             if f.cap:
                 out["message"] = (f"Yes, {tank.name} comes in {_cap_label(f.cap)}. "
-                                  f"{describe(tank)}.")
+                                  + out["message"])  # keeps the layers and features
             return out
         return _model_not_available(catalog, tank, failed, f, tests, brand_name, brand_info,
                                     ignored)
@@ -988,12 +988,15 @@ def _not_in_brand(catalog, model_key, brand_name, f, tests, brand_info) -> dict:
         return {"status": "not_in_brand", **brand_info, "asked": f"{brand_name} {model_name}",
                 "same_tank": _card(twin, True),
                 "message": f"{brand_name} does not sell {model_name}; the same tank in "
-                           f"{brand_name} is {twin.name}. {describe(twin)}."}
-    names = [o.name for o in _sorted(others, None)]
+                           f"{brand_name} is {twin.name}. {describe(twin)}. "
+                           f"Layers: {', '.join(twin.layer_names) or 'not listed'}. "
+                           f"Features: {'; '.join(twin.features) or 'not listed'}."}
+    ordered = _sorted(others, None)
     return {"status": "not_in_brand", **brand_info, "asked": f"{brand_name} {model_name}",
-            "other_brands": [_card(o, False) for o in _sorted(others, None)],
+            "other_brands": [_card(o, False) for o in ordered],
             "message": f"{brand_name} does not sell {model_name}. It is available as "
-                       f"{', '.join(names)}. Ask the customer if that brand is fine."}
+                       f"{'; '.join(describe(o) for o in ordered)}. "
+                       "Ask the customer if that brand is fine."}
 
 
 def _model_not_available(catalog, tank, failed, f, tests, brand_name, brand_info,
@@ -1018,6 +1021,7 @@ def _model_not_available(catalog, tank, failed, f, tests, brand_name, brand_info
             parts.append(f"{tank.name} is {tank.mould} moulded")
         elif name == "need":
             parts.append(f"{tank.name} is not listed for {f.need.replace('_', ' ')}")
+    parts.append(f"For reference, {describe(tank)}")  # the asked tank in full
     # Other tanks that do have everything that was asked.
     alts = [t for t in _pool(catalog, brand_name)
             if t is not tank and all(test(t) for test in tests.values())]
@@ -1092,3 +1096,31 @@ def _available_values(pool, tests) -> dict:
         out["guarantee"] = ", ".join(
             sorted({f"{t.guarantee} years" if t.guarantee else "no guarantee" for t in pool}))
     return out
+
+
+# ---------------------------------------------------------------------------
+# Compact replies (POST /tanks?compact=1, what the bot's tool uses)
+# ---------------------------------------------------------------------------
+
+# Everything the bot needs is in "message"; these repeat it as structured data
+# (or are internal) and only cost tokens on every later turn of the call.
+_COMPACT_KEEP = ("status", "brand", "message", "closest_capacities", "ignored", "heard")
+
+
+def compact(result: dict) -> dict:
+    """The same answer without the duplicate data cards.
+
+    Nothing the bot can say is lost: every fact on a card is also in the
+    message, except the features in a comparison, which are kept per tank.
+    """
+    # Detailed answers (one tank, a comparison, the same tank under another name)
+    # stay whole. Measured with the agent's LLM on "which layers does Granito
+    # have?": the full reply got the layer names 8/8; with the card removed 1/8,
+    # with the list kept but the message text trimmed 0/4. Only internal fields go.
+    cards = list(result.get("tanks", [])) + [result[k] for k in ("same_tank",) if k in result]
+    if any(c.get("layer_names") is not None for c in cards):
+        return {k: v for k, v in result.items() if k not in _INTERNAL}
+    return {k: result[k] for k in _COMPACT_KEEP if k in result}
+
+
+_INTERNAL = ("brand_reason", "asked", "count")

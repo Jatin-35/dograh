@@ -30,6 +30,7 @@ from .data import KBError, build_index, load_index
 from .matching import Lookup, lookup
 from .schemas import LookupRequest, TankRequest
 from .tanks import CatalogError, load_catalog
+from .tanks import compact as compact_tank_reply
 from .tanks import find as find_tanks
 
 KB_PATH = os.environ.get(
@@ -176,6 +177,8 @@ async def post_tanks(body: TankRequest, request: Request,
                              "the exact details."}
     else:
         result = find_tanks(request.app.state.tanks, **asked)
+        if request.query_params.get("compact") in {"1", "true", "yes"}:
+            result = compact_tank_reply(result)
     log.info(json.dumps({
         "event": "tanks",
         "request": asked,

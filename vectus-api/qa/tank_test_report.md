@@ -1,6 +1,6 @@
 # Tank lookup — scenario test report
 
-Run against `http://127.0.0.1:18080` on 2026-10-12 16:51. **181/181 passed.** Expected answers were written by hand from `Tank_details.xlsx` (Vectus brand unless a state or brand is given).
+Run against `http://127.0.0.1:18080` on 2026-10-12 18:22. **181/181 passed.** Expected answers were written by hand from `Tank_details.xlsx` (Vectus brand unless a state or brand is given).
 
 
 ## capacity
@@ -287,7 +287,7 @@ Run against `http://127.0.0.1:18080` on 2026-10-12 16:51. **181/181 passed.** Ex
 | H4 | broken JSON → 422, no crash | ✅ |
 | H5 | /health reports 39 tanks | ✅ |
 | H6 | GET /tanks not allowed | ✅ |
-| PF1 | 10 concurrent callers × 40 requests: 0 errors, p95 < 200 ms (p50 11.3 ms, p95 25.8 ms) | ✅ |
+| PF1 | 10 concurrent callers × 40 requests: 0 errors, p95 < 200 ms (p50 10.4 ms, p95 24.3 ms) | ✅ |
 
 ## Sample replies the bot reads
 
@@ -301,11 +301,11 @@ Run against `http://127.0.0.1:18080` on 2026-10-12 16:51. **181/181 passed.** Ex
 
 **G02 — Smart 1100?**
 
-> Vectus Smart does not come in 1100 litre; it comes in 500 to 5000 litres (500, 700, 1000, 1500, 2000, 3000, 5000). Closest: 1000 or 1500 litre. Tanks with 1100 litre: Vectus Safe: 4 layer, White / Green / Blue, 550 to 5000 litres (550, 750, 1100, 1500, 2000, 3000, 5000), 15 year guarantee, Roto moulded; Vectus Cool: 5 layer, White, 550 to 5000 litres (550, 750, 1100, 1500, 2000, 3000, 5000), 15 year guarantee, Roto moulded; Vectus Granito: 6 layer, Ruby / Emerald / Pearl, 550 to 2000 litres (550, 750, 1100, 1500, 2000), 15 year guarantee, Roto moulded. Tell the customer briefly and ask what they prefer.
+> Vectus Smart does not come in 1100 litre; it comes in 500 to 5000 litres (500, 700, 1000, 1500, 2000, 3000, 5000). Closest: 1000 or 1500 litre. For reference, Vectus Smart: 3 layer, White / Green / Blue, 500 to 5000 litres (500, 700, 1000, 1500, 2000, 3000, 5000), 10 year guarantee, Roto moulded. Tanks with 1100 litre: Vectus Safe: 4 layer, White / Green / Blue, 550 to 5000 litres (550, 750, 1100, 1500, 2000, 3000, 5000), 15 year guarantee, Roto moulded; Vectus Cool: 5 layer, White, 550 to 5000 litres (550, 750, 1100, 1500, 2000, 3000, 5000), 15 year guarantee, Roto moulded; Vectus Granito: 6 layer, Ruby / Emerald / Pearl, 550 to 2000 litres (550, 750, 1100, 1500, 2000), 15 year guarantee, Roto moulded. Tell the customer briefly and ask what they prefer.
 
 **L01 — Vectus Pro**
 
-> Vectus does not sell Pro; the same tank in Vectus is Vectus Smart. Vectus Smart: 3 layer, White / Green / Blue, 500 to 5000 litres (500, 700, 1000, 1500, 2000, 3000, 5000), 10 year guarantee, Roto moulded.
+> Vectus does not sell Pro; the same tank in Vectus is Vectus Smart. Vectus Smart: 3 layer, White / Green / Blue, 500 to 5000 litres (500, 700, 1000, 1500, 2000, 3000, 5000), 10 year guarantee, Roto moulded. Layers: Enhanced Aesthetic Layer, UV-Protective Sun-Shield Layer, Advanced Anti-Bacterial Layer. Features: Anti-Bacterial Layer: Guarantees water purity and safety with an inner anti-bacterial layer, effectively preventing bacterial contamination; UV-Protective Sun-Shield Layer: Provides reliable protection against harmful UV rays, safeguarding water quality; Enhanced Aesthetic Layer: Crafted with high-quality raw material, with various colour options which add an aesthetic appeal to the tank; Lightweight and Durable Construction: Engineered with a lightweight yet durable design; Injection-Moulded Threaded Lid: Features a robust injection-moulded threaded lid for secure sealing.
 
 **O01 — Cool aur Puff mein fark**
 
