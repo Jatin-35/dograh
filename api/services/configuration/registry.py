@@ -810,6 +810,24 @@ class GeminiLive38LLMConfiguration(BaseLLMConfiguration):
             "allow_custom_input": True,
         },
     )
+    turn_end_silence_ms: int | None = Field(
+        default=None,
+        ge=300,
+        le=2000,
+        description=(
+            "Silence (ms) before Gemini treats the caller's turn as finished. "
+            "Empty uses Google's default (about 800). Lower replies sooner but "
+            "can cut off callers who pause mid-sentence; 500-800 is typical."
+        ),
+    )
+
+    @field_validator("turn_end_silence_ms", mode="before")
+    @classmethod
+    def _blank_uses_default(cls, value):
+        # The settings form sends an empty box as "".
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return None
+        return value
 
 
 @register_service(ServiceType.REALTIME)

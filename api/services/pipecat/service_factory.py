@@ -1221,6 +1221,13 @@ def create_realtime_llm_service(user_config, audio_config: "AudioConfig"):
             )
         if language:
             settings_kwargs["language"] = language
+        # Gemini's server VAD ends the caller's turn (see
+        # _create_realtime_user_turn_config); unset keeps Google's default.
+        silence_ms = getattr(realtime_config, "turn_end_silence_ms", None)
+        if silence_ms:
+            from pipecat.services.google.gemini_live.llm import GeminiVADParams
+
+            settings_kwargs["vad"] = GeminiVADParams(silence_duration_ms=silence_ms)
         return DograhGemini38LiveLLMService(
             api_key=api_key,
             settings=DograhGemini38LiveLLMService.Settings(**settings_kwargs),

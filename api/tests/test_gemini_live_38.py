@@ -6,9 +6,10 @@ a declaration says BLOCKING, and the pinned pipecat never declares BLOCKING.
 """
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from pydantic import ValidationError
 
 from api.services.configuration.registry import (
     REALTIME_PROVIDERS,
@@ -182,3 +183,80 @@ def test_the_factory_builds_the_38_service_only_for_its_provider():
         type(build("google_realtime", "gemini-3.1-flash-live-preview"))
         is DograhGeminiLiveLLMService
     )
+
+
+# ─── turn-end silence (Gemini's server VAD) ────────────────────────────────
+
+
+def _build_38(**extra):
+    from api.services.pipecat.service_factory import create_realtime_llm_service
+
+    realtime = SimpleNamespace(
+        provider="gemini_live_38",
+        model="gemini-3.8-live",
+        api_key="k",
+        voice="Puck",
+        language="hi",
+        **extra,
+    )
+    return create_realtime_llm_service(SimpleNamespace(realtime=realtime), None)
+
+
+async def _session_config(service):
+    """The LiveConnectConfig _connect would open the session with."""
+    with (
+        patch.object(service, "_connection_task_handler", MagicMock()) as handler,
+        patch.object(service, "create_task", MagicMock()),
+        patch.object(service, "push_error", AsyncMock()) as push_error,
+    ):
+        await service._connect()
+    push_error.assert_not_awaited()
+    return handler.call_args.kwargs["config"]
+
+
+@pytest.mark.parametrize(
+    "sent, stored", [(None, None), ("", None), ("  ", None), ("600", 600), (600, 600)]
+)
+def test_turn_end_silence_setting_accepts_the_forms_values(sent, stored):
+    config = GeminiLive38LLMConfiguration(api_key="k", turn_end_silence_ms=sent)
+    assert config.turn_end_silence_ms == stored
+    assert GeminiLive38LLMConfiguration(api_key="k").turn_end_silence_ms is None
+
+
+@pytest.mark.parametrize("sent", [100, 299, 2001, "abc"])
+def test_turn_end_silence_outside_the_safe_range_is_refused(sent):
+    with pytest.raises(ValidationError):
+        GeminiLive38LLMConfiguration(api_key="k", turn_end_silence_ms=sent)
+
+
+@pytest.mark.asyncio
+async def test_the_session_asks_google_for_the_agents_silence():
+    config = await _session_config(_build_38(turn_end_silence_ms=600))
+    detection = config.realtime_input_config.automatic_activity_detection
+    assert detection.silence_duration_ms == 600
+    # Only the silence changes; Gemini still detects the caller's speech itself.
+    assert not detection.disabled
+
+
+@pytest.mark.asyncio
+async def test_without_the_setting_google_keeps_its_default():
+    for service in (_build_38(), _build_38(turn_end_silence_ms=None)):
+        config = await _session_config(service)
+        assert config.realtime_input_config is None
+
+
+@pytest.mark.asyncio
+async def test_gemini_31_never_gets_the_38_setting():
+    from api.services.pipecat.service_factory import create_realtime_llm_service
+
+    realtime = SimpleNamespace(
+        provider="google_realtime",
+        model="gemini-3.1-flash-live-preview",
+        api_key="k",
+        voice="Puck",
+        language="hi",
+        turn_end_silence_ms=600,
+    )
+    service = create_realtime_llm_service(SimpleNamespace(realtime=realtime), None)
+    config = await _session_config(service)
+    assert config.realtime_input_config is None
