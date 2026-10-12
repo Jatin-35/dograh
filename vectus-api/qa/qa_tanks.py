@@ -365,8 +365,8 @@ SCENARIOS: list[S] = [
     S("O05", "compare", "Granito ya TenX", {"model": "Granito ya TenX"}, "found",
       tanks=[V + "Granito", V + "TenX"]),
     # --- P. empty / junk -------------------------------------------------------
-    S("P01", "junk", "(nothing given)", {}, "catalogue", contains=("capacity",),
-      absent=("Chemical",)),
+    S("P01", "junk", "(nothing given)", {}, "catalogue",
+      contains=("capacity", "5 layer: Cool", "Also, for commercial or special use")),
     S("P02", "junk", "LLM nulls", {"model": "null", "capacity": "", "colour": "None"},
       "catalogue"),
     S("P03", "junk", "only a state", {"state": "UP"}, "catalogue"),

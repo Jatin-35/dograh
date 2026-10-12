@@ -16,6 +16,7 @@ state default (south → Ganga, everywhere else → Vectus), else Vectus.
 from __future__ import annotations
 
 import math
+import unicodedata
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -31,6 +32,10 @@ _BRAND_RE = re.compile(r"^\s*(vectus|ganga|water\s*well)\s+(.+?)\s*$", re.I)
 BRAND_ALIASES = {
     "vectus": "Vectus", "victus": "Vectus", "vektus": "Vectus", "vectas": "Vectus",
     "vector": "Vectus", "vectors": "Vectus", "वेक्टस": "Vectus",
+    # how speech-to-text wrote "Vectus" on real Vectus calls
+    "victor": "Vectus", "vaktis": "Vectus", "vetex": "Vectus", "dectus": "Vectus",
+    "vektas": "Vectus", "वेक्टर": "Vectus", "विक्टर": "Vectus", "वैक्टस": "Vectus",
+    "डेक्टस": "Vectus", "वेक्टर्स": "Vectus",
     "ganga": "Ganga", "gunga": "Ganga", "ganga tank": "Ganga", "गंगा": "Ganga",
     "waterwell": "Waterwell", "water well": "Waterwell", "watervel": "Waterwell",
     "वाटरवेल": "Waterwell",
@@ -76,6 +81,8 @@ MODEL_ALIASES: dict[str, str] = {
     "t 9 0": "t 90",
     "granito": "granito", "granite": "granito", "grenito": "granito", "granita": "granito",
     "graneto": "granito", "granito tank": "granito",
+    "garnier to": "granito", "garnierto": "granito", "garnito": "granito",  # real calls
+    "ग्रेनीटो": "granito", "ग्रेनिटो": "granito",
     "puff": "puff", "puf": "puff", "paff": "puff", "puff tank": "puff",
     "silk": "silk", "silky": "silk",
     "smart": "smart", "smaart": "smart",
@@ -117,7 +124,10 @@ COLOUR_ALIASES: dict[str, str] = {
 NEEDS: dict[str, tuple[str, ...]] = {
     "cooling": ("cool", "cooling", "thanda", "thanda pani", "garmi", "heat", "hot",
                 "temperature", "insulated", "insulation", "dhoop", "sunlight", "sun",
-                "summer", "weather"),
+                "summer", "thanda rahe", "garmiyon"),
+    # rain, storms, harsh weather (asked on real calls: "barish bahut hoti hai")
+    "weather": ("weather", "barish", "baarish", "rain", "rainy", "toofan", "tufan", "storm",
+                "mausam", "durable", "durability", "majboot", "long life", "tikau"),
     "underground": ("underground", "under ground", "zameen", "zameen ke neeche",
                     "bhoomigat", "sump"),
     "small_space": ("small space", "small", "kam jagah", "chhoti jagah", "space saving",
@@ -243,12 +253,25 @@ def _features(cell) -> tuple[str, ...]:
         item = re.sub(r"\s+", " ", item).strip(" .")
         if not item:
             continue
-        title, _, _ = item.partition(":")
-        title = title.strip() if ":" in item and len(title) <= 60 else item
         if re.search(r"wide (range|size)|size range|layer configuration", item, re.I):
             continue
-        out.append(title[:120].rstrip(" ,"))
+        title, _, desc = item.partition(":")
+        if ":" in item and len(title) <= 60:
+            # Keep what the feature does, in one short clause: callers ask "what
+            # does the titanium layer mean?" and the sheet's text answers it.
+            first = re.split(r"(?<=[a-z])[.;]\s|,\s(?:ensuring|guaranteeing|making|offering)",
+                             desc.strip())[0].strip(" .")
+            out.append(_clip(f"{title.strip()}: {first}", 160))
+        else:
+            out.append(_clip(item, 120))
     return tuple(out)
+
+
+def _clip(text: str, limit: int) -> str:
+    """Shorten at a word boundary, never mid-word."""
+    if len(text) <= limit:
+        return text.rstrip(" ,")
+    return text[:limit].rsplit(" ", 1)[0].rstrip(" ,;")
 
 
 def _header_map(header: tuple) -> dict[str, int]:
@@ -343,13 +366,15 @@ _NUM_WORDS = {
     "das": 10, "dus": 10, "gyarah": 11, "gyara": 11, "barah": 12, "bara": 12,
     "pandrah": 15, "pandra": 15, "bees": 20, "bis": 20, "pachees": 25, "pachchis": 25,
     "tees": 30, "tis": 30, "dedh": 1.5, "derh": 1.5, "dhai": 2.5, "adhai": 2.5, "dhaai": 2.5,
+    # as the Hindi-script transliteration spells them
+    "dhaaee": 2.5, "gyaarah": 11, "baarah": 12, "pachchees": 25, "chhah": 6,
     "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
     "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12, "fifteen": 15,
     "twenty": 20, "thirty": 30,
 }
 _MULTIPLIERS = {"sau": 100, "so": 100, "hundred": 100, "hazar": 1000, "hazaar": 1000,
                 "hajar": 1000, "hajaar": 1000, "thousand": 1000, "k": 1000}
-_HALF = {"saade": 0.5, "sade": 0.5, "saadhe": 0.5, "sava": 0.25, "savaa": 0.25,
+_HALF = {"saade": 0.5, "sade": 0.5, "saadhe": 0.5, "saarhe": 0.5, "sava": 0.25, "savaa": 0.25,
          "paune": -0.25, "pone": -0.25}
 
 
@@ -403,6 +428,9 @@ class Cap:
         return f"{self.low}-{self.high} litre"
 
 
+_HINDI_JOINERS = {"से": "se", "तक": "tak", "या": "ya", "बीच": "beech", "ऊपर": "upar",
+                  "ज़्यादा": "zyada", "ज्यादा": "zyada", "कम": "kam", "लीटर": "litre",
+                  "लिटर": "litre"}
 _RANGE_WORDS = {"se", "to", "till", "tak", "between", "beech", "and"}
 _CHOICE_WORDS = {"or", "ya", "yaa", "either"}
 _UP_TO = re.compile(r"\b(tak|upto|up to|under|below|se kam|less than|max|maximum|within|"
@@ -425,6 +453,12 @@ def parse_capacity(value) -> Cap | None:
         text = re.sub(r"^\s*0+\s*(se|to|till|-)", " ", text) + " tak"
     text = re.sub(r"(\d),(\d{3})(?!\d)", r"\1\2", text)          # 1,000 -> 1000
     text = re.sub(r"(\d)\s*-\s*(\d)", r"\1 to \2", text)          # 1000-1500
+    # Hindi script ("1,000 से 1,500", "डेढ़ हज़ार"): the joining words first, since
+    # the transliteration drops "से" as filler; then the number words.
+    for hindi, latin in _HINDI_JOINERS.items():
+        text = re.sub(_word(hindi), f" {latin} ", text)
+    text = re.sub(f"[{_DEVANAGARI}]+", lambda m: f" {translit(m.group())} ", text)
+    text = re.sub(r"\s+", " ", text)
     text = re.sub(r"(\d)\s*[/,]\s*(\d)", r"\1 or \2", text)       # 1000/1500, 1000, 1500
     text = re.sub(r"(\d+(?:\.\d+)?)\s*k\b", lambda m: str(float(m.group(1)) * 1000), text)
     text = re.sub(r"(\d)\s*(l|ltr|litre|liter|litres|liters|lit)\b", r"\1 ", text)
@@ -495,7 +529,7 @@ def parse_brand(brand, model_text: str, state) -> tuple[str | None, str]:
         if text in ANY_BRAND:
             return None, "all brands"
         for alias, name in BRAND_ALIASES.items():
-            if re.search(rf"\b{re.escape(norm(alias))}\b", text):
+            if re.search(_word(norm(alias)), text):
                 return name, why
     st = _clean(state)
     if st:
@@ -512,13 +546,22 @@ def parse_model(catalog: Catalog, value) -> tuple[str | None, str]:
     if not text:
         return None, ""
     for alias in sorted(BRAND_ALIASES, key=len, reverse=True):
-        text = re.sub(rf"\b{re.escape(norm(alias))}\b", " ", text)
+        text = re.sub(_word(norm(alias)), " ", text)
     stripped = re.sub(r"\s+", " ", _WORDS_DROPPED.sub(" ", text)).strip()
     for candidate in (text.strip(), stripped):
         if candidate in catalog.model_aliases:
             return catalog.model_aliases[candidate], ""
+        if candidate.endswith("s") and candidate[:-1] in catalog.model_aliases:  # "Puffs"
+            return catalog.model_aliases[candidate[:-1]], ""
     if not stripped:
         return None, ""
+    # "Cool" is the model speech-to-text mangles most: on real calls it came out
+    # as "Victor school", "Doctor school", "vertical school", "practice pool",
+    # "बैपटिस्ट स्कूल". A last word of school/pool means Cool; "pool" alone does not.
+    words = stripped.split()
+    if "cool" in catalog.model_aliases.values() and words[-1] in _COOL_ENDINGS and \
+            (words[-1] not in {"pool", "पूल"} or len(words) > 1):
+        return "cool", ""
     if not stripped.isascii():
         stripped = translit(stripped)
     target = fold(stripped)
@@ -543,8 +586,22 @@ def _heard(value) -> str:
     It is returned in a field the LLM reads, so it must never carry an
     instruction ("SYSTEM: ...") or markup through to the model.
     """
-    text = re.sub(r"[^\w\s-]", " ", str(value or ""))
+    # Letters, marks (Hindi vowel signs are marks, not \w) and digits only.
+    text = "".join(ch if unicodedata.category(ch)[0] in "LMN" or ch in " -" else " "
+                   for ch in str(value or ""))
     return re.sub(r"\s+", " ", text).strip()[:40]
+
+
+_DEVANAGARI = "ऀ-ॿ"
+
+
+def _word(phrase: str) -> str:
+    """A regex for ``phrase`` as whole words, Hindi script included (``\\b`` is not
+    enough there: a vowel sign counts as a non-word character)."""
+    return rf"(?<![\w{_DEVANAGARI}]){re.escape(phrase)}(?![\w{_DEVANAGARI}])"
+
+
+_COOL_ENDINGS = {"school", "schools", "skool", "scool", "pool", "स्कूल", "पूल", "cool", "kool"}
 
 
 def parse_colours(value) -> tuple[set[str], str]:
@@ -612,6 +669,8 @@ def _need_ok(t: Tank, need: str) -> bool:
         return t.key == "chemical tank"
     if need == "hygiene":
         return "anti-bacterial" in names or "anti-microbial" in names
+    if need == "weather":  # rain/storm/durability: the sheet's strength and weather layers
+        return any(w in names for w in ("weather-resistant", "strength", "stress-crack"))
     return True  # commercial: no filter, it only opens up the large tanks
 
 
@@ -724,7 +783,10 @@ def _listing(tanks: list[Tank], label: str, ignored: dict, brand_info: dict) -> 
     more = len(tanks) - len(shown)
     msg = f"Tanks ({label}): {lines}." if label else f"Tanks: {lines}."
     if detail:
-        msg = f"{describe(shown[0])}. Answer only the customer's question from this."
+        t = shown[0]
+        msg = (f"{describe(t)}. Layers: {', '.join(t.layer_names) or 'not listed'}. "
+               f"Features: {'; '.join(t.features) or 'not listed'}. "
+               "Answer only the customer's question from this.")
     elif more:
         msg += (f" There are {more} more; say these names and ask which capacity, colour or "
                 f"layers the customer prefers.")
@@ -774,7 +836,7 @@ def _unpack_model_text(model, capacity, colour, layers):
     return [p for p in parts if p and _WORDS_DROPPED.sub("", p).strip()], capacity, colour, layers
 
 
-def _compare(catalog, keys, brand_name, brand_info, ignored) -> dict:
+def _compare(catalog, keys, brand_name, brand_info, ignored, f: Filters | None = None) -> dict:
     tanks = []
     for key in keys:
         pool = _pool(catalog, brand_name)
@@ -786,10 +848,22 @@ def _compare(catalog, keys, brand_name, brand_info, ignored) -> dict:
         if tank not in tanks:
             tanks.append(tank)
     tanks = tanks[:MAX_RESULTS]
+
+    def fits(t: Tank) -> str:
+        # "Granito ya Cool, 1000 litre mein?" (a real call): say per tank whether
+        # it comes in that size, so a comparison never implies one that does not.
+        if not f or not f.cap:
+            return ""
+        if _cap_ok(t, f.cap):
+            return f", comes in {f.cap.label}"
+        near = _closest(list(t.capacities), f.cap)
+        alt = " or ".join(str(c) for c in (near["lower"], near["higher"]) if c)
+        return f", does NOT come in {f.cap.label} (closest {alt} litre)"
+
     out = {"status": "found", **brand_info, "count": len(tanks),
            "tanks": [_card(t, True) for t in tanks],
            "message": "Compare: " + "; ".join(
-               f"{describe(t)}, layers: {', '.join(t.layer_names) or 'not listed'}"
+               f"{describe(t)}{fits(t)}, layers: {', '.join(t.layer_names) or 'not listed'}"
                for t in tanks) + ". Answer the customer's comparison briefly from these."}
     if ignored:
         out["ignored"] = ignored
@@ -822,7 +896,7 @@ def find(catalog: Catalog, *, brand=None, state=None, model=None, capacity=None,
     if _clean(brand) and brand_why != "asked" and _clean(brand) not in ANY_BRAND:
         ignored["brand"] = str(brand)  # e.g. a competitor's name
     if len(known) > 1:
-        return _compare(catalog, known, brand_name, brand_info, ignored)
+        return _compare(catalog, known, brand_name, brand_info, ignored, f)
     if model_bad and known:
         model_bad = ""  # "Cool aur xyz": answer for the model we know
     if f.need in {"underground", "chemical"} and not model_key:
@@ -873,12 +947,22 @@ def find(catalog: Catalog, *, brand=None, state=None, model=None, capacity=None,
     pool = _pool(catalog, brand_name)
     if not tests and f.need != "commercial":
         regular = _sorted([t for t in pool if not t.special], brand_name)
+        special = _sorted([t for t in pool if t.special], brand_name)
         names = [t.name for t in regular]
+        # Grouped by layers: "which tanks do you have, in how many layers?" was a
+        # real question, and this answers it from the sheet.
+        by_layers: dict[int, list[str]] = {}
+        for t in regular:
+            by_layers.setdefault(t.layers, []).append(t.model)
+        grouped = "; ".join(f"{n} layer: {', '.join(m)}" for n, m in sorted(by_layers.items()))
+        other = ", ".join(f"{t.model} ({t.layers} layer)" for t in special)
         return {"status": "catalogue", **brand_info, "models": names,
+                "other_models": [t.name for t in special],
                 **({"ignored": ignored} if ignored else {}),
-                "message": "No capacity, colour or other detail was given. Ask the customer "
-                           "which capacity they need, then look up again. Models: "
-                           f"{', '.join(names)}."}
+                "message": f"{brand_name or 'All brands'} home tanks by layers — {grouped}. "
+                           + (f"Also, for commercial or special use: {other}. " if other else "")
+                           + "If the customer has not said a capacity, ask it, then look up "
+                             "again."}
 
     def matching(candidates):
         return [t for t in candidates if all(test(t) for test in tests.values())]

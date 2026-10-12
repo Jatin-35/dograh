@@ -1,6 +1,6 @@
 # Tank lookup — scenario test report
 
-Run against `http://127.0.0.1:18080` on 2026-10-12 16:00. **181/181 passed.** Expected answers were written by hand from `Tank_details.xlsx` (Vectus brand unless a state or brand is given).
+Run against `http://127.0.0.1:18080` on 2026-10-12 16:51. **181/181 passed.** Expected answers were written by hand from `Tank_details.xlsx` (Vectus brand unless a state or brand is given).
 
 
 ## capacity
@@ -287,7 +287,7 @@ Run against `http://127.0.0.1:18080` on 2026-10-12 16:00. **181/181 passed.** Ex
 | H4 | broken JSON → 422, no crash | ✅ |
 | H5 | /health reports 39 tanks | ✅ |
 | H6 | GET /tanks not allowed | ✅ |
-| PF1 | 10 concurrent callers × 40 requests: 0 errors, p95 < 200 ms (p50 11.5 ms, p95 27.7 ms) | ✅ |
+| PF1 | 10 concurrent callers × 40 requests: 0 errors, p95 < 200 ms (p50 11.3 ms, p95 25.8 ms) | ✅ |
 
 ## Sample replies the bot reads
 

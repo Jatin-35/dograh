@@ -69,6 +69,12 @@ guarantee; every model × capacity and colour; spoken numbers, model names and
 colours; and 5,000 random requests, none of which may state a number the
 sheet does not have for that tank.
 
+`tests/test_real_calls.py` replays 52 tank questions from real Vectus calls
+(speech-to-text as it came: "Doctor school", "Garnier to", "700 lead",
+"1,000 से 1,500"), including every case where the live bot's prompt table
+gave a wrong answer. `tests/test_tanks_edge.py` covers hostile input,
+injection, look-alike words and sheets Vectus might send.
+
 `qa/qa_tanks.py` is the black-box companion: ~160 real-call scenarios with
 hand-written expected answers, multi-turn flows, auth and a load check, run
 over HTTP against any deployment (`--report` writes a readable table).
