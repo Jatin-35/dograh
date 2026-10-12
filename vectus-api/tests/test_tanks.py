@@ -76,7 +76,13 @@ def oracle(brand, **f):
 
     hits = [r for r in pool if ok(r)]
     regular = [r for r in hits if r["key"] not in SPECIAL]
-    return {f"{r['brand']} {r['key']}" for r in (regular or hits)}
+    return {f"{r['brand']} {r['key']}" for r in no_chemical(regular or hits)}
+
+
+def no_chemical(rows):
+    """The Chemical Tank is named only when nothing else matches (run 849)."""
+    rest = [r for r in rows if r["key"] != "chemical tank"]
+    return rest or rows
 
 
 @pytest.fixture(scope="module")
@@ -492,8 +498,8 @@ def test_guarantee_as_heard(cat, said):
 
 def test_no_guarantee(cat):
     r = T.find(cat, guarantee="no guarantee")
-    assert names(r) == {f"Vectus {x['key']}" for x in ROWS
-                        if x["brand"] == "Vectus" and x["guarantee"] is None}
+    assert names(r) == {f"Vectus {x['key']}" for x in no_chemical(
+        [x for x in ROWS if x["brand"] == "Vectus" and x["guarantee"] is None])}
 
 
 @pytest.mark.parametrize("said,need", [
@@ -548,7 +554,7 @@ def test_home_enquiry_does_not_offer_chemical_or_isi(cat):
 
 
 def test_special_tanks_answer_when_only_they_match(cat):
-    assert names(T.find(cat, capacity=10000)) == {"Vectus chemical tank", "Vectus isi tank"}
+    assert names(T.find(cat, capacity=10000)) == {"Vectus isi tank"}
     assert names(T.find(cat, capacity=25000)) == {"Vectus group"}
     assert "Vectus underground" in names(T.find(cat, colour="black"))
     assert names(T.find(cat, layers=1)) == {"Vectus chemical tank"}

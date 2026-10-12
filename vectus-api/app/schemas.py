@@ -51,6 +51,9 @@ class TankRequest(BaseModel):
     guarantee: Loose = Field(default=None)
     mould: Loose = Field(default=None)
     need: Loose = Field(default=None)
+    # "full" adds layer names and features to a single-tank answer; "summary"
+    # gives one line. Comparisons always come in full.
+    detail: Loose = Field(default=None)
 
     @model_validator(mode="before")
     @classmethod

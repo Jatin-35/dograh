@@ -656,6 +656,22 @@ def parse_guarantee(value) -> tuple[int | None, bool]:
     return _int_field(value), False
 
 
+_DETAIL_FULL = {"full", "detail", "details", "detailed", "layers", "layer", "features",
+                "feature", "all", "yes", "true", "1"}
+_DETAIL_SUMMARY = {"summary", "short", "brief", "basic", "no", "false", "0", "none"}
+
+
+def parse_detail(value) -> bool | None:
+    """True for the full card (layer names, features), False for one line per
+    tank, None when not said."""
+    words = set(_clean(value).split()) if value is not None else set()
+    if words & _DETAIL_FULL:
+        return True
+    if words & _DETAIL_SUMMARY:
+        return False
+    return None
+
+
 def _need_ok(t: Tank, need: str) -> bool:
     names = " ".join(t.layer_names).lower()
     feats = " ".join(t.features).lower()
@@ -691,8 +707,97 @@ def _cap_text(caps) -> str:
 
 
 def describe(t: Tank) -> str:
-    return (f"{t.name}: {t.layers} layer, {' / '.join(t.colours)}, {_cap_text(t.capacities)}, "
+    text = (f"{t.name}: {t.layers} layer, {' / '.join(t.colours)}, {_cap_text(t.capacities)}, "
             f"{_guarantee_text(t)}, {t.mould} moulded")
+    if t.key == "chemical tank":
+        text += f" {CHEMICAL_NOTE}"
+    return text
+
+
+# A real call offered the Chemical Tank to a home customer asking for a black
+# tank. Wherever it is named it carries this; the label goes only as far as
+# the tank's own name.
+CHEMICAL_NOTE = "(chemical storage tank; mention only if the customer needs chemical storage)"
+
+
+def without_chemical(tanks: list[Tank], need: str | None) -> list[Tank]:
+    """Leave the Chemical Tank out of a list that has anything else, unless the
+    customer's need is chemical or commercial. A replay of run 849 showed a
+    label is not enough: the bot reads out whatever is listed."""
+    if need in {"chemical", "commercial"} or len(tanks) < 2:
+        return tanks
+    rest = [t for t in tanks if t.key != "chemical tank"]
+    return rest or tanks
+
+
+def spoken_name(t: Tank) -> str:
+    """A tank's name for a list of names, labelled where it must be."""
+    return f"{t.name} {CHEMICAL_NOTE}" if t.key == "chemical tank" else t.name
+
+
+# Layer names -> the protection they give, so a comparison can say what tanks
+# share and what only one has. Wording differences are not differences:
+# "Anti-Bacterial" and "Anti-Microbial (Microban)" are the same protection.
+_LAYER_KINDS = (
+    ("titanium", "titanium-loaded outer layer"),
+    ("granite", "granite-finish outer layer"),
+    ("aesthetic", "aesthetic outer layer"),
+    ("heat-reflective", "heat-reflective layer"),
+    ("foam", "temperature-resistant foam"),
+    ("weather", "weather-resistant layer"),
+    ("stress-crack", "stress-crack-resistant layer"),
+    ("strength", "extra-strength layer"),
+    ("uv", "UV / sun-shield protection"),
+    ("sun-shield", "UV / sun-shield protection"),
+    ("anti-bacterial", "anti-bacterial / anti-microbial inner layer"),
+    ("anti-microbial", "anti-bacterial / anti-microbial inner layer"),
+)
+
+
+def layer_kinds(t: Tank) -> dict[str, int]:
+    """{protection: how many layers give it}, from the sheet's layer names."""
+    kinds: dict[str, int] = {}
+    for name in t.layer_names:
+        low = name.lower()
+        kind = next((k for word, k in _LAYER_KINDS if word in low), None)
+        if kind:
+            kinds[kind] = kinds.get(kind, 0) + 1
+    return kinds
+
+
+def shared_and_only(tanks: list[Tank]) -> str:
+    """ "Both have: …. Only Cool: …." for a comparison, from the layer names."""
+    known = [t for t in tanks if t.layer_names]
+    if len(known) < 2:
+        return ""
+    kinds = {t.name: layer_kinds(t) for t in known}
+    every = set.intersection(*(set(k) for k in kinds.values()))
+    shared = []
+    for kind in sorted(every):
+        counts = {name: kinds[name][kind] for name in kinds}
+        if len(set(counts.values())) > 1:  # e.g. twin foam vs one foam layer
+            kind += " (" + ", ".join(f"{n.split(' ', 1)[1]} {c}" for n, c in counts.items()) + ")"
+        shared.append(kind)
+    guarantees = {t.guarantee for t in known}
+    same_guarantee = len(guarantees) == 1 and None not in guarantees
+    if same_guarantee:
+        shared.append(f"{known[0].guarantee} year guarantee")
+    short = {t.name: t.name.split(" ", 1)[1] for t in known}
+    parts = [f"{'Both' if len(known) == 2 else 'All'} have: {', '.join(shared) or 'no common layer'}"]
+    # Everything else, grouped by which tanks have it: "Only Granito: …",
+    # "Cool and Puff: …" (shared by some but not all).
+    owners: dict[tuple, list[str]] = {}
+    for kind in sorted({k for ks in kinds.values() for k in ks} - every):
+        who = tuple(n for n in kinds if kind in kinds[n])
+        owners.setdefault(who, []).append(kind)
+    for who, kinds_of in owners.items():
+        label = f"Only {short[who[0]]}" if len(who) == 1 else " and ".join(short[n] for n in who)
+        parts.append(f"{label}: {', '.join(kinds_of)}")
+    if not same_guarantee:
+        parts.append("Guarantee: " + ", ".join(
+            f"{short[t.name]} {t.guarantee} years" if t.guarantee else f"{short[t.name]} none"
+            for t in known))
+    return ". ".join(parts)
 
 
 def _card(t: Tank, detail: bool) -> dict:
@@ -769,16 +874,19 @@ class Filters:
 
 def _sorted(tanks: list[Tank], brand: str | None) -> list[Tank]:
     order = {b: i for i, b in enumerate(BRANDS)}
-    return sorted(tanks, key=lambda t: (t.special, t.layers, order[t.brand], t.model))
+    # The Chemical Tank goes last: a home customer should hear the others first.
+    return sorted(tanks, key=lambda t: (t.special, t.key == "chemical tank", t.layers,
+                                        order[t.brand], t.model))
 
 
 def _pool(catalog: Catalog, brand: str | None) -> list[Tank]:
     return catalog.tanks if brand is None else catalog.by_brand(brand)
 
 
-def _listing(tanks: list[Tank], label: str, ignored: dict, brand_info: dict) -> dict:
+def _listing(tanks: list[Tank], label: str, ignored: dict, brand_info: dict,
+             full: bool = True) -> dict:
     shown = tanks[:MAX_RESULTS]
-    detail = len(shown) == 1
+    detail = len(shown) == 1 and full
     lines = "; ".join(describe(t) for t in shown)
     more = len(tanks) - len(shown)
     msg = f"Tanks ({label}): {lines}." if label else f"Tanks: {lines}."
@@ -787,8 +895,19 @@ def _listing(tanks: list[Tank], label: str, ignored: dict, brand_info: dict) -> 
         msg = (f"{describe(t)}. Layers: {', '.join(t.layer_names) or 'not listed'}. "
                f"Features: {'; '.join(t.features) or 'not listed'}. "
                "Answer only the customer's question from this.")
+    elif len(shown) == 1:
+        # Summary: the feature sentences are most of a card, and Gemini re-reads
+        # whatever a tool returned on every later turn of the call. Layer names
+        # stay (short, and they answer "foam / UV / anti-bacterial hai?" without
+        # a second lookup, which would cost more than the card); what a layer
+        # does comes only when asked for.
+        t = shown[0]
+        msg = (f"{describe(t)}. Layers: {', '.join(t.layer_names) or 'not listed'}. "
+               "These are its layer names; they answer which layers it has and questions about foam, UV or "
+               "anti-bacterial protection; look up again with detail = full only to explain "
+               "what a layer does. Answer only the customer's question from this.")
     elif more:
-        msg += (f" Also: {', '.join(t.name for t in tanks[len(shown):])}. Say these names and "
+        msg += (f" Also: {', '.join(spoken_name(t) for t in tanks[len(shown):])}. Say these names and "
                 "ask which capacity, colour or layers the customer prefers.")
     else:
         msg += " Say these names briefly and ask which one the customer prefers."
@@ -864,14 +983,18 @@ def _compare(catalog, keys, brand_name, brand_info, ignored, f: Filters | None =
            "tanks": [_card(t, True) for t in tanks],
            "message": "Compare: " + "; ".join(
                f"{describe(t)}{fits(t)}, layers: {', '.join(t.layer_names) or 'not listed'}"
-               for t in tanks) + ". Answer the customer's comparison briefly from these."}
+               for t in tanks) + ". " + (shared_and_only(tanks) + ". " if len(tanks) > 1 else "")
+               + "Answer the customer's comparison briefly from these: say what they share and "
+                 "what only one has; give no opinion and never imply a tank lacks a feature."}
     if ignored:
         out["ignored"] = ignored
     return out
 
 
 def find(catalog: Catalog, *, brand=None, state=None, model=None, capacity=None,
-         colour=None, layers=None, guarantee=None, mould=None, need=None) -> dict:
+         colour=None, layers=None, guarantee=None, mould=None, need=None,
+         detail=None) -> dict:
+    full = parse_detail(detail) is not False  # not said: the full card, as before
     model_parts, capacity, colour, layers = _unpack_model_text(model, capacity, colour, layers)
     parsed = [parse_model(catalog, p) for p in model_parts]
     known = list(dict.fromkeys(k for k, _ in parsed if k))
@@ -926,7 +1049,7 @@ def find(catalog: Catalog, *, brand=None, state=None, model=None, capacity=None,
             if hits:
                 ordered = _sorted([t for t in hits if t in named], None) + \
                     _sorted([t for t in hits if t in twins], None)
-                return _listing(ordered, f.label(), ignored, brand_info)
+                return _listing(ordered, f.label(), ignored, brand_info, full)
             return _model_not_available(catalog, named[0], [n for n, test in tests.items()
                                                             if not test(named[0])],
                                         f, tests, None, brand_info, ignored)
@@ -935,7 +1058,7 @@ def find(catalog: Catalog, *, brand=None, state=None, model=None, capacity=None,
             return _not_in_brand(catalog, model_key, brand_name, f, tests, brand_info)
         failed = [name for name, test in tests.items() if not test(tank)]
         if not failed:
-            out = _listing([tank], f.label(), ignored, brand_info)
+            out = _listing([tank], f.label(), ignored, brand_info, full)
             if f.cap:
                 out["message"] = (f"Yes, {tank.name} comes in {_cap_label(f.cap)}. "
                                   + out["message"])  # keeps the layers and features
@@ -955,7 +1078,8 @@ def find(catalog: Catalog, *, brand=None, state=None, model=None, capacity=None,
         for t in regular:
             by_layers.setdefault(t.layers, []).append(t.model)
         grouped = "; ".join(f"{n} layer: {', '.join(m)}" for n, m in sorted(by_layers.items()))
-        other = ", ".join(f"{t.model} ({t.layers} layer)" for t in special)
+        other = ", ".join(f"{t.model} ({t.layers} layer)" + (f" {CHEMICAL_NOTE}" if t.key == "chemical tank" else "")
+                          for t in special)
         return {"status": "catalogue", **brand_info, "models": names,
                 "other_models": [t.name for t in special],
                 **({"ignored": ignored} if ignored else {}),
@@ -973,8 +1097,24 @@ def find(catalog: Catalog, *, brand=None, state=None, model=None, capacity=None,
         hits = _sorted(regular + special, brand_name)
     else:
         hits = _sorted(regular or special, brand_name)
+    hits = without_chemical(hits, f.need)
     if hits:
-        return _listing(hits, f.label(), ignored, brand_info)
+        return _listing(hits, f.label(), ignored, brand_info, full)
+    if f.need and f.need != "commercial":
+        # The bot sometimes adds a need the customer never said (run 849 replay:
+        # "black tank" sent with need=cooling). Say plainly that nothing fits the
+        # need, and give what fits everything else, rather than "nothing found".
+        rest = {k: t for k, t in tests.items() if k != "need"}
+        loose = [t for t in pool if all(test(t) for test in rest.values())]
+        loose = without_chemical(_sorted([t for t in loose if not t.special] or loose,
+                                         brand_name), None)
+        if loose:
+            out = _listing(loose, Filters(**{**f.__dict__, "need": None}).label(), ignored,
+                           brand_info, full)
+            out["message"] = (f"No tank here is listed for the {f.need.replace('_', ' ')} need. "
+                              f"Without that need: " + out["message"])
+            out["need_not_met"] = f.need
+            return out
     return _no_match(pool, f, tests, brand_info, ignored)
 
 
@@ -1025,7 +1165,7 @@ def _model_not_available(catalog, tank, failed, f, tests, brand_name, brand_info
     # Other tanks that do have everything that was asked.
     alts = [t for t in _pool(catalog, brand_name)
             if t is not tank and all(test(t) for test in tests.values())]
-    alts = [t for t in alts if not t.special] or alts
+    alts = without_chemical([t for t in alts if not t.special] or alts, f.need)
     alts = sorted(alts, key=lambda t: (abs(t.layers - tank.layers), t.layers, t.model))[:3]
     if alts:
         out["alternatives"] = [_card(t, False) for t in alts]
@@ -1058,9 +1198,11 @@ def _no_match(pool, f, tests, brand_info, ignored) -> dict:
             options = []
             for c in (near["lower"], near["higher"]):
                 if c:
-                    names = [t.name for t in _sorted(candidates, None) if c in t.capacities]
-                    options.append({"capacity": c, "tanks": names[:MAX_RESULTS]})
-                    parts.append(f"At {c} litre: {', '.join(names[:MAX_RESULTS])}")
+                    at_c = without_chemical(
+                        [t for t in _sorted(candidates, None) if c in t.capacities], f.need)
+                    options.append({"capacity": c, "tanks": [t.name for t in at_c[:MAX_RESULTS]]})
+                    parts.append(f"At {c} litre: "
+                                 f"{', '.join(spoken_name(t) for t in at_c[:MAX_RESULTS])}")
             out["options"] = options
             brand_word = brand_info["brand"] if brand_info["brand"] != "all" else "any"
             parts[0] = f"No {brand_word} tank comes in {_cap_label(f.cap)}"
@@ -1073,10 +1215,11 @@ def _no_match(pool, f, tests, brand_info, ignored) -> dict:
         for name in tests:
             rest = [t for k, t in tests.items() if k != name]
             hits = [t for t in pool if all(test(t) for test in rest)]
-            hits = _sorted([t for t in hits if not t.special] or hits, None)
+            hits = without_chemical(_sorted([t for t in hits if not t.special] or hits, None),
+                                    f.need)
             if hits:
                 relaxed.append({"without": name, "tanks": [t.name for t in hits[:3]]})
-                parts.append(f"Without the {name}: {', '.join(t.name for t in hits[:3])}")
+                parts.append(f"Without the {name}: {', '.join(spoken_name(t) for t in hits[:3])}")
         out["relaxed"] = relaxed
         values = _available_values(pool, tests)
         if values:
@@ -1104,7 +1247,8 @@ def _available_values(pool, tests) -> dict:
 
 # Everything the bot needs is in "message"; these repeat it as structured data
 # (or are internal) and only cost tokens on every later turn of the call.
-_COMPACT_KEEP = ("status", "brand", "message", "closest_capacities", "ignored", "heard")
+_COMPACT_KEEP = ("status", "brand", "message", "closest_capacities", "ignored", "heard",
+                 "need_not_met")
 
 
 def compact(result: dict) -> dict:

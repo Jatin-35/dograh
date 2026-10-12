@@ -176,8 +176,11 @@ async def post_tanks(body: TankRequest, request: Request,
                              "capacity, colour or guarantee; say the Area Manager will confirm "
                              "the exact details."}
     else:
+        query = request.query_params
+        if "detail" not in asked and query.get("summary") in {"1", "true", "yes"}:
+            asked = {**asked, "detail": "summary"}  # the bot's tool: full only when asked
         result = find_tanks(request.app.state.tanks, **asked)
-        if request.query_params.get("compact") in {"1", "true", "yes"}:
+        if query.get("compact") in {"1", "true", "yes"}:
             result = compact_tank_reply(result)
     log.info(json.dumps({
         "event": "tanks",

@@ -140,7 +140,7 @@ Main Agenda prompt (which had drifted from the Excel on 8 models).
 |---|---|
 | Name | `vectus_tank_lookup` |
 | Method | `POST` |
-| URL | `http://vectus-api:8080/tanks` |
+| URL | `http://vectus-api:8080/tanks?compact=1&summary=1` |
 | Credential | the same one as `vectus_area_manager_lookup` |
 | Timeout | `5000` ms |
 
@@ -164,6 +164,17 @@ Main Agenda prompt (which had drifted from the Excel on 8 models).
 | `need` | What the tank is for, only if said: `cooling` (heat/garmi/thanda), `underground`, `small space`, `commercial`, `chemical`. |
 | `brand` | `Vectus`, `Ganga` or `Waterwell`, only if the customer named one. |
 | `state` | The customer's state, so the right brand is used (south → Ganga). |
+| `detail` | `full` only when the customer asks what a layer does or about features beyond the layer names; otherwise leave it out (layer names and comparisons are always included). |
+
+`compact=1` drops data repeated from `data.message`; `summary=1` makes a
+single-tank answer its summary line plus layer names, without the feature
+sentences, unless `detail` is `full`. Whatever a tool returns stays in
+Gemini's context and is re-read on every later turn. The layer names stay in
+because without them the bot looks up again for "foam / UV hai?", and a
+second lookup costs more than the card. Saving: about 3–4% on product-heavy calls.
+
+Prompt line (Tank Product Questions): `Send detail = "full" only when the
+customer asks what a layer does or about features beyond the layer names.`
 
 ## What it returns (`data.status`)
 
