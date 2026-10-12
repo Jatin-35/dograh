@@ -1,6 +1,7 @@
 """Vectus area-manager lookup service.
 
     POST /lookup   {product, city?, district?, state?}  ->  {status, ...}
+    POST /tanks    {brand?, state?, model?, capacity?, colour?, ...}  ->  {status, ...}
     GET  /health
 
 Always answers HTTP 200 with a ``status`` for anything the bot can act on;
@@ -27,10 +28,15 @@ from fastapi.responses import JSONResponse
 from . import mavis
 from .data import KBError, build_index, load_index
 from .matching import Lookup, lookup
-from .schemas import LookupRequest
+from .schemas import LookupRequest, TankRequest
+from .tanks import CatalogError, load_catalog
+from .tanks import find as find_tanks
 
 KB_PATH = os.environ.get(
     "VECTUS_KB_PATH", str(Path(__file__).resolve().parent.parent / "data" / "Vectus_KB_Revised.txt")
+)
+TANKS_PATH = os.environ.get(
+    "VECTUS_TANKS_PATH", str(Path(__file__).resolve().parent.parent / "data" / "Tank_details.xlsx")
 )
 API_KEY = os.environ.get("VECTUS_API_KEY", "")
 # Live area-manager table (LeadSquared Mavis). Unset = serve the KB file only.
@@ -76,6 +82,16 @@ async def lifespan(app: FastAPI):
     # The KB file always loads first: it is the fallback, and a bad KB must
     # still stop startup (raises KBError).
     app.state.index = load_index(KB_PATH)
+    # A bad tank sheet disables /tanks only. It must not stop the container:
+    # that would take the Area Manager lookup down with it on live calls.
+    app.state.tanks, app.state.tanks_error = None, None
+    try:
+        app.state.tanks = load_catalog(TANKS_PATH)
+        log.info("loaded %d tank rows from %s", len(app.state.tanks.tanks),
+                 app.state.tanks.source)
+    except CatalogError as exc:
+        app.state.tanks_error = str(exc)
+        log.error("tank sheet not loaded, /tanks is unavailable: %s", exc)
     app.state.loaded_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     app.state.refresh_error = None
     task = None
@@ -123,7 +139,9 @@ async def health(request: Request):
     ix = request.app.state.index
     return {"status": "ok", "records": len(ix.records), "contacts": ix.contacts,
             "source": ix.source, "loaded_at": request.app.state.loaded_at,
-            "refresh_error": request.app.state.refresh_error}
+            "refresh_error": request.app.state.refresh_error,
+            "tanks": len(request.app.state.tanks.tanks) if request.app.state.tanks else 0,
+            "tanks_error": request.app.state.tanks_error}
 
 
 @app.post("/lookup")
@@ -139,6 +157,32 @@ async def post_lookup(body: LookupRequest, request: Request,
         "request": body.model_dump(),
         "status": result["status"],
         "match": result.get("match"),
+        "ms": round((time.perf_counter() - started) * 1000, 2),
+    }, ensure_ascii=False))
+    return result
+
+
+@app.post("/tanks")
+@app.post("/tanks/", include_in_schema=False)
+async def post_tanks(body: TankRequest, request: Request,
+                     x_api_key: str | None = Header(default=None)):
+    _check_key(x_api_key)
+    started = time.perf_counter()
+    asked = body.model_dump(exclude_none=True)
+    if request.app.state.tanks is None:
+        result = {"status": "unavailable",
+                  "message": "Tank details are not available right now. Do not guess any "
+                             "capacity, colour or guarantee; say the Area Manager will confirm "
+                             "the exact details."}
+    else:
+        result = find_tanks(request.app.state.tanks, **asked)
+    log.info(json.dumps({
+        "event": "tanks",
+        "request": asked,
+        "status": result["status"],
+        "brand": result.get("brand"),
+        "tanks": [t["name"] for t in result.get("tanks", [])],
+        "ignored": result.get("ignored"),
         "ms": round((time.perf_counter() - started) * 1000, 2),
     }, ensure_ascii=False))
     return result

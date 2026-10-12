@@ -124,3 +124,98 @@ Publish the workflow, then place these calls:
 
 Rollback: re-publish the previous workflow version (the tool and credential
 can stay; they do nothing unless the node uses them).
+
+---
+
+# Tank lookup (`POST /tanks`)
+
+Answers every water-tank product question (capacity, colour, layers,
+guarantee, model, comparison) from `data/Tank_details.xlsx`, by exact filter
+over all rows. Replaces the product table that used to be written into the
+Main Agenda prompt (which had drifted from the Excel on 8 models).
+
+## Tool (Tools → New → HTTP API)
+
+| Field | Value |
+|---|---|
+| Name | `vectus_tank_lookup` |
+| Method | `POST` |
+| URL | `http://vectus-api:8080/tanks` |
+| Credential | the same one as `vectus_area_manager_lookup` |
+| Timeout | `5000` ms |
+
+**Description:**
+
+> Looks up Vectus, Ganga and Waterwell water tanks: capacities, colours,
+> layers, guarantee and model details. Call it for ANY tank product question
+> or before confirming a capacity. Send only what the customer said; every
+> field is optional. Answer only from `data.message` — never state a capacity,
+> colour, layer count or guarantee that is not in this tool's result.
+
+**Parameters** (all `string`, all optional):
+
+| name | description |
+|---|---|
+| `model` | Tank model(s) the customer named, e.g. `Cool`, `Puff`, `T-90`, `TenX`, or `Cool aur Puff` to compare. Empty if none. |
+| `capacity` | Litres the customer asked for, e.g. `1100`, or a range `1000 se 1500`. |
+| `colour` | Colour the customer asked for, e.g. `green`, `peela`. |
+| `layers` | Number of layers asked for, e.g. `5`. |
+| `guarantee` | Guarantee years asked for, e.g. `15`. |
+| `need` | What the tank is for, only if said: `cooling` (heat/garmi/thanda), `underground`, `small space`, `commercial`, `chemical`. |
+| `brand` | `Vectus`, `Ganga` or `Waterwell`, only if the customer named one. |
+| `state` | The customer's state, so the right brand is used (south → Ganga). |
+
+## What it returns (`data.status`)
+
+| status | meaning |
+|---|---|
+| `found` | the matching tanks (at most 4; `more` lists the rest) |
+| `not_available` | the named model lacks that capacity/colour: its real values, closest capacities, and other tanks that do have it |
+| `no_match` | no tank has that combination: closest capacities, or what each relaxed filter gives |
+| `not_in_brand` | the brand sells it under another name (Vectus Pro → Vectus Smart), or only another brand has it (Ganga Mini → Vectus Mini) |
+| `unknown_model` / `unknown_colour` | not in the catalogue; the real list is returned |
+| `catalogue` | nothing to filter on: ask the capacity |
+| `unavailable` | the sheet failed to load: give no details, say the Area Manager will confirm |
+
+`data.message` always carries the facts in one sentence per tank, ready to
+paraphrase. Home enquiries are not offered Chemical, ISI, Underground or the
+15,000+ L tank unless the customer asks for them, says commercial/underground,
+or nothing else matches (black, 10000 L, 1–2 layers).
+
+## Main Agenda prompt change
+
+Delete these sections whole: `## Product Information Usage`,
+`## Water Tank Product Database` (every layer subsection) and
+`## Capacity / Option Matching`. Put this in their place:
+
+```
+## Tank Product Questions
+For ANY tank question — capacity, colour, layers, guarantee, model details,
+comparison, "which tanks in X litre", or before confirming a capacity — call
+vectus_tank_lookup with no speech in the same turn. Send only what the customer
+said: model, capacity, colour, layers, guarantee, need, brand, plus state if known.
+Answer only from data.message, in 1-2 short sentences: say tank names and the
+detail asked, not the full capacity list unless asked. Never state a capacity,
+colour, layer count or guarantee that is not in this turn's tool result.
+- found with several tanks: say the names, ask which the customer prefers.
+- not_available / no_match: say it is not available and offer the closest options given.
+- not_in_brand: offer the tank named in data.message.
+- unknown_model: confirm the model name once.
+- unavailable or a tool error: give no tank details; say the Area Manager will confirm them.
+Do not call it again for a question already answered in this call.
+```
+
+In `## Recommendation + FAQ`, replace the heat/rooftop sentence with:
+`For heat/rooftop/sunlight/cooling, call vectus_tank_lookup with need = cooling.`
+
+Attach `vectus_tank_lookup` to the node. Publish only after the test calls.
+
+## Updating the catalogue
+
+Replace `data/Tank_details.xlsx` (same columns), then on the VM:
+`cd ~/dograh/vectus-api && docker compose up -d --build`, and check
+`/health` shows `"tanks": 39` and `"tanks_error": null`. A sheet it cannot
+read (missing column, a name without a brand, no capacities, a blank
+guarantee) is never half-used: `/tanks` answers `unavailable` and
+`tanks_error` says which row is wrong, while the Area Manager lookup keeps
+working. Fix the sheet and rebuild.

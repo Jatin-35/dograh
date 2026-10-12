@@ -52,6 +52,27 @@ What else it understands, all taken from real calls:
 - A state that was corrected (a typo, or heard in Hindi) never releases
   numbers for a whole state without a `confirm` first.
 
+## Tank lookup
+
+`POST /tanks` answers water-tank product questions — any mix of model,
+capacity, colour, layers, guarantee, need, brand and state, every field
+optional — by exact filter over `data/Tank_details.xlsx`, the sheet Vectus
+sent. Spoken forms are understood ("saade saat sau", "peela", "vector school",
+"Cool aur Puff"). See `bot/INTEGRATION.md` → *Tank lookup* for statuses, the
+tool definition and the prompt change. To update, replace the sheet and
+redeploy. A sheet it cannot read disables only `/tanks` (`/health` shows
+`tanks_error`); the Area Manager lookup keeps working.
+
+`tests/test_tanks.py` (~3,000 tests) checks every answer against an
+independent re-read of the sheet: every brand × capacity, colour, layers and
+guarantee; every model × capacity and colour; spoken numbers, model names and
+colours; and 5,000 random requests, none of which may state a number the
+sheet does not have for that tank.
+
+`qa/qa_tanks.py` is the black-box companion: ~160 real-call scenarios with
+hand-written expected answers, multi-turn flows, auth and a load check, run
+over HTTP against any deployment (`--report` writes a readable table).
+
 ## Tests
 
 `pytest -q -s` runs about 450 tests, including:
