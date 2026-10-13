@@ -19,6 +19,7 @@ export type FlowNodeData = {
     hovered_through_edge?: boolean;
     runtime_active?: boolean;
     allow_interrupt?: boolean;
+    allow_interrupt_greeting?: boolean;
     extraction_enabled?: boolean;
     extraction_prompt?: string;
     extraction_variables?: ExtractionVariable[];

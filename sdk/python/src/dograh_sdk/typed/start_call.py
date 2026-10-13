@@ -78,6 +78,13 @@ class StartCall(TypedNode):
     When true, the user can interrupt the agent mid-utterance.
     """
 
+    allow_interrupt_greeting: bool = False
+    """
+    When true, the caller can interrupt the opening greeting and is heard
+    from the moment the call connects. When false, the caller is muted until
+    the greeting finishes.
+    """
+
     add_global_prompt: bool = True
     """
     When true and a Global node exists, prepends the global prompt to this

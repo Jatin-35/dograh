@@ -222,6 +222,7 @@ def test_all_registered_node_models_inherit_base_node_data():
                 "greeting_recording_id",
                 "prompt",
                 "allow_interrupt",
+                "allow_interrupt_greeting",
                 "add_global_prompt",
                 "delayed_start",
                 "delayed_start_duration",

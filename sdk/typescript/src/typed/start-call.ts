@@ -56,6 +56,10 @@ export interface StartCall {
      */
     allow_interrupt?: boolean;
     /**
+     * When true, the caller can interrupt the opening greeting and is heard from the moment the call connects. When false, the caller is muted until the greeting finishes.
+     */
+    allow_interrupt_greeting?: boolean;
+    /**
      * When true and a Global node exists, prepends the global prompt to this node's prompt at runtime.
      */
     add_global_prompt?: boolean;

@@ -202,6 +202,26 @@ def _create_non_realtime_user_turn_stop_strategies(
     return [SpeechTimeoutUserTurnStopStrategy()]
 
 
+def build_user_mute_strategies(
+    should_mute_callback,
+    *,
+    allow_interrupt_greeting: bool = False,
+) -> list:
+    """Return the user mute strategies for a run.
+
+    By default the caller is muted until the greeting finishes. A start node
+    with allow_interrupt_greeting lets the caller be heard (and barge in) from
+    the moment the call connects.
+    """
+    strategies = [
+        FunctionCallUserMuteStrategy(),
+        CallbackUserMuteStrategy(should_mute_callback=should_mute_callback),
+    ]
+    if not allow_interrupt_greeting:
+        strategies.insert(0, MuteUntilFirstBotCompleteUserMuteStrategy())
+    return strategies
+
+
 def _create_realtime_user_turn_config(provider: str):
     """Return user turn strategies and optional local VAD for realtime providers."""
 
@@ -895,11 +915,16 @@ async def _run_pipeline_impl(
         correct_aggregation_callback=engine.create_aggregation_correction_callback(),
     )
 
-    user_mute_strategies = [
-        MuteUntilFirstBotCompleteUserMuteStrategy(),
-        FunctionCallUserMuteStrategy(),
-        CallbackUserMuteStrategy(should_mute_callback=engine.should_mute_user),
-    ]
+    allow_interrupt_greeting = bool(
+        start_node and start_node.allow_interrupt_greeting
+    )
+    logger.info(
+        f"[run {workflow_run_id}] allow_interrupt_greeting={allow_interrupt_greeting}"
+    )
+    user_mute_strategies = build_user_mute_strategies(
+        engine.should_mute_user,
+        allow_interrupt_greeting=allow_interrupt_greeting,
+    )
     user_vad_analyzer = SileroVADAnalyzer(params=VADParams(stop_secs=0.2))
 
     # Configure turn strategies based on STT provider, model, and workflow configuration

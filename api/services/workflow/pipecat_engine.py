@@ -118,6 +118,10 @@ class PipecatEngine:
         # Tracks whether the bot is currently speaking (for allow_interrupt logic)
         self._bot_is_speaking: bool = False
 
+        # Set once the bot finishes its first speech (the greeting). Until then
+        # a start node with allow_interrupt_greeting keeps the caller unmuted.
+        self._first_bot_speech_done: bool = False
+
         # Custom tool manager (initialized in initialize())
         self._custom_tool_manager: Optional[CustomToolManager] = None
 
@@ -815,6 +819,7 @@ class PipecatEngine:
                 self._queued_speech_mute_state = "playing"
         elif isinstance(frame, BotStoppedSpeakingFrame):
             self._bot_is_speaking = False
+            self._first_bot_speech_done = True
             self._queued_speech_mute_state = "idle"
 
         # Always mute if pipeline is shutting down
@@ -825,6 +830,11 @@ class PipecatEngine:
         if self._queued_speech_mute_state != "idle":
             return True
 
+        # The greeting may be interrupted when the start node allows it, even
+        # if the node blocks interruptions for the rest of its turns.
+        if not self._first_bot_speech_done and self._greeting_interruptible():
+            return False
+
         # Mute if bot is speaking and current node doesn't allow interruption
         if self._bot_is_speaking and self._current_node:
             # If we should not allow interruption, mute the pipeline
@@ -832,6 +842,10 @@ class PipecatEngine:
                 return True
 
         return False
+
+    def _greeting_interruptible(self) -> bool:
+        start_node = self.workflow.nodes.get(self.workflow.start_node_id)
+        return bool(start_node and start_node.allow_interrupt_greeting)
 
     def create_user_idle_handler(self):
         """

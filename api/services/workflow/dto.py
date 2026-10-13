@@ -209,6 +209,7 @@ class _ToolDocumentRefsMixin(BaseModel):
         "greeting_recording_id",
         "prompt",
         "allow_interrupt",
+        "allow_interrupt_greeting",
         "add_global_prompt",
         "delayed_start",
         "delayed_start_duration",
@@ -267,6 +268,14 @@ class _ToolDocumentRefsMixin(BaseModel):
         },
         "allow_interrupt": {
             "description": "When true, the user can interrupt the agent mid-utterance.",
+        },
+        "allow_interrupt_greeting": {
+            "display_name": "Allow Interruption During Greeting",
+            "description": (
+                "When true, the caller can interrupt the opening greeting and "
+                "is heard from the moment the call connects. When false, the "
+                "caller is muted until the greeting finishes."
+            ),
         },
         "tool_uuids": {
             "description": "Tools the agent can invoke during the opening turn.",
@@ -329,6 +338,9 @@ class StartCallNodeData(
     )
     greeting_recording_id: Optional[str] = spec_field(
         default=None, ui_type=PropertyType.recording_ref
+    )
+    allow_interrupt_greeting: bool = spec_field(
+        default=False, ui_type=PropertyType.boolean
     )
     delayed_start: bool = spec_field(default=False, ui_type=PropertyType.boolean)
     delayed_start_duration: Optional[float] = spec_field(
