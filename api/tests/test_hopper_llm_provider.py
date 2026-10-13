@@ -36,7 +36,7 @@ def test_hopper_llm_configuration_defaults_and_registry():
 
     assert config.provider == ServiceProviders.HOPPER
     assert config.model == "gemma-4-31b"
-    assert "base_url" not in HopperLLMConfiguration.model_fields
+    assert config.base_url == HOPPER_API_BASE_URL  # editable, Hopper's own by default
     assert REGISTRY[ServiceType.LLM][ServiceProviders.HOPPER] is HopperLLMConfiguration
 
 
@@ -67,18 +67,45 @@ def test_create_hopper_llm_service_uses_openai_service_at_hopper_endpoint():
     assert kwargs["settings"].temperature == 0.1
 
 
-def test_create_hopper_llm_service_from_provider_ignores_caller_base_url():
+def test_create_hopper_llm_service_uses_a_custom_endpoint():
+    """A dedicated or self-hosted Hopper endpoint set in the settings form."""
+    custom = "https://dedicated.withhopper.com/v1"
+    user_config = SimpleNamespace(
+        llm=HopperLLMConfiguration(api_key="sk_hopper_test", base_url=custom)
+    )
     with patch("api.services.pipecat.service_factory.OpenAILLMService") as mock_service:
-        create_llm_service_from_provider(
-            ServiceProviders.HOPPER.value,
-            "gemma-4-31b",
-            "sk_hopper_test",
-            base_url="https://example.com/v1",
-        )
+        create_llm_service(user_config)
 
     kwargs = mock_service.call_args.kwargs
-    assert kwargs["base_url"] == HOPPER_API_BASE_URL
+    assert kwargs["base_url"] == custom
+    assert kwargs["api_key"] == "sk_hopper_test"
     assert kwargs["settings"].model == "gemma-4-31b"
+
+
+def test_a_blocked_custom_endpoint_is_refused(monkeypatch):
+    """In hosted mode a Hopper URL pointing inside the network is refused, as
+    for every other provider's URL."""
+    from fastapi import HTTPException
+
+    from api.utils import url_security
+
+    monkeypatch.setattr(url_security, "DEPLOYMENT_MODE", "saas")
+    with patch("api.services.pipecat.service_factory.OpenAILLMService"):
+        with pytest.raises(HTTPException):
+            create_llm_service_from_provider(
+                ServiceProviders.HOPPER.value, "gemma-4-31b", "k",
+                base_url="http://localhost:8000/v1",
+            )
+
+
+def test_an_old_saved_config_without_base_url_still_reaches_hopper():
+    """Configs saved before the field existed have no base_url key."""
+    config = TypeAdapter(LLMConfig).validate_python(
+        {"provider": "hopper", "api_key": "sk_old", "model": "gemma-4-31b"}
+    )
+    with patch("api.services.pipecat.service_factory.OpenAILLMService") as mock_service:
+        create_llm_service(SimpleNamespace(llm=config))
+    assert mock_service.call_args.kwargs["base_url"] == HOPPER_API_BASE_URL
 
 
 def _fake_openai(monkeypatch, *, raise_on_list=None):
@@ -182,7 +209,8 @@ async def test_qa_using_the_workflow_llm_resolves_hopper():
         fake_effective,
     ):
         provider, model, api_key, kwargs = await llm_config.resolve_user_llm_config(run)
-    assert (provider, model, kwargs) == ("hopper", "gemma-4-31b", {})
+    # no base_url saved: None, which the factory turns into Hopper's endpoint
+    assert (provider, model, kwargs) == ("hopper", "gemma-4-31b", {"base_url": None})
     assert api_key in ("sk_a", "sk_b")
 
 
@@ -202,7 +230,8 @@ def test_the_settings_form_gets_a_create_a_key_link_and_the_model_list():
     assert api_key["docs_label"] == "Create a key"
     model = schema["properties"]["model"]
     assert model["examples"] == ["gemma-4-31b"] and model["allow_custom_input"] is True
-    assert "base_url" not in schema["properties"]  # nothing to misconfigure
+    base_url = schema["properties"]["base_url"]  # shown in the form, like OpenAI's
+    assert base_url["default"] == HOPPER_API_BASE_URL
 
 
 def test_saving_a_hopper_config_checks_the_key_and_reports_a_bad_one(monkeypatch):
@@ -250,3 +279,20 @@ def test_openai_is_unchanged(monkeypatch):
     with patch("api.services.pipecat.service_factory.OpenAILLMService") as mock_service:
         create_llm_service_from_provider(ServiceProviders.OPENAI.value, "gpt-4.1", "k")
     assert "base_url" not in mock_service.call_args.kwargs
+
+
+def test_custom_endpoint_reaches_qa_and_the_key_check(monkeypatch):
+    """Post-call QA and the save-time key check use the same custom endpoint
+    as live calls, so the Hopper key never goes anywhere else."""
+    from api.services.pipecat.service_factory import llm_provider_kwargs
+
+    custom = "https://dedicated.withhopper.com/v1"
+    saved = HopperLLMConfiguration(api_key="sk_x", base_url=custom).model_dump()
+    assert llm_provider_kwargs("hopper", saved.get) == {"base_url": custom}
+
+    captured = _fake_openai(monkeypatch)
+    UserConfigurationValidator()._check_api_key(
+        ServiceProviders.HOPPER.value, "sk_x",
+        HopperLLMConfiguration(api_key="sk_x", base_url=custom),
+    )
+    assert captured == {"api_key": "sk_x", "base_url": custom}

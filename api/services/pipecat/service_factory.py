@@ -977,11 +977,13 @@ def create_llm_service_from_provider(
             settings=GroqLLMSettings(model=model, temperature=0.1),
         )
     elif provider == ServiceProviders.HOPPER.value:
-        # Hopper serves an OpenAI-compatible API at a fixed endpoint; a
-        # caller's base_url (voicemail/QA configs) never redirects its key.
+        # Hopper serves an OpenAI-compatible API. The endpoint comes only from
+        # the Hopper settings (llm_provider_kwargs); without one, Hopper's own.
+        if base_url and base_url.rstrip("/") != HOPPER_API_BASE_URL:
+            _validate_runtime_service_url(base_url, "base_url")
         return OpenAILLMService(
             api_key=api_key,
-            base_url=HOPPER_API_BASE_URL,
+            base_url=base_url or HOPPER_API_BASE_URL,
             settings=OpenAILLMSettings(model=model, temperature=0.1),
         )
     elif provider == ServiceProviders.OPENROUTER.value:
@@ -1336,6 +1338,8 @@ def llm_provider_kwargs(provider: str, get) -> dict:
     """
     kwargs = {}
     if provider == ServiceProviders.OPENAI.value:
+        kwargs["base_url"] = get("base_url")
+    elif provider == ServiceProviders.HOPPER.value:
         kwargs["base_url"] = get("base_url")
     elif provider == ServiceProviders.OPENROUTER.value:
         kwargs["base_url"] = get("base_url")

@@ -406,6 +406,10 @@ class HopperLLMConfiguration(BaseLLMConfiguration):
         description="Hopper chat model.",
         json_schema_extra={"examples": HOPPER_MODELS, "allow_custom_input": True},
     )
+    base_url: str = Field(
+        default=HOPPER_API_BASE_URL,
+        description="Override only for a dedicated or self-hosted Hopper endpoint.",
+    )
 
 
 @register_llm

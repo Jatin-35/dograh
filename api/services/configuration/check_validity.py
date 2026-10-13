@@ -37,7 +37,7 @@ class APIKeyStatusResponse(TypedDict):
 
 
 # OpenAI-compatible providers validated with the OpenAI client: their name for
-# error messages, and the fixed endpoint of those without a base_url setting.
+# error messages, and their default endpoint when no base_url is saved.
 _OPENAI_COMPATIBLE_PROVIDER_NAMES = {
     ServiceProviders.HOPPER.value: "Hopper",
 }
