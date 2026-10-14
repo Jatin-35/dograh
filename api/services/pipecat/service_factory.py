@@ -1075,6 +1075,15 @@ def create_llm_service_from_provider(
         raise HTTPException(status_code=400, detail=f"Invalid LLM provider {provider}")
 
 
+def _ms_in_range(value, low: int, high: int) -> int | None:
+    """An integer millisecond setting within [low, high], else None."""
+    try:
+        ms = int(value)
+    except (TypeError, ValueError):
+        return None
+    return ms if low <= ms <= high else None
+
+
 def create_realtime_llm_service(user_config, audio_config: "AudioConfig"):
     """Create a realtime (speech-to-speech) LLM service that handles STT+LLM+TTS.
 
@@ -1223,13 +1232,29 @@ def create_realtime_llm_service(user_config, audio_config: "AudioConfig"):
             )
         if language:
             settings_kwargs["language"] = language
-        # Gemini's server VAD ends the caller's turn (see
-        # _create_realtime_user_turn_config); unset keeps Google's default.
-        silence_ms = getattr(realtime_config, "turn_end_silence_ms", None)
+        # Gemini's server VAD owns the caller's turn and barge-in (see
+        # _create_realtime_user_turn_config); unset values keep Google's defaults.
+        # Legacy per-agent overlays reach here unvalidated, so a bad value
+        # falls back to Google's default instead of failing the call.
+        vad_kwargs = {}
+        silence_ms = _ms_in_range(
+            getattr(realtime_config, "turn_end_silence_ms", None), 300, 2000
+        )
         if silence_ms:
+            vad_kwargs["silence_duration_ms"] = silence_ms
+        if getattr(realtime_config, "interrupt_sensitivity", None) == "low":
+            from google.genai.types import StartSensitivity
+
+            vad_kwargs["start_sensitivity"] = StartSensitivity.START_SENSITIVITY_LOW
+        min_speech_ms = _ms_in_range(
+            getattr(realtime_config, "interrupt_min_speech_ms", None), 100, 1000
+        )
+        if min_speech_ms:
+            vad_kwargs["prefix_padding_ms"] = min_speech_ms
+        if vad_kwargs:
             from pipecat.services.google.gemini_live.llm import GeminiVADParams
 
-            settings_kwargs["vad"] = GeminiVADParams(silence_duration_ms=silence_ms)
+            settings_kwargs["vad"] = GeminiVADParams(**vad_kwargs)
         return DograhGemini38LiveLLMService(
             api_key=api_key,
             settings=DograhGemini38LiveLLMService.Settings(**settings_kwargs),

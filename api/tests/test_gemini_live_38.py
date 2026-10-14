@@ -260,3 +260,95 @@ async def test_gemini_31_never_gets_the_38_setting():
     service = create_realtime_llm_service(SimpleNamespace(realtime=realtime), None)
     config = await _session_config(service)
     assert config.realtime_input_config is None
+
+
+# ─── barge-in tuning: ignore short "mhm"/"haan" while the bot speaks ────────
+
+
+def test_interrupt_settings_default_to_googles_behaviour():
+    config = GeminiLive38LLMConfiguration(api_key="k")
+    assert config.interrupt_sensitivity == "default"
+    assert config.interrupt_min_speech_ms is None
+
+
+@pytest.mark.parametrize(
+    "sent, stored", [(None, None), ("", None), ("  ", None), ("400", 400), (400, 400)]
+)
+def test_min_speech_setting_accepts_the_forms_values(sent, stored):
+    config = GeminiLive38LLMConfiguration(api_key="k", interrupt_min_speech_ms=sent)
+    assert config.interrupt_min_speech_ms == stored
+
+
+@pytest.mark.parametrize("sent", [50, 99, 1001, "abc"])
+def test_min_speech_outside_the_safe_range_is_refused(sent):
+    with pytest.raises(ValidationError):
+        GeminiLive38LLMConfiguration(api_key="k", interrupt_min_speech_ms=sent)
+
+
+@pytest.mark.parametrize("sent", ["high", "LOW", "off", ""])
+def test_unknown_sensitivity_is_refused(sent):
+    with pytest.raises(ValidationError):
+        GeminiLive38LLMConfiguration(api_key="k", interrupt_sensitivity=sent)
+
+
+def test_settings_form_offers_sensitivity_as_a_dropdown():
+    props = GeminiLive38LLMConfiguration.model_json_schema()["properties"]
+    assert props["interrupt_sensitivity"]["enum"] == ["default", "low"]
+
+
+@pytest.mark.asyncio
+async def test_the_session_asks_google_to_ignore_short_sounds():
+    from google.genai.types import StartSensitivity
+
+    config = await _session_config(
+        _build_38(interrupt_sensitivity="low", interrupt_min_speech_ms=400)
+    )
+    detection = config.realtime_input_config.automatic_activity_detection
+    assert detection.start_of_speech_sensitivity == StartSensitivity.START_SENSITIVITY_LOW
+    assert detection.prefix_padding_ms == 400
+    # Gemini still detects speech and owns barge-in; only its thresholds change.
+    assert not detection.disabled
+    assert detection.silence_duration_ms is None
+
+
+@pytest.mark.asyncio
+async def test_all_three_turn_settings_reach_google_together():
+    from google.genai.types import StartSensitivity
+
+    config = await _session_config(
+        _build_38(
+            turn_end_silence_ms=600,
+            interrupt_sensitivity="low",
+            interrupt_min_speech_ms=400,
+        )
+    )
+    detection = config.realtime_input_config.automatic_activity_detection
+    assert detection.silence_duration_ms == 600
+    assert detection.start_of_speech_sensitivity == StartSensitivity.START_SENSITIVITY_LOW
+    assert detection.prefix_padding_ms == 400
+
+
+@pytest.mark.asyncio
+async def test_default_sensitivity_sends_nothing_to_google():
+    config = await _session_config(
+        _build_38(interrupt_sensitivity="default", interrupt_min_speech_ms=None)
+    )
+    assert config.realtime_input_config is None
+
+
+@pytest.mark.asyncio
+async def test_gemini_31_never_gets_the_interrupt_settings():
+    from api.services.pipecat.service_factory import create_realtime_llm_service
+
+    realtime = SimpleNamespace(
+        provider="google_realtime",
+        model="gemini-3.1-flash-live-preview",
+        api_key="k",
+        voice="Puck",
+        language="hi",
+        interrupt_sensitivity="low",
+        interrupt_min_speech_ms=400,
+    )
+    service = create_realtime_llm_service(SimpleNamespace(realtime=realtime), None)
+    config = await _session_config(service)
+    assert config.realtime_input_config is None

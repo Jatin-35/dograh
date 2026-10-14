@@ -824,8 +824,25 @@ class GeminiLive38LLMConfiguration(BaseLLMConfiguration):
             "can cut off callers who pause mid-sentence; 500-800 is typical."
         ),
     )
+    interrupt_sensitivity: Literal["default", "low"] = Field(
+        default="default",
+        description=(
+            "How readily caller sound interrupts the bot. Low ignores short "
+            "sounds like 'mhm' or 'haan' while the bot is speaking."
+        ),
+    )
+    interrupt_min_speech_ms: int | None = Field(
+        default=None,
+        ge=100,
+        le=1000,
+        description=(
+            "Caller must speak this long (ms) before it counts as speech. "
+            "Empty uses Google's default. About 400 skips short backchannels; "
+            "higher makes real interruptions slower."
+        ),
+    )
 
-    @field_validator("turn_end_silence_ms", mode="before")
+    @field_validator("turn_end_silence_ms", "interrupt_min_speech_ms", mode="before")
     @classmethod
     def _blank_uses_default(cls, value):
         # The settings form sends an empty box as "".
