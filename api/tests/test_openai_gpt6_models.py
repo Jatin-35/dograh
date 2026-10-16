@@ -224,6 +224,54 @@ def test_missing_bedrock_model_access_shows_aws_reason(monkeypatch):
     assert "AWS Marketplace" in status["message"]
 
 
+def test_a_router_that_refuses_the_model_list_is_checked_by_chat(monkeypatch):
+    from api.services.configuration.check_validity import UserConfigurationValidator
+
+    inworld = "https://api.inworld.ai/v1"
+    calls = _fake_client(
+        monkeypatch,
+        list_error=_status_error(openai.PermissionDeniedError, 403, "Forbidden"),
+    )
+    cfg = OpenAIConfig(
+        api_key="inworld-key", model="inworld/models/gemma-4-31b-it", base_url=inworld
+    )
+    assert UserConfigurationValidator()._validate_service(cfg, "llm") == []
+    assert calls["chat"]["model"] == "inworld/models/gemma-4-31b-it"
+
+
+def test_a_refused_model_list_and_refused_chat_still_report_the_reason(monkeypatch):
+    from api.services.configuration.check_validity import UserConfigurationValidator
+
+    _fake_client(
+        monkeypatch,
+        list_error=_status_error(openai.PermissionDeniedError, 403, "Forbidden"),
+        chat_error=_status_error(
+            openai.PermissionDeniedError, 403, "Tool calling is restricted on your plan"
+        ),
+    )
+    cfg = OpenAIConfig(
+        api_key="inworld-key",
+        model="inworld/models/gemma-4-31b-it",
+        base_url="https://api.inworld.ai/v1",
+    )
+    (status,) = UserConfigurationValidator()._validate_service(cfg, "llm")
+    assert "accepted the key but refused access" in status["message"]
+    assert "restricted on your plan" in status["message"]
+
+
+def test_real_openai_refusing_the_model_list_is_still_an_error(monkeypatch):
+    from api.services.configuration.check_validity import UserConfigurationValidator
+
+    calls = _fake_client(
+        monkeypatch,
+        list_error=_status_error(openai.PermissionDeniedError, 403, "Forbidden"),
+    )
+    cfg = OpenAIConfig(api_key="sk-test", model="gpt-4.1-mini")
+    (status,) = UserConfigurationValidator()._validate_service(cfg, "llm")
+    assert "accepted the key but refused access" in status["message"]
+    assert "chat" not in calls
+
+
 def test_a_wrong_bedrock_key_is_still_reported_as_invalid(monkeypatch):
     from api.services.configuration.check_validity import UserConfigurationValidator
 

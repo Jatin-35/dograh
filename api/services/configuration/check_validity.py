@@ -279,11 +279,14 @@ class UserConfigurationValidator:
         try:
             try:
                 client.models.list()
-            except openai.NotFoundError:
+            except (openai.NotFoundError, openai.PermissionDeniedError) as e:
                 # Some OpenAI-compatible APIs have no models endpoint (Amazon
-                # Bedrock's /openai/v1 answers 404). Check the key with the
-                # smallest real request for the configured model instead.
+                # Bedrock's /openai/v1 answers 404) or refuse it to keys that
+                # can still chat (Inworld's router answers 403). Check the key
+                # with the smallest real request for the configured model instead.
                 if not base_url:
+                    raise
+                if isinstance(e, openai.PermissionDeniedError) and "openai.com" in base_url:
                     raise
                 self._probe_openai_compatible_chat(client, service_config)
             return True
