@@ -19,7 +19,25 @@ export type AmbientNoiseConfiguration = Omit<
 
 export type TurnStopStrategy = NonNullable<GeneratedWorkflowConfigurationDefaults["turn_stop_strategy"]>;
 export type TurnStartStrategy = NonNullable<GeneratedWorkflowConfigurationDefaults["turn_start_strategy"]>;
+export type NoiseReduction = NonNullable<GeneratedWorkflowConfigurationDefaults["noise_reduction"]>;
 export const DEFAULT_TURN_START_MIN_WORDS = 3;
+
+export const NOISE_REDUCTION_OPTIONS: Array<{
+    value: NoiseReduction;
+    label: string;
+    description: string;
+}> = [
+    {
+        value: 'off',
+        label: 'Off',
+        description: "The caller's audio is used as received.",
+    },
+    {
+        value: 'rnnoise',
+        label: 'RNNoise (steady background noise)',
+        description: 'Removes steady background noise (fans, traffic, hum) from the caller before the agent hears it. Free; adds a little server CPU per call.',
+    },
+];
 export const DEFAULT_PROVISIONAL_VAD_PAUSE_SECS = 1.5;
 
 export const TURN_START_STRATEGY_OPTIONS: Array<{
@@ -110,6 +128,7 @@ type WorkflowConfigurationBase = Omit<
     | "turn_stop_strategy"
     | "dictionary"
     | "context_compaction_enabled"
+    | "noise_reduction"
 >;
 
 export type WorkflowConfigurations = WorkflowConfigurationBase & {
@@ -125,6 +144,7 @@ export type WorkflowConfigurations = WorkflowConfigurationBase & {
     voicemail_detection?: VoicemailDetectionConfiguration;
     transcript_configuration: TranscriptConfiguration;
     context_compaction_enabled: boolean;  // Summarize context on node transitions to remove stale tool calls
+    noise_reduction: NoiseReduction;  // Caller-side noise suppression before STT / the realtime model
     model_overrides?: ModelOverrides;  // Per-workflow model configuration overrides
     model_configuration_v2_override?: OrganizationAiModelConfigurationV2;  // Full v2 model configuration override
     [key: string]: unknown;  // Allow additional properties for future configurations
@@ -145,6 +165,7 @@ const FALLBACK_WORKFLOW_CONFIGURATIONS: WorkflowConfigurations = {
     dictionary: '',
     transcript_configuration: DEFAULT_TRANSCRIPT_CONFIGURATION,
     context_compaction_enabled: false,
+    noise_reduction: 'off',
 };
 
 export function resolveWorkflowConfigurations(
@@ -196,6 +217,10 @@ export function resolveWorkflowConfigurations(
             configurations?.context_compaction_enabled
             ?? defaults?.context_compaction_enabled
             ?? FALLBACK_WORKFLOW_CONFIGURATIONS.context_compaction_enabled,
+        noise_reduction:
+            configurations?.noise_reduction
+            ?? defaults?.noise_reduction
+            ?? FALLBACK_WORKFLOW_CONFIGURATIONS.noise_reduction,
         transcript_configuration: {
             ...DEFAULT_TRANSCRIPT_CONFIGURATION,
             ...(defaults?.transcript_configuration as Partial<TranscriptConfiguration> | undefined),

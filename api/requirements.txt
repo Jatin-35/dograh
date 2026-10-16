@@ -24,3 +24,7 @@ tzdata==2026.3
 openai==2.32.0
 vakyamai==0.1.8
 google-genai==2.24.0
+# RNNoise caller-side noise cancellation (workflow setting noise_cancellation).
+# Installed directly, not via pipecat[rnnoise], whose av<17.1.0 pin clashes
+# with av==17.1.0 in constraints.txt; audiolab only needs av>=17.0.0.
+pyrnnoise==0.4.5

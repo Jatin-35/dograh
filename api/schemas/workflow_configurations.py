@@ -14,6 +14,7 @@ DEFAULT_TURN_START_MIN_WORDS = 3
 DEFAULT_PROVISIONAL_VAD_PAUSE_SECS = 1.5
 DEFAULT_TURN_STOP_STRATEGY = "transcription"
 DEFAULT_CONTEXT_COMPACTION_ENABLED = False
+DEFAULT_NOISE_REDUCTION = "off"
 
 
 class AmbientNoiseConfigurationDefaults(BaseModel):
@@ -56,6 +57,9 @@ class WorkflowConfigurationDefaults(BaseModel):
     )
     dictionary: str = ""
     context_compaction_enabled: bool = DEFAULT_CONTEXT_COMPACTION_ENABLED
+    # Caller-side noise suppression applied in the input transport, before
+    # STT / the realtime model hears the audio.
+    noise_reduction: Literal["off", "rnnoise"] = DEFAULT_NOISE_REDUCTION
 
 
 def get_default_workflow_configurations() -> WorkflowConfigurationDefaults:

@@ -49,6 +49,8 @@ import {
     DEFAULT_PROVISIONAL_VAD_PAUSE_SECS,
     DEFAULT_TURN_START_MIN_WORDS,
     DEFAULT_VOICEMAIL_DETECTION_CONFIGURATION,
+    NOISE_REDUCTION_OPTIONS,
+    type NoiseReduction,
     resolveWorkflowConfigurations,
     TURN_START_STRATEGY_OPTIONS,
     type TurnStartStrategy,
@@ -295,6 +297,9 @@ function GeneralSection({
     const [contextCompactionEnabled, setContextCompactionEnabled] = useState(
         workflowConfigurations.context_compaction_enabled,
     );
+    const [noiseReduction, setNoiseReduction] = useState<NoiseReduction>(
+        workflowConfigurations.noise_reduction,
+    );
     const [includeTranscriptEndTimestamps, setIncludeTranscriptEndTimestamps] = useState(
         workflowConfigurations.transcript_configuration?.include_end_timestamps ?? false,
     );
@@ -305,6 +310,9 @@ function GeneralSection({
     const { playingId, toggle: togglePlayback } = useAudioPlayback();
     const selectedTurnStartStrategy = TURN_START_STRATEGY_OPTIONS.find(
         (option) => option.value === turnStartStrategy,
+    );
+    const selectedNoiseReduction = NOISE_REDUCTION_OPTIONS.find(
+        (option) => option.value === noiseReduction,
     );
 
     const isDirty = useMemo(() => {
@@ -320,10 +328,11 @@ function GeneralSection({
             provisionalVadPauseSecs !== workflowConfigurations.provisional_vad_pause_secs ||
             turnStopStrategy !== workflowConfigurations.turn_stop_strategy ||
             contextCompactionEnabled !== workflowConfigurations.context_compaction_enabled ||
+            noiseReduction !== workflowConfigurations.noise_reduction ||
             includeTranscriptEndTimestamps !==
             (workflowConfigurations.transcript_configuration?.include_end_timestamps ?? false)
         );
-    }, [name, workflowName, ambientNoiseConfig, maxCallDuration, maxUserIdleTimeout, smartTurnStopSecs, turnStartStrategy, turnStartMinWords, provisionalVadPauseSecs, turnStopStrategy, contextCompactionEnabled, includeTranscriptEndTimestamps, workflowConfigurations]);
+    }, [name, workflowName, ambientNoiseConfig, maxCallDuration, maxUserIdleTimeout, smartTurnStopSecs, turnStartStrategy, turnStartMinWords, provisionalVadPauseSecs, turnStopStrategy, contextCompactionEnabled, noiseReduction, includeTranscriptEndTimestamps, workflowConfigurations]);
 
     useUnsavedChanges("general", isDirty);
 
@@ -400,6 +409,7 @@ function GeneralSection({
                     provisional_vad_pause_secs: provisionalVadPauseSecs,
                     turn_stop_strategy: turnStopStrategy,
                     context_compaction_enabled: contextCompactionEnabled,
+                    noise_reduction: noiseReduction,
                     transcript_configuration: {
                         ...(workflowConfigurations.transcript_configuration ?? {}),
                         include_end_timestamps: includeTranscriptEndTimestamps,
@@ -747,6 +757,39 @@ function GeneralSection({
                             checked={contextCompactionEnabled}
                             onCheckedChange={setContextCompactionEnabled}
                         />
+                    </div>
+                </div>
+
+                <Separator />
+
+                {/* Background Noise Reduction */}
+                <div className="space-y-4">
+                    <div>
+                        <h3 className="text-sm font-medium">Background Noise Reduction</h3>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                            Clean background noise out of the caller&apos;s audio before the agent hears it. Applies to phone and browser calls.
+                        </p>
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="noise_reduction" className="text-xs">Background Noise Reduction</Label>
+                        <Select
+                            value={noiseReduction}
+                            onValueChange={(value: NoiseReduction) => setNoiseReduction(value)}
+                        >
+                            <SelectTrigger id="noise_reduction">
+                                <SelectValue placeholder="Select background noise reduction" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {NOISE_REDUCTION_OPTIONS.map((option) => (
+                                    <SelectItem key={option.value} value={option.value}>
+                                        {option.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                            {selectedNoiseReduction?.description}
+                        </p>
                     </div>
                 </div>
 

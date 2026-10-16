@@ -7460,6 +7460,10 @@ export type WorkflowConfigurationDefaults = {
      * Context Compaction Enabled
      */
     context_compaction_enabled?: boolean;
+    /**
+     * Background Noise Reduction
+     */
+    noise_reduction?: 'off' | 'rnnoise';
     [key: string]: unknown;
 };
 

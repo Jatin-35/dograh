@@ -67,6 +67,7 @@ from api.services.pipecat.tracing_config import (
     ensure_tracing,
 )
 from api.services.pipecat.transcript_log_coordinator import TranscriptLogCoordinator
+from api.services.pipecat.transport_params import apply_noise_reduction
 from api.services.pipecat.transport_setup import create_webrtc_transport
 from api.services.pipecat.worker_runner import run_pipeline_worker
 from api.services.pipecat.ws_sender_registry import get_ws_sender
@@ -394,6 +395,7 @@ async def _run_pipeline_telephony_impl(
         is_realtime=is_realtime,
         **transport_kwargs,
     )
+    apply_noise_reduction(transport, run_configs, workflow_run_id)
 
     try:
         await _run_pipeline_impl(
@@ -543,6 +545,7 @@ async def _run_pipeline_smallwebrtc_impl(
         ambient_noise_config,
         is_realtime=is_realtime,
     )
+    apply_noise_reduction(transport, run_configs, workflow_run_id)
     await _run_pipeline_impl(
         transport,
         workflow_id,

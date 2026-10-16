@@ -80,6 +80,7 @@ export const ConfigurationsDialog = ({
                 turn_stop_strategy: turnStopStrategy,
                 transcript_configuration: resolvedWorkflowConfigurations.transcript_configuration,
                 context_compaction_enabled: contextCompactionEnabled,
+                noise_reduction: resolvedWorkflowConfigurations.noise_reduction,
             }, name);
             onOpenChange(false);
         } catch (error) {
