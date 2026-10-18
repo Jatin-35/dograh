@@ -29,6 +29,7 @@ from api.services.pipecat.gemini_json_schema_adapter import (
     DograhGeminiJSONSchemaAdapter,
 )
 from api.services.pipecat.minimax_tts import MiniMaxOwnedSessionTTSService
+from api.services.pipecat.anthropic_llm import DograhAnthropicLLMService
 from api.services.pipecat.murf_tts import MurfTTSService
 from api.utils.url_security import validate_user_configured_service_url
 from pipecat.services.assemblyai.stt import AssemblyAISTTService, AssemblyAISTTSettings
@@ -1021,6 +1022,15 @@ def create_llm_service_from_provider(
             api_key=api_key,
             settings=OpenAILLMSettings(model=model, temperature=0.1),
             **kwargs,
+        )
+    elif provider == ServiceProviders.ANTHROPIC.value:
+        # Prompt caching keeps the long agent prompt cached between turns
+        # (cheaper and faster); no temperature, which current Claude ignores.
+        return DograhAnthropicLLMService(
+            api_key=api_key,
+            settings=DograhAnthropicLLMService.Settings(
+                model=model, enable_prompt_caching=True
+            ),
         )
     elif provider == ServiceProviders.GROQ.value:
         return GroqLLMService(

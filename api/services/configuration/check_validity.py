@@ -65,6 +65,7 @@ class UserConfigurationValidator:
             ServiceProviders.HOPPER.value: self._check_openai_api_key,
             ServiceProviders.DEEPGRAM.value: self._check_deepgram_api_key,
             ServiceProviders.GROQ.value: self._check_groq_api_key,
+            ServiceProviders.ANTHROPIC.value: self._check_anthropic_api_key,
             ServiceProviders.OPENROUTER.value: self._check_openrouter_api_key,
             ServiceProviders.INWORLD.value: self._check_inworld_api_key,
             ServiceProviders.ELEVENLABS.value: self._validate_elevenlabs_api_key,
@@ -375,6 +376,28 @@ class UserConfigurationValidator:
                 "Please check that your API key is correct and active. "
                 "You can verify your keys at https://console.deepgram.com/."
             )
+
+    def _check_anthropic_api_key(self, model: str, api_key: str) -> bool:
+        # Listing models needs only a valid key; a clear auth failure rejects
+        # the save, anything else is inconclusive and doesn't block it.
+        try:
+            response = httpx.get(
+                "https://api.anthropic.com/v1/models",
+                headers={"x-api-key": api_key, "anthropic-version": "2023-06-01"},
+                timeout=10.0,
+            )
+        except httpx.RequestError:
+            raise ValueError(
+                "Could not connect to the Anthropic API. Please check your network "
+                "connection and try again."
+            )
+        if response.status_code in (401, 403):
+            raise ValueError(
+                "Invalid Anthropic API key. The key was rejected by the Anthropic API. "
+                "Please check that your API key is correct and active. "
+                "You can manage keys at https://console.anthropic.com/settings/keys."
+            )
+        return True
 
     def _check_groq_api_key(self, model: str, api_key: str) -> bool:
         client = Groq(api_key=api_key)

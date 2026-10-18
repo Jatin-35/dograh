@@ -100,6 +100,7 @@ class ServiceProviders(str, Enum):
     SMALLEST = "smallest"
     XAI = "xai"
     MURF = "murf"
+    ANTHROPIC = "anthropic"
 
 
 class BaseServiceConfiguration(BaseModel):
@@ -108,6 +109,7 @@ class BaseServiceConfiguration(BaseModel):
         ServiceProviders.HOPPER,
         ServiceProviders.DEEPGRAM,
         ServiceProviders.GROQ,
+        ServiceProviders.ANTHROPIC,
         ServiceProviders.OPENROUTER,
         ServiceProviders.INWORLD,
         ServiceProviders.ELEVENLABS,
@@ -260,6 +262,7 @@ HOPPER_PROVIDER_MODEL_CONFIG = provider_model_config(
 GOOGLE_PROVIDER_MODEL_CONFIG = provider_model_config("Google")
 GROQ_PROVIDER_MODEL_CONFIG = provider_model_config("Groq")
 OPENROUTER_PROVIDER_MODEL_CONFIG = provider_model_config("Open Router")
+ANTHROPIC_PROVIDER_MODEL_CONFIG = provider_model_config("Anthropic")
 AZURE_OPENAI_PROVIDER_MODEL_CONFIG = provider_model_config("Azure OpenAI")
 DOGRAH_PROVIDER_MODEL_CONFIG = provider_model_config("Dograh")
 AWS_BEDROCK_PROVIDER_MODEL_CONFIG = provider_model_config("AWS Bedrock")
@@ -349,6 +352,12 @@ HOPPER_MODELS = [
     "gemma-4-31b",
 ]
 
+ANTHROPIC_MODELS = [
+    "claude-haiku-5-5",
+    "claude-sonnet-5-5",
+    "claude-opus-5-5",
+    "claude-haiku-4-5",
+]
 GROQ_MODELS = [
     "llama-3.3-70b-versatile",
     "deepseek-r1-distill-llama-70b",
@@ -468,6 +477,20 @@ class GroqLLMService(BaseLLMConfiguration):
         default="llama-3.3-70b-versatile",
         description="Groq-hosted model identifier.",
         json_schema_extra={"examples": GROQ_MODELS, "allow_custom_input": True},
+    )
+
+
+@register_llm
+class AnthropicLLMConfiguration(BaseLLMConfiguration):
+    model_config = ANTHROPIC_PROVIDER_MODEL_CONFIG
+    provider: Literal[ServiceProviders.ANTHROPIC] = ServiceProviders.ANTHROPIC
+    model: str = Field(
+        default="claude-haiku-5-5",
+        description=(
+            "Claude model ID. Haiku is the fastest and suits live calls; "
+            "Sonnet and Opus are stronger but slower."
+        ),
+        json_schema_extra={"examples": ANTHROPIC_MODELS, "allow_custom_input": True},
     )
 
 
@@ -958,6 +981,7 @@ LLMConfig = Annotated[
         HopperLLMConfiguration,
         GoogleVertexLLMConfiguration,
         GroqLLMService,
+        AnthropicLLMConfiguration,
         OpenRouterLLMConfiguration,
         GoogleLLMService,
         AzureLLMService,
