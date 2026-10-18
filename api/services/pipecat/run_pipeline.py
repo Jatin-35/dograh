@@ -9,7 +9,6 @@ from api.enums import WorkflowRunMode
 from api.schemas.workflow_configurations import (
     DEFAULT_MAX_CALL_DURATION_SECONDS,
     DEFAULT_MAX_USER_IDLE_TIMEOUT_SECONDS,
-    DEFAULT_PROVISIONAL_VAD_PAUSE_SECS,
     DEFAULT_SMART_TURN_STOP_SECS,
     DEFAULT_TURN_START_MIN_WORDS,
     DEFAULT_TURN_START_STRATEGY,
@@ -67,6 +66,16 @@ from api.services.pipecat.tracing_config import (
     ensure_tracing,
 )
 from api.services.pipecat.transcript_log_coordinator import TranscriptLogCoordinator
+from api.services.pipecat.empty_turn_recovery import (
+    BotActivityObserver,
+    EmptyTurnRecovery,
+)
+from api.services.pipecat.latency_breakdown import build_latency_breakdown_event
+from api.services.pipecat.silero_vad import DograhSileroVADAnalyzer
+from api.services.pipecat.turn_stop_strategies import (
+    DograhSpeechTimeoutUserTurnStopStrategy,
+    DograhTurnAnalyzerUserTurnStopStrategy,
+)
 from api.services.pipecat.transport_params import apply_noise_reduction
 from api.services.pipecat.transport_setup import create_webrtc_transport
 from api.services.pipecat.worker_runner import run_pipeline_worker
@@ -77,7 +86,6 @@ from api.services.workflow.pipecat_engine import PipecatEngine
 from api.services.workflow.workflow_graph import WorkflowGraph
 from pipecat.audio.turn.smart_turn.base_smart_turn import SmartTurnParams
 from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnalyzerV3
-from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.extensions.voicemail.voicemail_detector import VoicemailDetector
 from pipecat.processors.aggregators.llm_response_universal import (
@@ -94,7 +102,6 @@ from pipecat.turns.user_mute import (
 from pipecat.turns.user_start import (
     ExternalUserTurnStartStrategy,
     MinWordsUserTurnStartStrategy,
-    ProvisionalVADUserTurnStartStrategy,
 )
 from pipecat.turns.user_start.transcription_user_turn_start_strategy import (
     TranscriptionUserTurnStartStrategy,
@@ -104,8 +111,6 @@ from pipecat.turns.user_start.vad_user_turn_start_strategy import (
 )
 from pipecat.turns.user_stop import (
     ExternalUserTurnStopStrategy,
-    SpeechTimeoutUserTurnStopStrategy,
-    TurnAnalyzerUserTurnStopStrategy,
 )
 from pipecat.turns.user_turn_strategies import UserTurnStrategies
 from pipecat.utils.enums import EndTaskReason, RealtimeFeedbackType
@@ -129,21 +134,9 @@ def _resolve_user_turn_stop_timeout(
 
 
 def _resolve_turn_start_min_words(run_configs: dict) -> int:
-    return max(
-        1,
-        int(run_configs.get("turn_start_min_words", DEFAULT_TURN_START_MIN_WORDS)),
-    )
-
-
-def _resolve_provisional_vad_pause_secs(run_configs: dict) -> float:
-    return max(
-        0.1,
-        float(
-            run_configs.get(
-                "provisional_vad_pause_secs", DEFAULT_PROVISIONAL_VAD_PAUSE_SECS
-            )
-        ),
-    )
+    # A stored null means "never configured": use the default, don't crash.
+    min_words = run_configs.get("turn_start_min_words")
+    return max(1, int(DEFAULT_TURN_START_MIN_WORDS if min_words is None else min_words))
 
 
 def _create_non_realtime_user_turn_start_strategies(
@@ -154,20 +147,16 @@ def _create_non_realtime_user_turn_start_strategies(
     turn_start_strategy = run_configs.get(
         "turn_start_strategy", DEFAULT_TURN_START_STRATEGY
     )
+    # Retired ("provisional_vad", upstream dograh #767), unknown and null values
+    # all resolve to the default.
+    if turn_start_strategy not in ("default", "min_words"):
+        turn_start_strategy = DEFAULT_TURN_START_STRATEGY
 
     if turn_start_strategy == "min_words":
         return [
             MinWordsUserTurnStartStrategy(
                 min_words=_resolve_turn_start_min_words(run_configs)
             )
-        ]
-
-    if turn_start_strategy == "provisional_vad":
-        return [
-            TranscriptionUserTurnStartStrategy(),
-            ProvisionalVADUserTurnStartStrategy(
-                pause_secs=_resolve_provisional_vad_pause_secs(run_configs)
-            ),
         ]
 
     if uses_external_turns:
@@ -195,12 +184,12 @@ def _create_non_realtime_user_turn_stop_strategies(
             )
         )
         return [
-            TurnAnalyzerUserTurnStopStrategy(
+            DograhTurnAnalyzerUserTurnStopStrategy(
                 turn_analyzer=LocalSmartTurnAnalyzerV3(params=smart_turn_params)
             )
         ]
 
-    return [SpeechTimeoutUserTurnStopStrategy()]
+    return [DograhSpeechTimeoutUserTurnStopStrategy()]
 
 
 def build_user_mute_strategies(
@@ -241,9 +230,9 @@ def _create_realtime_user_turn_config(provider: str):
                 start=[
                     VADUserTurnStartStrategy(enable_interruptions=enable_interruptions)
                 ],
-                stop=[SpeechTimeoutUserTurnStopStrategy(wait_for_transcript=False)],
+                stop=[DograhSpeechTimeoutUserTurnStopStrategy(wait_for_transcript=False)],
             ),
-            SileroVADAnalyzer(params=VADParams(stop_secs=0.2)),
+            DograhSileroVADAnalyzer(params=VADParams(stop_secs=0.2)),
         )
 
     if provider in {
@@ -928,7 +917,7 @@ async def _run_pipeline_impl(
         engine.should_mute_user,
         allow_interrupt_greeting=allow_interrupt_greeting,
     )
-    user_vad_analyzer = SileroVADAnalyzer(params=VADParams(stop_secs=0.2))
+    user_vad_analyzer = DograhSileroVADAnalyzer(params=VADParams(stop_secs=0.2))
 
     # Configure turn strategies based on STT provider, model, and workflow configuration
     if is_realtime:
@@ -1136,6 +1125,13 @@ async def _run_pipeline_impl(
     )
     task.add_observer(feedback_observer)
 
+    # A caller turn that cut the bot off with no recognisable words (a cough,
+    # a horn) otherwise leaves the bot silent mid-reply; ask them to repeat.
+    if not is_realtime and run_configs.get("empty_turn_recovery", True):
+        bot_activity = BotActivityObserver()
+        task.add_observer(bot_activity)
+        EmptyTurnRecovery(bot_activity).attach(user_context_aggregator)
+
     # Register latency observer to log user-to-bot response latency
     if task.user_bot_latency_observer:
 
@@ -1163,6 +1159,16 @@ async def _run_pipeline_impl(
                 await in_memory_logs_buffer.append(message)
             except Exception as e:
                 logger.error(f"Failed to append latency to logs buffer: {e}")
+
+        @task.user_bot_latency_observer.event_handler("on_latency_breakdown")
+        async def on_latency_breakdown(observer, breakdown):
+            # Where one caller-stops-to-bot-speaks interval went (turn
+            # detection, each service's first byte, sentence buffering, tools),
+            # kept in the run's logs only, next to the total above.
+            try:
+                await in_memory_logs_buffer.append(build_latency_breakdown_event(breakdown))
+            except Exception as e:
+                logger.debug(f"Failed to append latency breakdown to logs buffer: {e}")
 
     # Register turn log handlers for all call types (WebRTC and telephony)
     register_turn_log_handlers(

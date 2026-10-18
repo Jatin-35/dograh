@@ -7439,15 +7439,11 @@ export type WorkflowConfigurationDefaults = {
     /**
      * Turn Start Strategy
      */
-    turn_start_strategy?: 'default' | 'min_words' | 'provisional_vad';
+    turn_start_strategy?: 'default' | 'min_words';
     /**
      * Turn Start Min Words
      */
     turn_start_min_words?: number;
-    /**
-     * Provisional Vad Pause Secs
-     */
-    provisional_vad_pause_secs?: number;
     /**
      * Turn Stop Strategy
      */

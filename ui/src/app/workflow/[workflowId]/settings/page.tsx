@@ -46,7 +46,6 @@ import logger from "@/lib/logger";
 import { fetchModelConfigurationPricing } from "@/lib/modelConfigurationPricing";
 import {
     type AmbientNoiseConfiguration,
-    DEFAULT_PROVISIONAL_VAD_PAUSE_SECS,
     DEFAULT_TURN_START_MIN_WORDS,
     DEFAULT_VOICEMAIL_DETECTION_CONFIGURATION,
     NOISE_REDUCTION_OPTIONS,
@@ -288,9 +287,6 @@ function GeneralSection({
     const [turnStartMinWords, setTurnStartMinWords] = useState(
         workflowConfigurations.turn_start_min_words,
     );
-    const [provisionalVadPauseSecs, setProvisionalVadPauseSecs] = useState(
-        workflowConfigurations.provisional_vad_pause_secs,
-    );
     const [turnStopStrategy, setTurnStopStrategy] = useState<TurnStopStrategy>(
         workflowConfigurations.turn_stop_strategy,
     );
@@ -325,14 +321,13 @@ function GeneralSection({
             smartTurnStopSecs !== workflowConfigurations.smart_turn_stop_secs ||
             turnStartStrategy !== workflowConfigurations.turn_start_strategy ||
             turnStartMinWords !== workflowConfigurations.turn_start_min_words ||
-            provisionalVadPauseSecs !== workflowConfigurations.provisional_vad_pause_secs ||
             turnStopStrategy !== workflowConfigurations.turn_stop_strategy ||
             contextCompactionEnabled !== workflowConfigurations.context_compaction_enabled ||
             noiseReduction !== workflowConfigurations.noise_reduction ||
             includeTranscriptEndTimestamps !==
             (workflowConfigurations.transcript_configuration?.include_end_timestamps ?? false)
         );
-    }, [name, workflowName, ambientNoiseConfig, maxCallDuration, maxUserIdleTimeout, smartTurnStopSecs, turnStartStrategy, turnStartMinWords, provisionalVadPauseSecs, turnStopStrategy, contextCompactionEnabled, noiseReduction, includeTranscriptEndTimestamps, workflowConfigurations]);
+    }, [name, workflowName, ambientNoiseConfig, maxCallDuration, maxUserIdleTimeout, smartTurnStopSecs, turnStartStrategy, turnStartMinWords, turnStopStrategy, contextCompactionEnabled, noiseReduction, includeTranscriptEndTimestamps, workflowConfigurations]);
 
     useUnsavedChanges("general", isDirty);
 
@@ -406,7 +401,6 @@ function GeneralSection({
                     smart_turn_stop_secs: smartTurnStopSecs,
                     turn_start_strategy: turnStartStrategy,
                     turn_start_min_words: turnStartMinWords,
-                    provisional_vad_pause_secs: provisionalVadPauseSecs,
                     turn_stop_strategy: turnStopStrategy,
                     context_compaction_enabled: contextCompactionEnabled,
                     noise_reduction: noiseReduction,
@@ -657,11 +651,6 @@ function GeneralSection({
                         </Select>
                         <p className="text-xs text-muted-foreground">
                             {selectedTurnStartStrategy?.description}
-                            {turnStartStrategy === "provisional_vad" && (
-                                <span className="ml-2 inline-flex rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                                    Experimental
-                                </span>
-                            )}
                         </p>
                     </div>
                     {turnStartStrategy === "min_words" && (
@@ -683,28 +672,6 @@ function GeneralSection({
                             />
                             <p className="text-xs text-muted-foreground">
                                 Number of transcribed words needed to interrupt while the bot is speaking. Default: {DEFAULT_TURN_START_MIN_WORDS}
-                            </p>
-                        </div>
-                    )}
-                    {turnStartStrategy === "provisional_vad" && (
-                        <div className="space-y-2">
-                            <Label htmlFor="provisional_vad_pause_secs" className="text-xs">
-                                Provisional Pause (seconds)
-                            </Label>
-                            <Input
-                                id="provisional_vad_pause_secs"
-                                type="number"
-                                step="0.1"
-                                min="0.1"
-                                max="5"
-                                value={provisionalVadPauseSecs}
-                                onChange={(e) => {
-                                    const value = parseFloat(e.target.value);
-                                    if (!isNaN(value) && value >= 0.1) setProvisionalVadPauseSecs(value);
-                                }}
-                            />
-                            <p className="text-xs text-muted-foreground">
-                                Seconds to pause bot audio while waiting for transcript confirmation. Default: {DEFAULT_PROVISIONAL_VAD_PAUSE_SECS}
                             </p>
                         </div>
                     )}
