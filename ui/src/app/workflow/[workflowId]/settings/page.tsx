@@ -58,6 +58,7 @@ import {
     type WorkflowConfigurations,
 } from "@/types/workflow-configurations";
 
+import { AmbientPlaybackFields } from "../components/AmbientPlaybackFields";
 import { EmbedDialog } from "../components/EmbedDialog";
 import { useWorkflowState } from "../hooks/useWorkflowState";
 
@@ -479,11 +480,17 @@ function GeneralSection({
                                 />
                             </div>
 
+                            <AmbientPlaybackFields
+                                config={ambientNoiseConfig}
+                                onChange={(update) => setAmbientNoiseConfig((prev) => ({ ...prev, ...update }))}
+                                showSoundPicker={!ambientNoiseConfig.storage_key}
+                            />
+
                             {/* Custom Audio File */}
                             <div className="space-y-2">
                                 <Label className="text-xs">Custom Audio File</Label>
                                 <p className="text-xs text-muted-foreground">
-                                    Upload your own audio file or use the default office ambience.
+                                    Upload your own audio file, or use the built-in sound selected above.
                                 </p>
 
                                 {ambientNoiseConfig.storage_key ? (
@@ -560,7 +567,7 @@ function GeneralSection({
 
                                 {!ambientNoiseConfig.storage_key && (
                                     <p className="text-xs text-muted-foreground italic">
-                                        Using default office ambience
+                                        Using the built-in {ambientNoiseConfig.sound === "typing" ? "keyboard typing" : "office ambience"} sound
                                     </p>
                                 )}
                             </div>

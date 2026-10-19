@@ -16,6 +16,8 @@ import {
     WorkflowConfigurations,
 } from "@/types/workflow-configurations";
 
+import { AmbientPlaybackFields } from "./AmbientPlaybackFields";
+
 interface ConfigurationsDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
@@ -136,7 +138,7 @@ export const ConfigurationsDialog = ({
                         <div>
                             <h3 className="text-sm font-semibold mb-1">Ambient Noise</h3>
                             <p className="text-xs text-muted-foreground">
-                                Add background office ambient noise to make the conversation sound more natural.
+                                Add background ambient noise to make the conversation sound more natural.
                             </p>
                         </div>
 
@@ -155,6 +157,7 @@ export const ConfigurationsDialog = ({
                             </div>
 
                             {ambientNoiseConfig.enabled && (
+                                <div className="space-y-4">
                                 <div className="space-y-2">
                                     <Label htmlFor="ambient-volume" className="text-xs">
                                         Volume
@@ -173,6 +176,12 @@ export const ConfigurationsDialog = ({
                                             }
                                         }}
                                     />
+                                </div>
+                                <AmbientPlaybackFields
+                                    config={ambientNoiseConfig}
+                                    onChange={(update) => setAmbientNoiseConfig(prev => ({ ...prev, ...update }))}
+                                    showSoundPicker={!ambientNoiseConfig.storage_key}
+                                />
                                 </div>
                             )}
                         </div>

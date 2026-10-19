@@ -198,6 +198,18 @@ export type AmbientNoiseConfigurationDefaults = {
      * Volume
      */
     volume?: number;
+    /**
+     * Play Mode
+     */
+    play_mode?: 'whole_call' | 'thinking' | 'tool_calls';
+    /**
+     * Start Delay Secs
+     */
+    start_delay_secs?: number;
+    /**
+     * Sound
+     */
+    sound?: 'office' | 'typing';
     [key: string]: unknown;
 };
 

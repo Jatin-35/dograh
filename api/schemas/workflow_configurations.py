@@ -23,6 +23,14 @@ class AmbientNoiseConfigurationDefaults(BaseModel):
 
     enabled: bool = False
     volume: float = 0.3
+    # When the sound plays: the whole call, only while the bot is working out
+    # its reply (after the caller's turn, including tool calls), or only while
+    # a tool runs. See api/services/pipecat/ambient_sound.py.
+    play_mode: Literal["whole_call", "thinking", "tool_calls"] = "whole_call"
+    # Wait this long into a pause before playing, so quick replies stay silent.
+    start_delay_secs: float = Field(default=0.5, ge=0, le=5)
+    # Built-in sound; an uploaded file (storage_key) takes precedence.
+    sound: Literal["office", "typing"] = "office"
 
 
 class WorkflowConfigurationDefaults(BaseModel):

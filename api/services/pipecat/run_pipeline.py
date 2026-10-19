@@ -66,6 +66,7 @@ from api.services.pipecat.tracing_config import (
     ensure_tracing,
 )
 from api.services.pipecat.transcript_log_coordinator import TranscriptLogCoordinator
+from api.services.pipecat.ambient_sound import attach_ambient_sound_gate
 from api.services.pipecat.empty_turn_recovery import (
     BotActivityObserver,
     EmptyTurnRecovery,
@@ -1131,6 +1132,16 @@ async def _run_pipeline_impl(
         bot_activity = BotActivityObserver()
         task.add_observer(bot_activity)
         EmptyTurnRecovery(bot_activity).attach(user_context_aggregator)
+
+    # Ambient sound set to play only while the caller waits (the bot thinking,
+    # or a tool running) follows the call from here; whole-call sound needs
+    # nothing. Same config source the transport built its mixer from.
+    attach_ambient_sound_gate(
+        task,
+        transport,
+        (workflow.workflow_configurations or {}).get("ambient_noise_configuration"),
+        llm=llm,
+    )
 
     # Register latency observer to log user-to-bot response latency
     if task.user_bot_latency_observer:

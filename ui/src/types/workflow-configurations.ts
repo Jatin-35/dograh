@@ -12,10 +12,47 @@ export type AmbientNoiseConfiguration = Omit<
 > & {
     enabled: boolean;
     volume: number;
+    // Named here because Omit<> over a type with an index signature drops them.
+    play_mode?: AmbientNoiseConfigurationDefaults["play_mode"];
+    start_delay_secs?: number;
+    sound?: AmbientNoiseConfigurationDefaults["sound"];
     storage_key?: string;
     storage_backend?: string;
     original_filename?: string;
 };
+
+export type AmbientPlayMode = NonNullable<AmbientNoiseConfigurationDefaults["play_mode"]>;
+export type AmbientSound = NonNullable<AmbientNoiseConfigurationDefaults["sound"]>;
+export const DEFAULT_AMBIENT_START_DELAY_SECS = 0.5;
+
+export const AMBIENT_PLAY_MODE_OPTIONS: Array<{
+    value: AmbientPlayMode;
+    label: string;
+    description: string;
+}> = [
+    {
+        value: "whole_call",
+        label: "Whole call",
+        description: "Plays from the moment the call connects until it ends.",
+    },
+    {
+        value: "thinking",
+        label: "While the agent is thinking",
+        description:
+            "Plays after the caller finishes speaking until the agent replies, including tool calls. Silent while either side talks.",
+    },
+    {
+        value: "tool_calls",
+        label: "Only during tool calls",
+        description:
+            "Plays only while the agent waits on a tool (a lookup or API call). End-call and transfer tools don't count.",
+    },
+];
+
+export const AMBIENT_SOUND_OPTIONS: Array<{ value: AmbientSound; label: string }> = [
+    { value: "office", label: "Office ambience" },
+    { value: "typing", label: "Keyboard typing" },
+];
 
 export type TurnStopStrategy = NonNullable<GeneratedWorkflowConfigurationDefaults["turn_stop_strategy"]>;
 export type TurnStartStrategy = NonNullable<GeneratedWorkflowConfigurationDefaults["turn_start_strategy"]>;
@@ -145,7 +182,10 @@ export type WorkflowConfigurations = WorkflowConfigurationBase & {
 const FALLBACK_WORKFLOW_CONFIGURATIONS: WorkflowConfigurations = {
     ambient_noise_configuration: {
         enabled: false,
-        volume: 0.3
+        volume: 0.3,
+        play_mode: "whole_call",
+        start_delay_secs: DEFAULT_AMBIENT_START_DELAY_SECS,
+        sound: "office"
     },
     max_call_duration: 300,
     max_user_idle_timeout: 10,  // 10 seconds
