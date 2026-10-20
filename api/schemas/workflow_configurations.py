@@ -22,7 +22,8 @@ class AmbientNoiseConfigurationDefaults(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     enabled: bool = False
-    volume: float = 0.3
+    # 0.1-1.5: above 1.0 boosts a soft sound for the short-wait play modes.
+    volume: float = Field(default=0.3, ge=0.1, le=1.5)
     # When the sound plays: the whole call, only while the bot is working out
     # its reply (after the caller's turn, including tool calls), or only while
     # a tool runs. See api/services/pipecat/ambient_sound.py.
@@ -31,6 +32,15 @@ class AmbientNoiseConfigurationDefaults(BaseModel):
     start_delay_secs: float = Field(default=0.5, ge=0, le=5)
     # Built-in sound; an uploaded file (storage_key) takes precedence.
     sound: Literal["office", "typing"] = "office"
+
+    @field_validator("volume", mode="before")
+    @classmethod
+    def _clamp_volume(cls, value):
+        # Agents saved before the range existed can hold 0 or 3; re-saving
+        # them must not fail, so a stored number is brought into range.
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return min(1.5, max(0.1, float(value)))
+        return value
 
 
 class WorkflowConfigurationDefaults(BaseModel):

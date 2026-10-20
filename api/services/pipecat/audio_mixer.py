@@ -5,7 +5,11 @@ import os
 from loguru import logger
 
 from api.constants import APP_ROOT_DIR
-from api.services.pipecat.ambient_sound import PLAY_WHOLE_CALL, GatedSoundfileMixer
+from api.services.pipecat.ambient_sound import (
+    PLAY_WHOLE_CALL,
+    GatedSoundfileMixer,
+    normalize_ambient_config,
+)
 from api.services.pipecat.audio_file_cache import get_cached_ambient_noise_path
 from pipecat.audio.mixers.silence_mixer import SilenceAudioMixer
 from pipecat.audio.mixers.soundfile_mixer import SoundfileMixer
@@ -38,8 +42,9 @@ async def build_audio_out_mixer(
     if not ambient_noise_config or not ambient_noise_config.get("enabled", False):
         return SilenceAudioMixer()
 
-    volume = ambient_noise_config.get("volume", 0.3)
-    gated = ambient_noise_config.get("play_mode", PLAY_WHOLE_CALL) != PLAY_WHOLE_CALL
+    ambient_noise_config = normalize_ambient_config(ambient_noise_config)
+    volume = ambient_noise_config["volume"]
+    gated = ambient_noise_config["play_mode"] != PLAY_WHOLE_CALL
     mixer_cls = GatedSoundfileMixer if gated else SoundfileMixer
 
     storage_key = ambient_noise_config.get("storage_key")
@@ -57,9 +62,7 @@ async def build_audio_out_mixer(
             )
         logger.warning("Custom ambient noise file unavailable, falling back to default")
 
-    sound = ambient_noise_config.get("sound", "office")
-    if sound not in BUILT_IN_SOUNDS:
-        sound = "office"
+    sound = ambient_noise_config["sound"]
     return mixer_cls(
         sound_files={
             sound: APP_ROOT_DIR

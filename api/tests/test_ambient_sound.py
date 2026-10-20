@@ -27,11 +27,15 @@ from pydantic import ValidationError
 from api.constants import APP_ROOT_DIR
 from api.schemas.workflow_configurations import AmbientNoiseConfigurationDefaults
 from api.services.pipecat.ambient_sound import (
+    LIVELY_SECS,
+    normalize_ambient_config,
     PLAY_THINKING,
     PLAY_TOOL_CALLS,
     AmbientSoundGate,
     GatedSoundfileMixer,
+    _cached_lively_start_positions,
     attach_ambient_sound_gate,
+    lively_start_positions,
 )
 from api.services.pipecat.audio_mixer import build_audio_out_mixer
 
@@ -121,6 +125,11 @@ async def test_gated_mixer_at_full_gain_matches_the_whole_call_mixer():
         volume=0.3,
     )
     await plain.start(RATE)
+    # The gated mixer skips to a lively part of the file when it starts;
+    # compare the two from that same point on.
+    first = await gated.mix(CHUNK)
+    plain._sound_pos = gated._sound_pos - len(CHUNK) // 2
+    assert np.allclose(np.frombuffer(first, np.int16), np.frombuffer(await plain.mix(CHUNK), np.int16), atol=1)
     for _ in range(5):
         assert np.allclose(
             np.frombuffer(await gated.mix(CHUNK), np.int16),
@@ -406,6 +415,13 @@ def test_schema_defaults_keep_existing_agents_on_whole_call():
         AmbientNoiseConfigurationDefaults(play_mode="sometimes")
     with pytest.raises(ValidationError):
         AmbientNoiseConfigurationDefaults(start_delay_secs=9)
+    assert AmbientNoiseConfigurationDefaults(volume=1.5).volume == 1.5
+    assert AmbientNoiseConfigurationDefaults(volume=0.1).volume == 0.1
+    # Agents saved before the range existed must still save: brought into range.
+    for stored, saved in ((0, 0.1), (0.05, 0.1), (1.6, 1.5), (3, 1.5)):
+        assert AmbientNoiseConfigurationDefaults(volume=stored).volume == saved
+    with pytest.raises(ValidationError):
+        AmbientNoiseConfigurationDefaults(volume="loud")
 
 
 # ── A long call ───────────────────────────────────────────────────────
@@ -458,4 +474,219 @@ async def test_two_calls_at_once_do_not_affect_each_other():
     await _settle(0.02)
     assert await _level(call_a) > 0
     assert await _level(call_b) == 0
+
+
+# ── Every wait lands on a lively part of the sound ────────────────────
+
+
+def _db(level: float) -> float:
+    return 20 * np.log10(max(level, 1e-9) / 32768)
+
+
+async def _burst_levels(mixer, bursts=60, burst_secs=1.0):
+    """Play ``bursts`` short waits; return the loudness of each (after fade-in)."""
+    levels = []
+    for _ in range(bursts):
+        mixer.set_target(True)
+        chunks = [await mixer.mix(CHUNK) for _ in range(int(burst_secs / 0.02))]
+        levels.append(_rms(b"".join(chunks[8:])))  # skip the fade-in
+        mixer.set_target(False)
+        for _ in range(10):  # fade out
+            await mixer.mix(CHUNK)
+        for _ in range(int(np.random.default_rng(len(levels)).uniform(1, 40))):
+            await mixer.mix(CHUNK)  # silence between waits (position doesn't move)
+    return levels
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("sound", ["office", "typing"])
+async def test_no_wait_plays_a_silent_or_quiet_stretch(sound):
+    # Before the fix a short wait could land on a pause in the typing (heard
+    # nothing) or a dip in the office ambience (10 dB quieter than another call).
+    files = {"office": "office-ambience-8000-mono.wav", "typing": "typing-8000-mono.wav"}
+    mixer = GatedSoundfileMixer(
+        sound_files={sound: APP_ROOT_DIR / "assets" / files[sound]}, default_sound=sound, volume=1.0, fade_secs=0.15
+    )
+    await mixer.start(RATE)
+    levels = [_db(x) for x in await _burst_levels(mixer)]
+    assert min(levels) > -60, "a wait played (near) silence"
+    assert np.median(levels) - min(levels) < 8, f"waits vary too much: {min(levels):.1f}..{max(levels):.1f} dBFS"
+
+
+@pytest.mark.asyncio
+async def test_seeking_skips_a_long_pause_in_an_uploaded_file(tmp_path):
+    import soundfile as sf
+
+    rng = np.random.default_rng(1)
+    noise = (rng.standard_normal(RATE * 3) * 2000).astype(np.int16)
+    path = tmp_path / "pausey.wav"  # 4 s of silence, then 3 s of sound
+    sf.write(path, np.concatenate([np.zeros(RATE * 4, np.int16), noise]), RATE, subtype="PCM_16")
+    mixer = GatedSoundfileMixer(sound_files={"custom": path}, default_sound="custom", volume=1.0, fade_secs=0.02)
+    await mixer.start(RATE)
+    mixer.set_target(True)
+    first = [await mixer.mix(CHUNK) for _ in range(10)]
+    assert all(_rms(c) > 100 for c in first[1:]), "started inside the silent stretch"
+
+
+def test_lively_positions_handle_short_and_silent_files():
+    assert len(lively_start_positions(np.zeros(RATE * 5, np.int16), RATE)) == 0
+    assert len(lively_start_positions(np.ones(int(RATE * LIVELY_SECS / 2), np.int16), RATE)) == 0
+
+
+@pytest.mark.parametrize("rate", [8000, 16000])
+def test_typing_sound_never_pauses_long_and_does_not_clip(rate):
+    import soundfile as sf
+
+    audio, sr = sf.read(APP_ROOT_DIR / "assets" / f"typing-{rate}-mono.wav", dtype="int16")
+    silent = np.abs(audio) < 1
+    longest, run = 0, 0
+    for quiet in silent:
+        run = run + 1 if quiet else 0
+        longest = max(longest, run)
+    assert longest / sr < 0.5
+    assert np.abs(audio).max() < 16000  # headroom under the voice, no clipping
+    half = sr // 2
+    per_half_second = [_db(_rms(audio[i : i + half].tobytes())) for i in range(0, len(audio) - half + 1, half)]
+    assert max(per_half_second) - min(per_half_second) < 10  # steady, no dips
+
+
+# ── Deep checks on the lively-start fix ───────────────────────────────
+
+
+async def _sound_mixer(sound, rate=RATE, volume=1.0, fade_secs=0.15):
+    files = {"office": f"office-ambience-{rate}-mono.wav", "typing": f"typing-{rate}-mono.wav"}
+    mixer = GatedSoundfileMixer(
+        sound_files={sound: APP_ROOT_DIR / "assets" / files[sound]},
+        default_sound=sound,
+        volume=volume,
+        fade_secs=fade_secs,
+    )
+    await mixer.start(rate)
+    return mixer
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("sound", ["office", "typing"])
+@pytest.mark.parametrize("rate", [8000, 16000])
+async def test_random_waits_are_never_silent(sound, rate):
+    """300 waits of random length (0.3-5 s) with random gaps between them."""
+    mixer = await _sound_mixer(sound, rate)
+    chunk = b"\x00" * int(rate * 0.02) * 2
+    rng = np.random.default_rng(7)
+    for _ in range(300):
+        secs = float(rng.choice([rng.uniform(0.3, 0.8), rng.uniform(0.8, 2.0), rng.uniform(2.0, 5.0)]))
+        mixer.set_target(True)
+        wait = [await mixer.mix(chunk) for _ in range(int(secs / 0.02))]
+        assert _db(_rms(b"".join(wait))) > -58, f"a {secs:.2f}s wait was (near) silent"
+        mixer.set_target(False)
+        for _ in range(int(rng.integers(8, 60))):
+            await mixer.mix(chunk)
+
+
+@pytest.mark.asyncio
+async def test_seeking_wraps_around_the_end_of_the_file():
+    mixer = await _sound_mixer("typing")
+    starts = mixer._lively["typing"]
+    mixer._sound_pos = int(starts[-1]) + 1  # past the last lively start
+    mixer.set_target(True)
+    await mixer.mix(CHUNK)
+    assert mixer._sound_pos == int(starts[0]) + len(CHUNK) // 2
+
+
+@pytest.mark.asyncio
+async def test_no_jump_when_the_sound_comes_back_before_it_faded_out():
+    mixer = await _sound_mixer("office")
+    mixer.set_target(True)
+    for _ in range(20):
+        await mixer.mix(CHUNK)
+    mixer.set_target(False)
+    await mixer.mix(CHUNK)  # fading out, not yet silent
+    pos = mixer._sound_pos
+    mixer.set_target(True)  # back on mid-fade: carry on, don't seek
+    await mixer.mix(CHUNK)
+    assert mixer._sound_pos == pos + len(CHUNK) // 2
+
+
+@pytest.mark.asyncio
+async def test_the_jump_happens_in_silence_so_it_never_clicks():
+    mixer = await _sound_mixer("typing", fade_secs=0.15)
+    peak = np.abs(mixer._sounds["typing"]).max()
+    mixer.set_target(True)
+    first = np.abs(np.frombuffer(await mixer.mix(CHUNK), np.int16)).max()
+    assert first <= peak * (0.02 / 0.15) + 1  # first chunk is at the first fade step
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rate", [8000, 16000])
+async def test_volume_extremes_neither_clip_nor_vanish(rate):
+    loud = await _sound_mixer("typing", rate, volume=1.5, fade_secs=0.0)
+    loud.set_target(True)
+    chunk = b"\x00" * int(rate * 0.02) * 2
+    heard = np.concatenate([np.frombuffer(await loud.mix(chunk), np.int16) for _ in range(250)])
+    assert np.abs(heard).max() < 32767  # 1.5x the loudest keystroke still fits
+    quiet = await _sound_mixer("typing", rate, volume=0.1, fade_secs=0.0)
+    quiet.set_target(True)
+    heard = b"".join([await quiet.mix(chunk) for _ in range(250)])
+    assert _db(_rms(heard)) > -60  # quiet, but there
+
+
+@pytest.mark.asyncio
+async def test_lively_parts_are_found_once_per_file_and_never_mixed_up(tmp_path):
+    import soundfile as sf
+
+    a = await _sound_mixer("typing")
+    b = await _sound_mixer("typing")
+    assert a._lively["typing"] is b._lively["typing"]  # second call reuses the first's work
+    office = await _sound_mixer("office")
+    assert office._lively["office"] is not a._lively["typing"]
+    # Same audio under a different path (a new upload) gets its own entry.
+    path = tmp_path / "copy.wav"
+    sf.write(path, a._sounds["typing"], RATE, subtype="PCM_16")
+    copy = _cached_lively_start_positions(str(path), a._sounds["typing"], RATE)
+    assert copy is not a._lively["typing"] and np.array_equal(copy, a._lively["typing"])
+
+
+# ── Stored settings that were never validated ─────────────────────────
+
+
+@pytest.mark.parametrize(
+    "stored,expected",
+    [
+        (None, {"play_mode": "whole_call", "sound": "office", "volume": 0.3, "start_delay_secs": 0.5}),
+        ({"play_mode": None, "start_delay_secs": None, "volume": None, "sound": None},
+         {"play_mode": "whole_call", "sound": "office", "volume": 0.3, "start_delay_secs": 0.5}),
+        ({"play_mode": "sometimes", "sound": "jungle", "volume": "loud", "start_delay_secs": "soon"},
+         {"play_mode": "whole_call", "sound": "office", "volume": 0.3, "start_delay_secs": 0.5}),
+        ({"play_mode": "tool_calls", "sound": "typing", "volume": 9, "start_delay_secs": -2},
+         {"play_mode": "tool_calls", "sound": "typing", "volume": 1.5, "start_delay_secs": 0.0}),
+        ({"volume": float("nan"), "start_delay_secs": 99}, {"volume": 0.3, "start_delay_secs": 5.0}),
+    ],
+    ids=["missing", "nulls", "garbage", "out-of-range", "nan-and-huge"],
+)
+def test_stored_settings_are_made_safe_for_the_call(stored, expected):
+    clean = normalize_ambient_config(stored)
+    assert {k: clean[k] for k in expected} == expected
+
+
+@pytest.mark.asyncio
+async def test_a_call_with_broken_stored_settings_still_starts():
+    broken = {"enabled": True, "play_mode": "tool_calls", "start_delay_secs": None, "volume": None, "sound": None}
+    mixer = await build_audio_out_mixer(RATE, broken)  # used to raise on volume=None
+    assert isinstance(mixer, GatedSoundfileMixer)
+    added = []
+    task = SimpleNamespace(add_observer=added.append)
+    attach_ambient_sound_gate(task, SimpleNamespace(_params=SimpleNamespace(audio_out_mixer=mixer)), broken)
+    [gate] = added  # used to raise on float(None)
+    assert gate._start_delay == 0.5 and gate._mode == "tool_calls"
+
+
+@pytest.mark.asyncio
+async def test_audio_frames_are_ignored_without_bookkeeping():
+    from pipecat.frames.frames import InputAudioRawFrame, OutputAudioRawFrame
+
+    gate = AmbientSoundGate(await _mixer(), mode=PLAY_TOOL_CALLS)
+    for _ in range(500):
+        await _push(gate, InputAudioRawFrame(audio=CHUNK, sample_rate=RATE, num_channels=1))
+        await _push(gate, OutputAudioRawFrame(audio=CHUNK, sample_rate=RATE, num_channels=1))
+    assert len(gate._seen) == 0
 
