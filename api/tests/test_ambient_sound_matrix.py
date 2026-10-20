@@ -45,6 +45,9 @@ HEARD = 0.5  # RMS above which a window carries sound (the voice is exact silenc
 # Typing has natural gaps between keystrokes of up to ~0.3 s, so "sound"
 # is only judged over windows long enough to hold a keystroke.
 MIN_SOUND_WINDOW = 0.35
+# ...and over at least this much mixed audio: under load fewer chunks are
+# mixed per wall-clock second, and a short stretch can fall between keys.
+MIN_SOUND_CHUNKS = int(0.45 / 0.02)
 
 
 def _call():
@@ -101,7 +104,7 @@ def _expectations(mode: str, delay: float, sound: str) -> dict[str, tuple[str, f
     return silent | {"tool": ("sound", on)}  # tool_calls
 
 
-async def _run(mode, sound, rate, delay, custom_path):
+async def _run(mode, sound, rate, delay, custom_path, voice=False):
     cfg = {"enabled": True, "volume": 1.0, "play_mode": mode, "start_delay_secs": delay, "sound": sound}
     if sound == "custom":
         cfg |= {"sound": "office", "storage_key": "ambient/upload.wav", "storage_backend": "minio"}
@@ -117,23 +120,34 @@ async def _run(mode, sound, rate, delay, custom_path):
 
     loop = asyncio.get_running_loop()
     chunk = b"\x00" * int(rate * 0.02) * 2
-    heard: list[tuple[float, float]] = []
-    phases: list[tuple[str, float, float]] = []
-    for name, secs, _speaking, frames in _script():
+    t = np.arange(int(rate * 0.02)) / rate
+    voice_chunk = (4000 * np.sin(2 * np.pi * 220 * t)).astype(np.int16).tobytes()
+    heard: list[tuple[float, float]] = []  # (time, RMS of what the mixer added)
+    phases: list[tuple[str, float, float, bool]] = []
+    for name, secs, speaking, frames in _script():
         start = loop.time()
         for frame in frames:
             if gate:
                 await gate.on_push_frame(SimpleNamespace(frame=frame))
         end = start + secs
+        src = voice_chunk if (voice and speaking) else chunk
         while loop.time() < end:
-            out = np.frombuffer(await mixer.mix(chunk), np.int16).astype(np.float64)
-            heard.append((loop.time(), float(np.sqrt((out**2).mean()))))
+            out = np.frombuffer(await mixer.mix(src), np.int16).astype(np.float64)
+            added = out - np.frombuffer(src, np.int16)
+            heard.append((loop.time(), float(np.sqrt((added**2).mean()))))
             await asyncio.sleep(0.02)
-        phases.append((name, start, end))
+        phases.append((name, start, end, speaking))
 
     problems = []
-    for name, start, end in phases:
+    for name, start, end, speaking in phases:
         kind, offset = _expectations(mode, delay, sound)[name]
+        if voice and speaking and mode != "whole_call":
+            # Under an audible voice the sound must be gone from the first
+            # chunk on (that chunk holds only a 10 ms ramp), with no fade tail.
+            under = [lv for t, lv in heard if start <= t < end][1:]
+            if any(lv > 0 for lv in under):
+                problems.append(f"{name}: sound under the bot's voice ({max(under):.0f})")
+            continue
         if kind == "any":
             continue
         hi = end - 0.05
@@ -142,6 +156,8 @@ async def _run(mode, sound, rate, delay, custom_path):
             if hi - lo < MIN_SOUND_WINDOW:
                 continue  # too short to judge after the delay
             levels = [lv for t, lv in heard if lo <= t < hi]
+            if len(levels) < MIN_SOUND_CHUNKS:
+                continue
         else:
             levels = [lv for t, lv in heard if start <= t < hi][FADE_CHUNKS:]
         if len(levels) < 3:
@@ -151,7 +167,7 @@ async def _run(mode, sound, rate, delay, custom_path):
             problems.append(f"{name}: expected sound, heard nothing")
         if kind == "silent" and max(levels) > HEARD:
             problems.append(f"{name}: expected silence, heard {max(levels):.0f}")
-    return f"{mode}/{sound}/{rate}/delay={delay}", problems
+    return f"{mode}/{sound}/{rate}/delay={delay}/voice={voice}", problems
 
 
 @pytest.fixture(scope="module")
@@ -169,11 +185,12 @@ def uploads(tmp_path_factory):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("voice", [False, True], ids=["silent-voice", "audible-voice"])
 @pytest.mark.parametrize("sound", SOUNDS)
 @pytest.mark.parametrize("rate", RATES)
-async def test_every_mode_and_delay_plays_only_where_it_should(sound, rate, uploads):
+async def test_every_mode_and_delay_plays_only_where_it_should(sound, rate, voice, uploads):
     results = await asyncio.gather(
-        *[_run(mode, sound, rate, delay, uploads[rate]) for mode in MODES for delay in DELAYS]
+        *[_run(mode, sound, rate, delay, uploads[rate], voice) for mode in MODES for delay in DELAYS]
     )
     failures = [f"{combo}: {p}" for combo, problems in results for p in problems]
     assert not failures, "\n".join(failures)

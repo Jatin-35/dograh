@@ -36,7 +36,7 @@ from sqlalchemy import update
 
 from api.db.models import WorkflowDefinitionModel, WorkflowModel
 from api.enums import WorkflowRunMode, WorkflowRunState
-from api.services.pipecat.ambient_sound import AmbientSoundGate
+from api.services.pipecat.ambient_sound import AmbientSoundGate, GatedSoundfileMixer
 from api.services.pipecat.audio_config import create_audio_config
 from api.services.pipecat.audio_mixer import build_audio_out_mixer
 from api.services.pipecat.run_pipeline import _run_pipeline
@@ -55,6 +55,9 @@ BROWSER = WorkflowRunMode.SMALLWEBRTC.value
 # Converting the mock TTS's silent 16 kHz speech to an 8 kHz phone line leaves
 # +-1 rounding noise (about -90 dBFS, inaudible); count that as silence.
 SILENT = 2.0
+# Clearly audible: the soft office ambience at volume 0.5 sits around 70-110
+# RMS (and typing louder), against exact silence when nothing plays.
+AUDIBLE = 20.0
 
 DEFINITION = {
     "nodes": [
@@ -179,7 +182,9 @@ class Call:
             wf.writeframes(b"".join(a for _, a in self.written))
 
 
-async def _run_call(db_session, async_session, monkeypatch, *, ambient, llm, script, name, mode=BROWSER, configs=None):
+async def _run_call(
+    db_session, async_session, monkeypatch, *, ambient, llm, script, name, mode=BROWSER, configs=None, voice=False
+):
     """Run one call; ``script(say, vad_turn, timeline)`` drives the caller's side."""
     run, user, workflow = await create_workflow_run_rows(
         db_session,
@@ -206,7 +211,10 @@ async def _run_call(db_session, async_session, monkeypatch, *, ambient, llm, scr
 
     monkeypatch.setattr(MockOutputTransport, "write_audio_frame", recording_write)
 
-    tts = MockTTSService(mock_audio_data=b"\x00" * int(rate * 1.2) * 2, frame_delay=0)  # 1.2 s of silent speech
+    if voice:
+        tts = MockTTSService(mock_audio_duration_ms=1200, frame_delay=0)  # audible speech
+    else:
+        tts = MockTTSService(mock_audio_data=b"\x00" * int(rate * 1.2) * 2, frame_delay=0)  # 1.2 s of silent speech
     mixer = await build_audio_out_mixer(rate, ambient)
     transport = MockTransport(
         TransportParams(
@@ -329,7 +337,7 @@ async def test_tool_calls_mode_plays_only_while_the_tool_runs(db_session, async_
     assert call.loudest(*greeting) < SILENT
     assert call.loudest(greeting[1], tool_started) < SILENT  # caller talking, LLM deciding
     assert call.loudest(tool_started, tool_started + 0.25) < SILENT  # the start delay
-    assert call.loudest(tool_started + 0.6, tool_done - 0.1) > 200
+    assert call.loudest(tool_started + 0.6, tool_done - 0.1) > AUDIBLE
     assert call.share_with_sound(tool_started + 0.6, tool_done - 0.1) > 0.15
     assert call.loudest(answer[0] + 0.25, answer[1]) < SILENT  # after the 150 ms fade-out
     assert call.loudest(answer[1], tl.at("bot_stopped", 2)) < SILENT  # quick reply, no tool
@@ -363,7 +371,7 @@ async def test_caller_talking_during_a_tool_silences_the_sound(db_session, async
     tool_started = tl.at("tool_started")
     talk = tl.first_after("user_started", tool_started)
     talk_end = tl.first_after("user_stopped", talk)
-    assert call.loudest(tool_started + 0.4, talk) > 200  # playing before the caller cut in
+    assert call.loudest(tool_started + 0.4, talk) > AUDIBLE  # playing before the caller cut in
     assert call.loudest(talk + 0.2, talk_end) < SILENT  # silent while the caller talks
 
 
@@ -392,7 +400,7 @@ async def test_thinking_mode_fills_the_gap_before_a_slow_reply(db_session, async
     assert reply - turn_end > 0.8, "the reply should have been slow"
     assert call.loudest(tl.at("bot_started", 0), tl.at("bot_stopped", 0)) < SILENT  # greeting
     assert call.loudest(tl.at("bot_stopped", 0), turn_end) < SILENT  # caller's turn
-    assert call.loudest(turn_end + 0.5, reply - 0.05) > 100  # thinking: sound
+    assert call.loudest(turn_end + 0.5, reply - 0.05) > AUDIBLE  # thinking: sound
     assert call.loudest(reply + 0.25, tl.at("bot_stopped", 1)) < SILENT  # under the bot's voice
 
 
@@ -419,3 +427,53 @@ async def test_thinking_mode_ignores_a_noise_turn_the_bot_does_not_answer(db_ses
     next_turn = tl.first_after("user_started", noise_end)
     # At most a short blip right after the noise; never sound running on.
     assert call.loudest(noise_end + 2.5, next_turn) < SILENT
+
+# ── The bot's first word ──────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_the_bots_first_word_is_not_under_the_sound(db_session, async_session, monkeypatch):
+    # "While the agent is thinking": the sound plays right up to the moment
+    # the bot starts its answer (here after a tool call). With an audible voice, what the mixer adds to each chunk must be
+    # nothing from 10 ms into the bot's first word.
+    mixes: list[tuple[bytes, bytes]] = []
+    original_mix = GatedSoundfileMixer._mix_with_sound
+
+    def recording_mix(self, audio):
+        out = original_mix(self, audio)
+        mixes.append((audio, out))
+        return out
+
+    monkeypatch.setattr(GatedSoundfileMixer, "_mix_with_sound", recording_mix)
+    llm = MockLLMService(
+        mock_steps=[_tool_step(), MockLLMService.create_text_chunks("Rohit ji aapke area manager hain."), _end_step()],
+        chunk_delay=0.001,
+    )
+    _lookup_tool(llm)
+
+    async def script(say, vad_turn, tl):
+        await say("Area manager ka number chahiye")
+        assert await _wait_for(lambda: tl.count("tool_done") >= 1, timeout=10.0)
+        assert await _wait_for(lambda: tl.count("bot_stopped") >= 2, timeout=8.0)
+        await asyncio.sleep(0.3)
+        await say("Bas, call end kar dijiye")
+
+    await _run_call(
+        db_session, async_session, monkeypatch, ambient=_ambient("thinking", "typing", start_delay_secs=0.2),
+        llm=llm, script=script, name="first-word-thinking", voice=True,
+    )
+    is_voice = [int(np.abs(np.frombuffer(src, np.int16)).max()) > 300 for src, _ in mixes]
+    added = [
+        np.frombuffer(out, np.int16).astype(np.int32) - np.frombuffer(src, np.int16).astype(np.int32)
+        for src, out in mixes
+    ]
+    playing = [bool(np.any(a)) for a in added]
+    # The answer after the tool: the first voice chunk right after sound was playing.
+    first_answer = next(i for i in range(1, len(mixes)) if is_voice[i] and any(playing[max(0, i - 5) : i]))
+    assert sum(playing[first_answer - 25 : first_answer]) > 5, "sound wasn't playing before the answer"
+    samples_per_chunk = len(np.frombuffer(mixes[first_answer][0], np.int16))
+    cut = int(samples_per_chunk / 0.02 * 0.01)  # 10 ms
+    assert not np.any(added[first_answer][cut:]), "sound under the bot's first word"
+    for i in range(first_answer + 1, len(mixes)):
+        if is_voice[i]:
+            assert not np.any(added[i]), f"sound under the bot's voice at chunk {i}"

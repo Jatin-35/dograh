@@ -66,6 +66,16 @@ DEFAULT_VOLUME = 0.3
 MAX_VOLUME = 1.5
 BUILT_IN_SOUND_NAMES = ("office", "typing")
 FADE_SECS = 0.15
+# The bot's voice cuts the sound the moment it reaches the mixer, with a
+# ramp this short (to avoid a click), instead of waiting for the "bot started
+# speaking" frame to reach the gate (a chunk or two later) and fading out over
+# FADE_SECS, which left the sound over the bot's first word.
+VOICE_CUT_SECS = 0.01
+# After the voice, the sound stays off this long, so a short pause between
+# the bot's words doesn't let it creep back in before the gate catches up.
+VOICE_HOLD_SECS = 0.5
+# A chunk peaking above this is the bot's voice (TTS silence is digital zero).
+VOICE_PEAK = 300
 # A wait the bot never ends (an ignored turn, a lost frame) must not leave the
 # sound playing for the rest of the call.
 MAX_WAIT_SECS = 30.0
@@ -162,6 +172,7 @@ class GatedSoundfileMixer(SoundfileMixer):
         self._fade_secs = fade_secs
         self._target = 0.0
         self._gain = 0.0
+        self._voice_hold = 0.0  # seconds left in which the voice keeps the sound off
         self._lively: dict[str, np.ndarray] = {}
 
     async def start(self, sample_rate: int):
@@ -187,24 +198,50 @@ class GatedSoundfileMixer(SoundfileMixer):
 
     def _mix_with_sound(self, audio: bytes):
         audio_np = np.frombuffer(audio, dtype=np.int16)
-        chunk_secs = len(audio_np) / self._sample_rate if self._sample_rate else 0.02
+        chunk_size = len(audio_np)
+        chunk_secs = chunk_size / self._sample_rate if self._sample_rate else 0.02
+        if chunk_size and int(np.abs(audio_np).max()) > VOICE_PEAK:
+            return self._cut_for_voice(audio_np, chunk_secs)
+        if self._voice_hold > 0:
+            self._voice_hold = max(0.0, self._voice_hold - chunk_secs)
+            return audio
+
         step = chunk_secs / self._fade_secs if self._fade_secs > 0 else 1.0
         if self._gain <= 0.0 and self._target > 0.0:
             self._seek_lively()
         self._gain += max(-step, min(step, self._target - self._gain))
-        if self._gain <= 0.0 or not self._mixing or self._current_sound not in self._sounds:
+        sound_np = self._next_sound(chunk_size)
+        if self._gain <= 0.0 or sound_np is None:
             return audio
+        mixed = audio_np + sound_np.astype(np.float32) * (self._volume * self._gain)
+        return np.clip(mixed, -32768, 32767).astype(np.int16).tobytes()
 
+    def _next_sound(self, chunk_size: int) -> np.ndarray | None:
+        """The next ``chunk_size`` samples of the sound, or None if it can't play."""
+        if not self._mixing or self._current_sound not in self._sounds:
+            return None
         sound = self._sounds[self._current_sound]
-        chunk_size = len(audio_np)
         if self._sound_pos + chunk_size > len(sound):
             if not self._loop:
-                return audio
+                return None
             self._sound_pos = 0
         sound_np = sound[self._sound_pos : self._sound_pos + chunk_size]
         self._sound_pos += chunk_size
+        return sound_np
 
-        mixed = audio_np + sound_np.astype(np.float32) * (self._volume * self._gain)
+    def _cut_for_voice(self, audio_np: np.ndarray, chunk_secs: float) -> bytes:
+        """The bot is speaking in this chunk: drop the sound at once."""
+        self._voice_hold = VOICE_HOLD_SECS
+        if self._gain <= 0.0:
+            return audio_np.tobytes()
+        sound_np = self._next_sound(len(audio_np))
+        gain, self._gain = self._gain, 0.0
+        if sound_np is None:
+            return audio_np.tobytes()
+        ramp = max(1, min(len(audio_np), int(self._sample_rate * VOICE_CUT_SECS)))
+        envelope = np.zeros(len(audio_np), dtype=np.float32)
+        envelope[:ramp] = np.linspace(gain, 0.0, ramp, dtype=np.float32)
+        mixed = audio_np + sound_np.astype(np.float32) * (self._volume * envelope)
         return np.clip(mixed, -32768, 32767).astype(np.int16).tobytes()
 
 

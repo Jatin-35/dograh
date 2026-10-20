@@ -690,3 +690,199 @@ async def test_audio_frames_are_ignored_without_bookkeeping():
         await _push(gate, OutputAudioRawFrame(audio=CHUNK, sample_rate=RATE, num_channels=1))
     assert len(gate._seen) == 0
 
+
+# ── The bot's voice cuts the sound at once ────────────────────────────
+
+
+def _voice_chunk(rate=RATE, amplitude=4000):
+    t = np.arange(int(rate * 0.02)) / rate
+    return (amplitude * np.sin(2 * np.pi * 220 * t)).astype(np.int16).tobytes()
+
+
+def _added(out: bytes, src: bytes) -> np.ndarray:
+    """What the mixer added on top of the source audio."""
+    return np.frombuffer(out, np.int16).astype(np.int32) - np.frombuffer(src, np.int16).astype(np.int32)
+
+
+@pytest.mark.asyncio
+async def test_the_bots_first_word_cuts_the_sound_within_10_ms():
+    mixer = await _sound_mixer("office")
+    mixer.set_target(True)
+    for _ in range(20):  # sound fully up
+        await mixer.mix(CHUNK)
+    assert mixer.gain == 1.0
+    voice = _voice_chunk()
+    added = _added(await mixer.mix(voice), voice)
+    cut = int(RATE * 0.01)
+    assert np.any(added[:cut] != 0)  # the short ramp down
+    assert not np.any(added[cut:]), "sound still under the bot's first word"
+    for _ in range(10):  # the rest of the word
+        assert not np.any(_added(await mixer.mix(voice), voice))
+
+
+@pytest.mark.asyncio
+async def test_a_pause_between_the_bots_words_keeps_the_sound_off():
+    mixer = await _sound_mixer("typing")
+    mixer.set_target(True)  # the gate hasn't caught up yet
+    for _ in range(20):
+        await mixer.mix(CHUNK)
+    voice = _voice_chunk()
+    await mixer.mix(voice)
+    for _ in range(int(0.4 / 0.02)):  # a 0.4 s pause between words
+        assert await mixer.mix(CHUNK) == CHUNK
+    await mixer.mix(voice)  # the next word resets the hold
+    for _ in range(int(0.4 / 0.02)):
+        assert await mixer.mix(CHUNK) == CHUNK
+
+
+@pytest.mark.asyncio
+async def test_the_sound_returns_after_the_hold_if_the_wait_goes_on():
+    # e.g. "ek minute, check kar rahi hoon" while a tool keeps running
+    mixer = await _sound_mixer("office")
+    mixer.set_target(True)
+    await mixer.mix(_voice_chunk())
+    held = [await mixer.mix(CHUNK) for _ in range(int(0.5 / 0.02))]
+    assert all(c == CHUNK for c in held)
+    after = [await mixer.mix(CHUNK) for _ in range(20)]
+    assert any(c != CHUNK for c in after)
+    assert mixer.gain > 0.9  # faded back in, not jumped
+
+
+@pytest.mark.asyncio
+async def test_a_voice_during_the_fade_in_cuts_it_too():
+    mixer = await _sound_mixer("office")
+    mixer.set_target(True)
+    for _ in range(3):  # partway into the fade-in
+        await mixer.mix(CHUNK)
+    assert 0 < mixer.gain < 1
+    voice = _voice_chunk()
+    added = _added(await mixer.mix(voice), voice)
+    assert not np.any(added[int(RATE * 0.01):])
+    assert mixer.gain == 0.0
+
+
+@pytest.mark.asyncio
+async def test_quiet_rounding_noise_is_not_mistaken_for_the_voice():
+    mixer = await _sound_mixer("office")
+    mixer.set_target(True)
+    noise = (np.random.default_rng(1).integers(-2, 3, int(RATE * 0.02))).astype(np.int16).tobytes()
+    for _ in range(20):
+        await mixer.mix(noise)
+    assert mixer.gain == 1.0
+
+# ── Voice detection edge cases ────────────────────────────────────────
+
+
+def _tone(rate, secs, amplitude, freq=220.0):
+    t = np.arange(int(rate * secs)) / rate
+    return (amplitude * np.sin(2 * np.pi * freq * t)).astype(np.int16)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rate", [8000, 16000])
+@pytest.mark.parametrize("chunk_ms", [10, 20, 40, 33])
+async def test_voice_cut_and_hold_work_for_any_chunk_size(rate, chunk_ms):
+    """Transports send 10-40 ms chunks (33 ms checks an odd size)."""
+    mixer = await _sound_mixer("office", rate)
+    silence = b"\x00" * (int(rate * chunk_ms / 1000) * 2)
+    voice = _tone(rate, chunk_ms / 1000, 4000).tobytes()
+    mixer.set_target(True)
+    for _ in range(int(0.4 / (chunk_ms / 1000)) + 1):
+        await mixer.mix(silence)
+    assert mixer.gain == 1.0
+    out = await mixer.mix(voice)
+    added = _added(out, voice)
+    assert not np.any(added[int(rate * 0.01):])
+    # Held off for 0.5 s of silence whatever the chunk size, then back.
+    held = int(0.5 / (chunk_ms / 1000))
+    for _ in range(held - 1):
+        assert await mixer.mix(silence) == silence
+    back = [await mixer.mix(silence) for _ in range(int(0.4 / (chunk_ms / 1000)) + 2)]
+    assert any(chunk != silence for chunk in back)
+
+
+@pytest.mark.asyncio
+async def test_a_soft_voice_still_cuts_the_sound():
+    mixer = await _sound_mixer("office")
+    mixer.set_target(True)
+    for _ in range(20):
+        await mixer.mix(CHUNK)
+    soft = _tone(RATE, 0.02, 400).tobytes()  # about -38 dBFS peak, far below normal TTS
+    assert not np.any(_added(await mixer.mix(soft), soft)[int(RATE * 0.01):])
+
+
+@pytest.mark.asyncio
+async def test_a_voice_starting_late_in_a_chunk_still_cuts_it():
+    mixer = await _sound_mixer("office")
+    mixer.set_target(True)
+    for _ in range(20):
+        await mixer.mix(CHUNK)
+    late = np.zeros(int(RATE * 0.02), np.int16)
+    late[-40:] = 4000  # the word begins in the last 5 ms of the chunk
+    src = late.tobytes()
+    added = _added(await mixer.mix(src), src)
+    assert not np.any(added[int(RATE * 0.01):])  # cut before the word, not after
+
+
+@pytest.mark.asyncio
+async def test_faint_hiss_between_words_does_not_count_as_voice():
+    # Some TTS services send low-level noise instead of digital silence.
+    mixer = await _sound_mixer("office")
+    mixer.set_target(True)
+    hiss = (np.random.default_rng(2).normal(0, 60, int(RATE * 0.02))).clip(-250, 250).astype(np.int16).tobytes()
+    for _ in range(30):
+        out = await mixer.mix(hiss)
+    assert mixer.gain == 1.0 and np.any(_added(out, hiss))  # still plays over hiss
+
+
+@pytest.mark.asyncio
+async def test_hold_ends_exactly_after_half_a_second_of_silence():
+    mixer = await _sound_mixer("office", fade_secs=0.02)
+    mixer.set_target(True)
+    await mixer.mix(_voice_chunk())
+    for _ in range(int(0.5 / 0.02) - 1):  # 0.48 s: still held
+        assert await mixer.mix(CHUNK) == CHUNK
+    await mixer.mix(CHUNK)  # the 0.5 s mark
+    assert await mixer.mix(CHUNK) != CHUNK  # sound is back right after
+
+
+@pytest.mark.asyncio
+async def test_transfer_hold_music_or_a_recorded_greeting_also_keeps_the_sound_off():
+    # Anything the bot plays (TTS, a recorded greeting, transfer hold music)
+    # reaches the mixer as outgoing audio and must not have ambient under it.
+    mixer = await _sound_mixer("typing")
+    mixer.set_target(True)
+    music = _tone(RATE, 3.0, 3000, freq=440)
+    step = int(RATE * 0.02)
+    added = [
+        _added(await mixer.mix(music[i : i + step].tobytes()), music[i : i + step].tobytes())
+        for i in range(0, len(music) - step + 1, step)
+    ]
+    assert not any(np.any(a) for a in added[1:])
+
+
+@pytest.mark.asyncio
+async def test_whole_call_mode_still_plays_under_the_voice():
+    whole = await build_audio_out_mixer(RATE, {"enabled": True, "play_mode": "whole_call", "sound": "office", "volume": 1.0})
+    await whole.start(RATE)
+    assert type(whole) is not GatedSoundfileMixer
+    voice = _voice_chunk()
+    added = [_added(await whole.mix(voice), voice) for _ in range(50)]
+    assert any(np.any(a) for a in added)
+
+
+def test_voice_detection_costs_almost_nothing():
+    import time
+
+    async def run():
+        mixer = await _sound_mixer("office")
+        mixer.set_target(True)
+        voice, n = _voice_chunk(), 20000
+        start = time.perf_counter()
+        for i in range(n):
+            await mixer.mix(voice if i % 3 else CHUNK)
+        return (time.perf_counter() - start) / n
+
+    per_chunk = asyncio.run(run())
+    assert per_chunk < 0.0002, f"{per_chunk * 1e6:.0f} us per 20 ms chunk"  # < 1% of real time
+
