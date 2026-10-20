@@ -16,7 +16,7 @@ import {
     WorkflowConfigurations,
 } from "@/types/workflow-configurations";
 
-import { AmbientPlaybackFields } from "./AmbientPlaybackFields";
+import { AmbientNoiseFields } from "./AmbientNoiseFields";
 
 interface ConfigurationsDialogProps {
     open: boolean;
@@ -157,32 +157,10 @@ export const ConfigurationsDialog = ({
                             </div>
 
                             {ambientNoiseConfig.enabled && (
-                                <div className="space-y-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="ambient-volume" className="text-xs">
-                                        Volume
-                                    </Label>
-                                    <Input
-                                        id="ambient-volume"
-                                        type="number"
-                                        step="0.1"
-                                        min="0"
-                                        max="1"
-                                        value={ambientNoiseConfig.volume}
-                                        onChange={(e) => {
-                                            const value = parseFloat(e.target.value);
-                                            if (!isNaN(value)) {
-                                                setAmbientNoiseConfig(prev => ({ ...prev, volume: value }));
-                                            }
-                                        }}
-                                    />
-                                </div>
-                                <AmbientPlaybackFields
+                                <AmbientNoiseFields
                                     config={ambientNoiseConfig}
                                     onChange={(update) => setAmbientNoiseConfig(prev => ({ ...prev, ...update }))}
-                                    showSoundPicker={!ambientNoiseConfig.storage_key}
                                 />
-                                </div>
                             )}
                         </div>
                     </div>

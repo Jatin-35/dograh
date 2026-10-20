@@ -1,7 +1,7 @@
 "use client";
 
 import { format } from "date-fns";
-import { ArrowLeft, BookA, Brain, CalendarIcon, Clipboard, Download, ExternalLink, FileDown, Fingerprint, Loader2, Mic, Pause, PhoneOff, Play, Rocket, Settings, Trash2Icon, Upload, Variable, X } from "lucide-react";
+import { ArrowLeft, BookA, Brain, CalendarIcon, Clipboard, Download, ExternalLink, FileDown, Fingerprint, Loader2, Mic, PhoneOff, Rocket, Settings, Trash2Icon, Variable } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -39,7 +39,6 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { SETTINGS_DOCUMENTATION_URLS } from "@/constants/documentation";
 import { UnsavedChangesProvider, useUnsavedChanges, useUnsavedChangesContext } from "@/context/UnsavedChangesContext";
-import { useAudioPlayback } from "@/hooks/useAudioPlayback";
 import { detailFromError } from "@/lib/apiError";
 import { useAuth } from "@/lib/auth";
 import logger from "@/lib/logger";
@@ -58,7 +57,7 @@ import {
     type WorkflowConfigurations,
 } from "@/types/workflow-configurations";
 
-import { AmbientPlaybackFields } from "../components/AmbientPlaybackFields";
+import { AmbientNoiseFields } from "../components/AmbientNoiseFields";
 import { EmbedDialog } from "../components/EmbedDialog";
 import { useWorkflowState } from "../hooks/useWorkflowState";
 
@@ -303,8 +302,6 @@ function GeneralSection({
     const [isSaving, setIsSaving] = useState(false);
     const [isUploadingAudio, setIsUploadingAudio] = useState(false);
     const [audioUploadError, setAudioUploadError] = useState<string | null>(null);
-    const ambientFileInputRef = useRef<HTMLInputElement>(null);
-    const { playingId, toggle: togglePlayback } = useAudioPlayback();
     const selectedTurnStartStrategy = TURN_START_STRATEGY_OPTIONS.find(
         (option) => option.value === turnStartStrategy,
     );
@@ -379,15 +376,18 @@ function GeneralSection({
             setAudioUploadError(err instanceof Error ? err.message : "Upload failed");
         } finally {
             setIsUploadingAudio(false);
-            if (ambientFileInputRef.current) ambientFileInputRef.current.value = "";
         }
     };
 
     const handleRemoveCustomAudio = () => {
-        setAmbientNoiseConfig((prev) => ({
-            enabled: prev.enabled,
-            volume: prev.volume,
-        }));
+        // Drop only the uploaded file; keep when/how loud the sound plays.
+        setAmbientNoiseConfig((prev) => {
+            const next = { ...prev };
+            delete next.storage_key;
+            delete next.storage_backend;
+            delete next.original_filename;
+            return next;
+        });
     };
 
     const handleSave = async () => {
@@ -463,115 +463,16 @@ function GeneralSection({
                         />
                     </div>
                     {ambientNoiseConfig.enabled && (
-                        <div className="space-y-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="ambient-volume" className="text-xs">Volume</Label>
-                                <Input
-                                    id="ambient-volume"
-                                    type="number"
-                                    step="0.1"
-                                    min="0"
-                                    max="1"
-                                    value={ambientNoiseConfig.volume}
-                                    onChange={(e) => {
-                                        const value = parseFloat(e.target.value);
-                                        if (!isNaN(value)) setAmbientNoiseConfig((prev) => ({ ...prev, volume: value }));
-                                    }}
-                                />
-                            </div>
-
-                            <AmbientPlaybackFields
-                                config={ambientNoiseConfig}
-                                onChange={(update) => setAmbientNoiseConfig((prev) => ({ ...prev, ...update }))}
-                                showSoundPicker={!ambientNoiseConfig.storage_key}
-                            />
-
-                            {/* Custom Audio File */}
-                            <div className="space-y-2">
-                                <Label className="text-xs">Custom Audio File</Label>
-                                <p className="text-xs text-muted-foreground">
-                                    Upload your own audio file, or use the built-in sound selected above.
-                                </p>
-
-                                {ambientNoiseConfig.storage_key ? (
-                                    <div className="flex items-center gap-2 rounded-md border p-2 bg-muted/10">
-                                        <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono truncate flex-1">
-                                            {ambientNoiseConfig.original_filename || "Custom audio"}
-                                        </code>
-                                        <Button
-                                            type="button"
-                                            size="sm"
-                                            variant="ghost"
-                                            className="h-6 w-6 p-0 shrink-0"
-                                            onClick={async () => {
-                                                try {
-                                                    await togglePlayback(
-                                                        "ambient-noise",
-                                                        ambientNoiseConfig.storage_key!,
-                                                        ambientNoiseConfig.storage_backend,
-                                                    );
-                                                } catch {
-                                                    setAudioUploadError("Failed to play audio");
-                                                }
-                                            }}
-                                        >
-                                            {playingId === "ambient-noise" ? (
-                                                <Pause className="w-3.5 h-3.5" />
-                                            ) : (
-                                                <Play className="w-3.5 h-3.5" />
-                                            )}
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            size="sm"
-                                            variant="ghost"
-                                            className="h-6 w-6 p-0 shrink-0"
-                                            onClick={handleRemoveCustomAudio}
-                                        >
-                                            <X className="w-3.5 h-3.5" />
-                                        </Button>
-                                    </div>
-                                ) : (
-                                    <div>
-                                        <input
-                                            ref={ambientFileInputRef}
-                                            type="file"
-                                            accept="audio/*"
-                                            onChange={(e) => {
-                                                const file = e.target.files?.[0];
-                                                if (file) handleAmbientFileUpload(file);
-                                            }}
-                                            className="hidden"
-                                        />
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            className="text-sm font-normal"
-                                            onClick={() => ambientFileInputRef.current?.click()}
-                                            disabled={isUploadingAudio}
-                                        >
-                                            {isUploadingAudio ? (
-                                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                            ) : (
-                                                <Upload className="w-4 h-4 mr-2" />
-                                            )}
-                                            {isUploadingAudio ? "Uploading..." : "Upload audio file (max 10MB)"}
-                                        </Button>
-                                    </div>
-                                )}
-
-                                {audioUploadError && (
-                                    <p className="text-xs text-destructive">{audioUploadError}</p>
-                                )}
-
-                                {!ambientNoiseConfig.storage_key && (
-                                    <p className="text-xs text-muted-foreground italic">
-                                        Using the built-in {ambientNoiseConfig.sound === "typing" ? "keyboard typing" : "office ambience"} sound
-                                    </p>
-                                )}
-                            </div>
-                        </div>
+                        <AmbientNoiseFields
+                            config={ambientNoiseConfig}
+                            onChange={(update) => setAmbientNoiseConfig((prev) => ({ ...prev, ...update }))}
+                            upload={{
+                                isUploading: isUploadingAudio,
+                                error: audioUploadError,
+                                onUpload: handleAmbientFileUpload,
+                                onRemove: handleRemoveCustomAudio,
+                            }}
+                        />
                     )}
                 </div>
 

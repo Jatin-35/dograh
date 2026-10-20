@@ -24,6 +24,20 @@ export type AmbientNoiseConfiguration = Omit<
 export type AmbientPlayMode = NonNullable<AmbientNoiseConfigurationDefaults["play_mode"]>;
 export type AmbientSound = NonNullable<AmbientNoiseConfigurationDefaults["sound"]>;
 export const DEFAULT_AMBIENT_START_DELAY_SECS = 0.5;
+export const AMBIENT_VOLUME_MIN = 0.1;
+export const AMBIENT_VOLUME_MAX = 1.5;
+
+/** Keep a typed volume inside the range the backend accepts. */
+export function clampAmbientVolume(volume: number): number {
+    if (!Number.isFinite(volume)) return 0.3;
+    return Math.min(AMBIENT_VOLUME_MAX, Math.max(AMBIENT_VOLUME_MIN, volume));
+}
+
+/** Agents saved before the volume range existed can hold 0 or 3; bring them
+ * into range on load so saving the page sends a value the backend accepts. */
+function normalizeAmbientNoiseConfiguration(config: AmbientNoiseConfiguration): AmbientNoiseConfiguration {
+    return { ...config, volume: clampAmbientVolume(Number(config.volume)) };
+}
 
 export const AMBIENT_PLAY_MODE_OPTIONS: Array<{
     value: AmbientPlayMode;
@@ -207,11 +221,11 @@ export function resolveWorkflowConfigurations(
         ...FALLBACK_WORKFLOW_CONFIGURATIONS,
         ...defaults,
         ...configurations,
-        ambient_noise_configuration: {
+        ambient_noise_configuration: normalizeAmbientNoiseConfiguration({
             ...FALLBACK_WORKFLOW_CONFIGURATIONS.ambient_noise_configuration,
             ...defaults?.ambient_noise_configuration,
             ...configurations?.ambient_noise_configuration,
-        },
+        }),
         max_call_duration:
             configurations?.max_call_duration
             ?? defaults?.max_call_duration
