@@ -2,7 +2,14 @@ import random
 from enum import Enum, auto
 from typing import Annotated, Dict, Literal, Type, TypeVar, Union
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 
 from api.services.configuration.options import (
     AZURE_EMBEDDING_MODELS,
@@ -50,9 +57,15 @@ from api.services.configuration.options import (
     SMALLEST_TTS_MODELS,
     SMALLEST_TTS_PRO_VOICES,
     SMALLEST_TTS_VOICES,
+    SONIOX_DEFAULT_LANGUAGES,
+    SONIOX_STT_LANGUAGES,
+    SONIOX_STT_MODELS,
     SPEECHMATICS_STT_LANGUAGES,
 )
 from api.services.configuration.options.google import GOOGLE_VERTEX_MODELS
+
+# Soniox caps a session's whole context at about 10,000 characters.
+SONIOX_CONTEXT_MAX_CHARS = 8000
 
 
 class ServiceType(Enum):
@@ -102,6 +115,7 @@ class ServiceProviders(str, Enum):
     MURF = "murf"
     ANTHROPIC = "anthropic"
     INCEPTION = "inception"
+    SONIOX = "soniox"
 
 
 class BaseServiceConfiguration(BaseModel):
@@ -140,6 +154,7 @@ class BaseServiceConfiguration(BaseModel):
         ServiceProviders.SMALLEST,
         ServiceProviders.XAI,
         ServiceProviders.MURF,
+        ServiceProviders.SONIOX,
     ]
     api_key: str | list[str]
 
@@ -317,6 +332,14 @@ VAKYAM_PROVIDER_MODEL_CONFIG = provider_model_config(
 )
 GOOGLE_CLOUD_PROVIDER_MODEL_CONFIG = provider_model_config("Google Cloud")
 SPEECHMATICS_PROVIDER_MODEL_CONFIG = provider_model_config("Speechmatics")
+SONIOX_PROVIDER_MODEL_CONFIG = provider_model_config(
+    "Soniox",
+    description=(
+        "Real-time transcription in 60+ languages, including Hindi and other "
+        "Indian languages, with Hindi-English switching mid-sentence."
+    ),
+    provider_docs_url="https://soniox.com/docs/stt/models",
+)
 ASSEMBLYAI_PROVIDER_MODEL_CONFIG = provider_model_config("AssemblyAI")
 GLADIA_PROVIDER_MODEL_CONFIG = provider_model_config("Gladia")
 SPEACHES_PROVIDER_MODEL_CONFIG = provider_model_config(
@@ -1913,6 +1936,121 @@ class SarvamSTTConfiguration(BaseSTTConfiguration):
 
 
 @register_stt
+class SonioxSTTConfiguration(BaseSTTConfiguration):
+    model_config = SONIOX_PROVIDER_MODEL_CONFIG
+    provider: Literal[ServiceProviders.SONIOX] = ServiceProviders.SONIOX
+    model: str = Field(
+        default="stt-rt-v5",
+        description="Soniox real-time model. stt-rt-v5 is the latest.",
+        json_schema_extra={"examples": SONIOX_STT_MODELS, "allow_custom_input": True},
+    )
+    languages: list[str] = Field(
+        default_factory=lambda: list(SONIOX_DEFAULT_LANGUAGES),
+        description=(
+            "Languages callers speak. Pick Hindi and English for Hinglish. "
+            "Leave empty to detect any language."
+        ),
+        json_schema_extra={
+            "examples": SONIOX_STT_LANGUAGES,
+            "multi_select": True,
+            "label": "Languages",
+            # default_factory leaves the default out of the schema; the form needs it.
+            "default": list(SONIOX_DEFAULT_LANGUAGES),
+        },
+    )
+    strict_languages: bool = Field(
+        default=False,
+        description=(
+            "Only transcribe the languages above. Works best with a single "
+            "language; for Hinglish callers leave it off, as Soniox may write "
+            "English spoken with a Hindi accent in the wrong script."
+        ),
+        json_schema_extra={"label": "Strict languages"},
+    )
+    domain_context: str | None = Field(
+        default=None,
+        max_length=SONIOX_CONTEXT_MAX_CHARS,
+        description=(
+            "A short description of the calls, e.g. 'Think Gas PNG customer "
+            "support: complaints, meter readings, BP numbers'. The agent's "
+            "dictionary words are sent too."
+        ),
+        json_schema_extra={"multiline": True, "label": "Domain context"},
+    )
+    use_soniox_turn_detection: bool = Field(
+        default=False,
+        description=(
+            "Let Soniox decide when the caller has finished speaking, from what "
+            "they said. Off uses the agent's own turn detection."
+        ),
+        json_schema_extra={"advanced": True, "label": "Use Soniox turn detection"},
+    )
+    max_endpoint_delay_ms: int | None = Field(
+        default=None,
+        ge=500,
+        le=3000,
+        description="Longest wait (ms) before Soniox ends the turn. Empty uses Soniox's default.",
+        json_schema_extra={
+            "advanced": True,
+            "label": "Max wait (ms)",
+            "visible_when": {"use_soniox_turn_detection": True},
+        },
+    )
+    endpoint_sensitivity: float | None = Field(
+        default=None,
+        ge=-1.0,
+        le=1.0,
+        description="-1 to 1; higher ends turns sooner. Empty uses Soniox's default.",
+        json_schema_extra={
+            "advanced": True,
+            "label": "Sensitivity",
+            "visible_when": {"use_soniox_turn_detection": True},
+        },
+    )
+    endpoint_speed_level: int | None = Field(
+        default=None,
+        ge=0,
+        le=3,
+        description="0-3; higher answers sooner. Empty uses Soniox's default.",
+        json_schema_extra={
+            "advanced": True,
+            "label": "Speed level",
+            "visible_when": {"use_soniox_turn_detection": True},
+        },
+    )
+
+    @field_validator("languages", mode="before")
+    @classmethod
+    def _normalise_languages(cls, value):
+        if value is None:
+            return []
+        if isinstance(value, str):  # tolerate "hi, en" from API or SDK writers
+            value = value.split(",")
+        seen: list[str] = []
+        for item in value:
+            code = str(item).strip().lower()
+            if not code or code in seen:
+                continue
+            if code not in SONIOX_STT_LANGUAGES:
+                raise ValueError(f"Soniox does not support the language '{code}'")
+            seen.append(code)
+        return seen
+
+    @field_validator("domain_context", mode="before")
+    @classmethod
+    def _blank_context_is_none(cls, value):
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value.strip() if isinstance(value, str) else value
+
+    @model_validator(mode="after")
+    def _strict_needs_languages(self):
+        if self.strict_languages and not self.languages:
+            raise ValueError("Pick at least one language to use strict languages.")
+        return self
+
+
+@register_stt
 class SpeechmaticsSTTConfiguration(BaseSTTConfiguration):
     model_config = SPEECHMATICS_PROVIDER_MODEL_CONFIG
     provider: Literal[ServiceProviders.SPEECHMATICS] = ServiceProviders.SPEECHMATICS
@@ -2156,6 +2294,7 @@ STTConfig = Annotated[
         DograhSTTService,
         SpeechmaticsSTTConfiguration,
         SarvamSTTConfiguration,
+        SonioxSTTConfiguration,
         SpeachesSTTConfiguration,
         HuggingFaceSTTConfiguration,
         AssemblyAISTTConfiguration,

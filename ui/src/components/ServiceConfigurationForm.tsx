@@ -1,13 +1,15 @@
 "use client";
 
-import { ExternalLink, Plus, X } from "lucide-react";
+import { ChevronDown, ExternalLink, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { getDefaultConfigurationsApiV1UserConfigurationsDefaultsGet } from '@/client/sdk.gen';
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -22,9 +24,11 @@ import type { ModelOverrides } from "@/types/workflow-configurations";
 
 export type ServiceSegment = "llm" | "tts" | "stt" | "embeddings" | "realtime";
 
+type FieldValue = string | number | boolean | string[] | null;
+
 interface SchemaProperty {
     type?: string;
-    default?: string | number | boolean;
+    default?: FieldValue;
     enum?: string[];
     examples?: string[];
     model_options?: Record<string, string[]>;
@@ -35,6 +39,32 @@ interface SchemaProperty {
     multiline?: boolean;
     docs_url?: string;
     docs_label?: string;
+    /** Optional fields (`int | None`) carry their type here instead of `type`. */
+    anyOf?: SchemaProperty[];
+    items?: SchemaProperty;
+    /** A list field picked from `examples`, shown as removable chips. */
+    multi_select?: boolean;
+    /** Shown in the collapsed "Advanced" section. */
+    advanced?: boolean;
+    /** Shown only while each named field holds the given value. */
+    visible_when?: Record<string, FieldValue>;
+    /** Display label; defaults to the field name. */
+    label?: string;
+}
+
+/** The field's type, looking through `anyOf` for optional fields. */
+function effectiveType(schema: SchemaProperty | undefined): string | undefined {
+    if (!schema) return undefined;
+    if (schema.type) return schema.type;
+    return schema.anyOf?.find(option => option.type && option.type !== "null")?.type;
+}
+
+function isNumericType(type: string | undefined): boolean {
+    return type === "number" || type === "integer";
+}
+
+function fieldLabel(field: string, schema: SchemaProperty | undefined): string {
+    return schema?.label || field.replace(/_/g, " ");
 }
 
 export interface ProviderSchema {
@@ -48,7 +78,7 @@ export interface ProviderSchema {
 }
 
 interface FormValues {
-    [key: string]: string | number | boolean;
+    [key: string]: FieldValue;
 }
 
 export interface ServiceConfigurationDefaults {
@@ -256,7 +286,7 @@ export function ServiceConfigurationForm({
                 setIsRealtime(true);
             }
 
-            const defaultValues: Record<string, string | number | boolean> = {};
+            const defaultValues: Record<string, FieldValue> = {};
             const selectedProviders: Record<ServiceSegment, string> = {
                 llm: pickDefaultProvider("llm", defaultsData.llm),
                 tts: pickDefaultProvider("tts", defaultsData.tts),
@@ -311,7 +341,7 @@ export function ServiceConfigurationForm({
                                 }
                             }
                         } else if (field !== "provider") {
-                            defaultValues[`${service}_${field}`] = value as string | number | boolean;
+                            defaultValues[`${service}_${field}`] = value as FieldValue;
                         }
                     });
                     selectedProviders[service] = src.provider as string;
@@ -422,7 +452,7 @@ export function ServiceConfigurationForm({
         if (!providerName) return;
 
         const currentValues = getValues();
-        const preservedValues: Record<string, string | number | boolean> = {};
+        const preservedValues: Record<string, FieldValue> = {};
 
         Object.keys(currentValues).forEach(key => {
             if (!key.startsWith(`${service}_`)) {
@@ -454,7 +484,7 @@ export function ServiceConfigurationForm({
     };
 
     const buildServiceConfig = (service: ServiceSegment, data: FormValues) => {
-        const config: Record<string, string | number | string[]> = {
+        const config: Record<string, FieldValue> = {
             provider: serviceProviders[service],
         };
         const keys = apiKeys[service].map(k => k.trim()).filter(k => k.length > 0);
@@ -465,7 +495,8 @@ export function ServiceConfigurationForm({
             if (!property.startsWith(`${service}_`)) return;
             const field = property.slice(service.length + 1);
             if (field === "api_key" || field === "provider") return;
-            config[field] = value as string | number;
+            // An emptied number input reads as NaN; send it as "not set".
+            config[field] = typeof value === "number" && Number.isNaN(value) ? null : value;
         });
         return config;
     };
@@ -530,11 +561,43 @@ export function ServiceConfigurationForm({
         );
     };
 
+    const resolveFieldSchema = (providerSchema: ProviderSchema, field: string): SchemaProperty | undefined => {
+        const schema = providerSchema.properties[field];
+        return schema?.$ref && providerSchema.$defs
+            ? providerSchema.$defs[schema.$ref.split('/').pop() || '']
+            : schema;
+    };
+
+    const isFieldVisible = (service: ServiceSegment, schema: SchemaProperty | undefined) => {
+        if (!schema?.visible_when) return true;
+        return Object.entries(schema.visible_when).every(
+            ([other, expected]) => (watch(`${service}_${other}`) ?? false) === expected,
+        );
+    };
+
+    const renderFieldBlock = (service: ServiceSegment, field: string, providerSchema: ProviderSchema) => {
+        const schema = resolveFieldSchema(providerSchema, field);
+        const fullWidth = schema?.multiline || schema?.multi_select;
+        return (
+            <div key={field} className={`space-y-2 ${fullWidth ? "col-span-2" : ""}`}>
+                <Label className={schema?.label ? "" : "capitalize"} htmlFor={`${service}_${field}`}>
+                    {fieldLabel(field, schema)}
+                </Label>
+                {renderField(service, field, providerSchema)}
+            </div>
+        );
+    };
+
     const renderServiceFields = (service: ServiceSegment) => {
         const currentProvider = serviceProviders[service];
         const providerSchema = schemas?.[service]?.[currentProvider];
         const availableProviders = schemas?.[service] ? Object.keys(schemas[service]) : [];
         const configFields = getConfigFields(service);
+        const shownFields = providerSchema
+            ? configFields.slice(1).filter(field => isFieldVisible(service, resolveFieldSchema(providerSchema, field)))
+            : [];
+        const mainFields = shownFields.filter(field => !resolveFieldSchema(providerSchema!, field)?.advanced);
+        const advancedFields = shownFields.filter(field => resolveFieldSchema(providerSchema!, field)?.advanced);
 
         return (
             <div className="space-y-6">
@@ -577,28 +640,32 @@ export function ServiceConfigurationForm({
 
                     {currentProvider && providerSchema && configFields[0] && (
                         <div className="space-y-2">
-                            <Label className="capitalize">{configFields[0].replace(/_/g, ' ')}</Label>
+                            <Label className="capitalize">
+                                {fieldLabel(configFields[0], resolveFieldSchema(providerSchema, configFields[0]))}
+                            </Label>
                             {renderField(service, configFields[0], providerSchema)}
                         </div>
                     )}
                 </div>
 
-                {currentProvider && providerSchema && configFields.length > 1 && (
+                {currentProvider && providerSchema && mainFields.length > 0 && (
                     <div className="grid grid-cols-2 gap-4">
-                        {configFields.slice(1).map((field) => {
-                            const fieldSchema = providerSchema.properties[field];
-                            const actualFieldSchema = fieldSchema?.$ref && providerSchema.$defs
-                                ? providerSchema.$defs[fieldSchema.$ref.split('/').pop() || '']
-                                : fieldSchema;
-                            const fullWidth = actualFieldSchema?.multiline;
-                            return (
-                                <div key={field} className={`space-y-2 ${fullWidth ? "col-span-2" : ""}`}>
-                                    <Label className="capitalize">{field.replace(/_/g, ' ')}</Label>
-                                    {renderField(service, field, providerSchema)}
-                                </div>
-                            );
-                        })}
+                        {mainFields.map((field) => renderFieldBlock(service, field, providerSchema))}
                     </div>
+                )}
+
+                {currentProvider && providerSchema && advancedFields.length > 0 && (
+                    <Collapsible className="rounded-md border">
+                        <CollapsibleTrigger className="group flex w-full items-center justify-between px-3 py-2 text-sm font-medium">
+                            Advanced
+                            <ChevronDown className="h-4 w-4 transition-transform group-data-[state=open]:rotate-180" />
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="border-t p-3">
+                            <div className="grid grid-cols-2 gap-4">
+                                {advancedFields.map((field) => renderFieldBlock(service, field, providerSchema))}
+                            </div>
+                        </CollapsibleContent>
+                    </Collapsible>
                 )}
 
                 {currentProvider && providerSchema && providerSchema.properties.api_key && (
@@ -698,6 +765,88 @@ export function ServiceConfigurationForm({
             actualSchema,
             watch(`${service}_model`) as string | undefined,
         );
+        const fieldKey = `${service}_${field}`;
+        const type = effectiveType(actualSchema);
+
+        if (type === "boolean") {
+            return (
+                <div className="flex h-9 items-center">
+                    <Switch
+                        id={fieldKey}
+                        checked={!!watch(fieldKey)}
+                        onCheckedChange={(checked) => setValue(fieldKey, checked, { shouldDirty: true })}
+                    />
+                </div>
+            );
+        }
+
+        if (type === "array" && actualSchema?.multi_select) {
+            const selected = (watch(fieldKey) as string[] | null | undefined) ?? [];
+            const options = (dropdownOptions ?? []).filter(option => !selected.includes(option));
+            const displayName = (value: string) => LANGUAGE_DISPLAY_NAMES[value] || value;
+            const update = (next: string[]) => setValue(fieldKey, next, { shouldDirty: true });
+            return (
+                <div className="space-y-2">
+                    <div className="flex min-h-9 flex-wrap items-center gap-1.5 rounded-md border px-2 py-1.5">
+                        {selected.length === 0 && (
+                            <span className="text-sm text-muted-foreground">None selected</span>
+                        )}
+                        {selected.map(value => (
+                            <Badge key={value} variant="secondary" className="gap-1">
+                                {displayName(value)}
+                                <button
+                                    type="button"
+                                    aria-label={`Remove ${displayName(value)}`}
+                                    className="rounded-sm opacity-70 hover:opacity-100"
+                                    onClick={() => update(selected.filter(item => item !== value))}
+                                >
+                                    <X className="h-3 w-3" />
+                                </button>
+                            </Badge>
+                        ))}
+                    </div>
+                    {options.length > 0 && (
+                        <Select
+                            value=""
+                            onValueChange={(value) => {
+                                if (value) update([...selected, value]);
+                            }}
+                        >
+                            <SelectTrigger className="w-full" aria-label={`Add ${fieldLabel(field, actualSchema)}`}>
+                                <SelectValue placeholder="Add..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {options.map(value => (
+                                    <SelectItem key={value} value={value}>
+                                        {displayName(value)}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    )}
+                </div>
+            );
+        }
+
+        if (!actualSchema?.type && isNumericType(type) && !dropdownOptions?.length) {
+            // An optional number: empty means "not set" rather than 0 or NaN.
+            const bounds = actualSchema?.anyOf?.find(option => isNumericType(option.type)) as
+                (SchemaProperty & { minimum?: number; maximum?: number }) | undefined;
+            return (
+                <Input
+                    id={fieldKey}
+                    type="number"
+                    step={type === "integer" ? 1 : "any"}
+                    min={bounds?.minimum}
+                    max={bounds?.maximum}
+                    placeholder="Default"
+                    {...register(fieldKey, {
+                        setValueAs: (value) =>
+                            value === "" || value === null || value === undefined ? null : Number(value),
+                    })}
+                />
+            );
+        }
 
         if (service === "tts" && field === "voice" && !actualSchema?.allow_custom_input) {
             if (!dropdownOptions) {
@@ -715,7 +864,6 @@ export function ServiceConfigurationForm({
         }
 
         if (actualSchema?.allow_custom_input && dropdownOptions && dropdownOptions.length > 0) {
-            const fieldKey = `${service}_${field}`;
             const currentValue = watch(fieldKey) as string || "";
             const options = dropdownOptions;
 
@@ -723,6 +871,7 @@ export function ServiceConfigurationForm({
                 return (
                     <div className="space-y-2">
                         <Input
+                            id={fieldKey}
                             type="text"
                             placeholder={`Enter ${field}`}
                             value={currentValue}
@@ -758,7 +907,7 @@ export function ServiceConfigurationForm({
                             setValue(fieldKey, value, { shouldDirty: true });
                         }}
                     >
-                        <SelectTrigger className="w-full">
+                        <SelectTrigger id={fieldKey} className="w-full">
                             <SelectValue placeholder={`Select ${field}`} />
                         </SelectTrigger>
                         <SelectContent>
@@ -804,7 +953,7 @@ export function ServiceConfigurationForm({
                         setValue(`${service}_${field}`, value, { shouldDirty: true });
                     }}
                 >
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger id={fieldKey} className="w-full">
                         <SelectValue placeholder={`Select ${field}`} />
                     </SelectTrigger>
                     <SelectContent>
@@ -821,6 +970,7 @@ export function ServiceConfigurationForm({
         if (actualSchema?.multiline) {
             return (
                 <Textarea
+                    id={fieldKey}
                     rows={6}
                     className="font-mono text-xs"
                     placeholder={`Enter ${field}`}
@@ -833,6 +983,7 @@ export function ServiceConfigurationForm({
 
         return (
             <Input
+                id={fieldKey}
                 type={actualSchema?.type === "number" ? "number" : "text"}
                 {...(actualSchema?.type === "number" && { step: "any" })}
                 placeholder={`Enter ${field}`}

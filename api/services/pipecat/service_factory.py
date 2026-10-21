@@ -33,9 +33,14 @@ from api.services.pipecat.minimax_tts import MiniMaxOwnedSessionTTSService
 from api.services.pipecat.anthropic_llm import DograhAnthropicLLMService
 from api.services.pipecat.deepgram_stt import DograhDeepgramSTTService
 from api.services.pipecat.murf_tts import MurfTTSService
+from api.services.pipecat.soniox_stt import (
+    DograhSonioxSTTService,
+    build_soniox_context,
+)
 from api.utils.url_security import validate_user_configured_service_url
 from pipecat.services.assemblyai.stt import AssemblyAISTTService, AssemblyAISTTSettings
 from pipecat.services.inception.llm import InceptionLLMService
+from pipecat.services.soniox.stt import SonioxSTTSettings
 from pipecat.services.aws.llm import AWSBedrockLLMService, AWSBedrockLLMSettings
 from pipecat.services.azure.llm import AzureLLMService, AzureLLMSettings
 from pipecat.services.azure.stt import AzureSTTService, AzureSTTSettings
@@ -210,6 +215,8 @@ def stt_uses_external_turns(user_config) -> bool:
         return dograh_stt_uses_flux_language(getattr(user_config.stt, "language", None))
     if user_config.stt.provider == ServiceProviders.CARTESIA.value:
         return user_config.stt.model == "ink-2"
+    if user_config.stt.provider == ServiceProviders.SONIOX.value:
+        return bool(getattr(user_config.stt, "use_soniox_turn_detection", False))
     return False
 
 
@@ -231,11 +238,56 @@ def _validate_runtime_service_url(url: str, field_name: str) -> None:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
+def create_soniox_stt_service(
+    stt_config,
+    *,
+    sample_rate: int,
+    keyterms: list[str] | None = None,
+    call_reference: str | None = None,
+):
+    """Soniox real-time STT from an agent's Soniox settings.
+
+    The agent's dictionary words become Soniox terms and its description the
+    domain context. With Soniox turn detection off (the default) the local VAD
+    ends the turn and asks Soniox to finalize, as for the other STTs; on, Soniox
+    decides from what was said and stt_uses_external_turns hands it the turns.
+    """
+    use_soniox_turns = bool(getattr(stt_config, "use_soniox_turn_detection", False))
+    languages = list(getattr(stt_config, "languages", None) or [])
+    settings_kwargs = {
+        "model": stt_config.model,
+        "language_hints": [Language(code) for code in languages] or None,
+        "language_hints_strict": bool(getattr(stt_config, "strict_languages", False))
+        and bool(languages),
+        "context": build_soniox_context(
+            keyterms, getattr(stt_config, "domain_context", None)
+        ),
+        "client_reference_id": call_reference,
+    }
+    if use_soniox_turns:
+        settings_kwargs.update(
+            max_endpoint_delay_ms=getattr(stt_config, "max_endpoint_delay_ms", None),
+            endpoint_sensitivity=getattr(stt_config, "endpoint_sensitivity", None),
+            endpoint_latency_adjustment_level=getattr(
+                stt_config, "endpoint_speed_level", None
+            ),
+        )
+    return DograhSonioxSTTService(
+        api_key=stt_config.api_key,
+        settings=SonioxSTTSettings(**settings_kwargs),
+        vad_force_turn_endpoint=not use_soniox_turns,
+        # Interruption follows the agent's turn strategies, as for the others.
+        should_interrupt=False,
+        sample_rate=sample_rate,
+    )
+
+
 def create_stt_service(
     user_config,
     audio_config: "AudioConfig",
     keyterms: list[str] | None = None,
     correlation_id: str | None = None,
+    call_reference: str | None = None,
 ):
     """Create and return appropriate STT service based on user configuration
 
@@ -365,6 +417,13 @@ def create_stt_service(
             ),
             keyterms=keyterms,
             sample_rate=audio_config.transport_in_sample_rate,
+        )
+    elif user_config.stt.provider == ServiceProviders.SONIOX.value:
+        return create_soniox_stt_service(
+            user_config.stt,
+            sample_rate=audio_config.transport_in_sample_rate,
+            keyterms=keyterms,
+            call_reference=call_reference,
         )
     elif user_config.stt.provider == ServiceProviders.SARVAM.value:
         language = getattr(user_config.stt, "language", None)

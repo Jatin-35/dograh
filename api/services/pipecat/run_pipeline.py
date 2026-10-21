@@ -721,6 +721,7 @@ async def _run_pipeline_impl(
             audio_config,
             keyterms=keyterms,
             correlation_id=mps_correlation_id,
+            call_reference=f"run-{workflow_run_id}",
         )
         tts = create_tts_service(
             user_config,

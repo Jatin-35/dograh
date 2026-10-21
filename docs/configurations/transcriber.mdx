@@ -3,7 +3,7 @@ title: "Transcriber"
 description: "Voice Agents use STT (Speech to Text), to transcribe what the user speaks. This transcribed speech as text goes into an LLM to generate the response that gets played out to the user."
 ---
 
-BotrixAI platform supports Deepgram, OpenAI, Google, Azure Speech, AssemblyAI, Speechmatics, Cartesia, Gladia, Sarvam, Smallest AI, Hugging Face, ElevenLabs, and BotrixAI transcribers. You can take a look at the providers documentation of which language to select for your language requirements. 
+BotrixAI platform supports Deepgram, OpenAI, Google, Azure Speech, AssemblyAI, Speechmatics, Cartesia, Gladia, Soniox, Sarvam, Smallest AI, Hugging Face, ElevenLabs, and BotrixAI transcribers. You can take a look at the providers documentation of which language to select for your language requirements. 
 
 <Warning>
 Transcriber providers receive the data needed to transcribe speech, such as call audio, language settings, keyterms, and request metadata. Review the provider's data processing, retention, model training, and regional hosting policies before using sensitive data.
@@ -12,3 +12,20 @@ Transcriber providers receive the data needed to transcribe speech, such as call
 BotrixAI also supports Speaches, an OpenAI API-compatible server for streaming transcription.
 
 Example: Deepgram has their language support documentation at https://developers.deepgram.com/docs/models-languages-overview#nova-3
+
+## Soniox
+
+Soniox transcribes 60+ languages, including Hindi, Marathi, Gujarati, Bengali, Punjabi, Tamil, Telugu, Kannada, Malayalam and Urdu, and follows callers who switch between Hindi and English mid-sentence. Pick **Soniox** as the transcriber provider and set:
+
+| Setting | What it does |
+|---|---|
+| **Model** | `stt-rt-v5` (latest) or `stt-rt-v4`. |
+| **Languages** | The languages your callers speak. For Hinglish pick **Hindi** and **English**. Leave empty to detect any language. |
+| **Strict languages** | When on, only the languages above are transcribed, so background speech in other languages isn't picked up. Needs at least one language. For Hinglish keep both Hindi and English. |
+| **Domain context** | A short description of the calls, for example "Think Gas PNG customer support: complaints, meter readings, BP numbers". It helps Soniox pick the right words. |
+
+The agent's **Dictionary** words are sent to Soniox as terms to recognise exactly, such as product, brand and place names.
+
+**Advanced:** **Use Soniox turn detection** lets Soniox decide when the caller has finished speaking from what they said, instead of the agent's own turn detection. When it's on you can tune **Max wait (ms)** (500 to 3000), **Sensitivity** (-1 to 1, higher ends turns sooner) and **Speed level** (0 to 3, higher answers sooner). Leave them empty for Soniox's defaults.
+
+Each Soniox session is tagged with the call's run ID (`run-<id>`), so usage in the Soniox console can be matched to calls. See the [Soniox models](https://soniox.com/docs/stt/models) and [language](https://soniox.com/docs/stt/concepts/supported-languages) documentation.
