@@ -193,29 +193,56 @@ def register_event_handlers(
         ready_state["pipeline_started"] = True
         await maybe_trigger_initial_response()
 
+    outcome_lock = asyncio.Lock()
+    outcome_recorded = False
+
+    async def _record_pipeline_outcome() -> None:
+        """Count this call once toward its campaign's failure rate.
+
+        Judged by why the pipeline ended: an STT/LLM/TTS failure counts as a
+        failure, any other ending as a success. Busy, no-answer and failed
+        dials never get here (no pipeline), so a list of unreachable numbers
+        can't pause a healthy campaign. A bare framework cancellation has no
+        reliable outcome and is not counted either way.
+        """
+        nonlocal outcome_recorded
+        try:
+            async with outcome_lock:
+                if outcome_recorded:
+                    return
+                end_reason = engine.end_reason
+                if not end_reason or end_reason == EndTaskReason.SYSTEM_CANCELLED.value:
+                    return
+                is_failure = end_reason in {
+                    EndTaskReason.PIPELINE_ERROR.value,
+                    EndTaskReason.UNEXPECTED_ERROR.value,
+                }
+                run = await db_client.get_workflow_run_by_id(workflow_run_id)
+                if run and run.campaign_id:
+                    await circuit_breaker.record_and_evaluate(
+                        campaign_id=run.campaign_id,
+                        is_failure=is_failure,
+                        workflow_run_id=workflow_run_id,
+                        reason=end_reason,
+                    )
+                outcome_recorded = True
+                if is_failure:
+                    asyncio.create_task(
+                        _capture_call_event(
+                            workflow_run_id,
+                            user_provider_id,
+                            PostHogEvent.CALL_FAILED,
+                            extra_properties={"error_reason": end_reason},
+                        )
+                    )
+        except Exception as e:
+            logger.error(f"Error recording circuit breaker outcome: {e}", exc_info=True)
+
     @task.event_handler("on_pipeline_error")
     async def on_pipeline_error(_task: PipelineWorker, frame: Frame):
         logger.warning(f"Pipeline error for workflow run {workflow_run_id}: {frame}")
-        try:
-            workflow_run = await db_client.get_workflow_run_by_id(workflow_run_id)
-            if workflow_run and workflow_run.campaign_id:
-                await circuit_breaker.record_and_evaluate(
-                    campaign_id=workflow_run.campaign_id,
-                    is_failure=True,
-                    workflow_run_id=workflow_run_id,
-                    reason="pipeline_error",
-                )
-            asyncio.create_task(
-                _capture_call_event(
-                    workflow_run_id,
-                    user_provider_id,
-                    PostHogEvent.CALL_FAILED,
-                    extra_properties={"error_reason": "pipeline_error"},
-                )
-            )
-        except Exception as e:
-            logger.error(f"Error recording circuit breaker failure: {e}", exc_info=True)
-
+        # The call's outcome (and campaign health) is counted once when the
+        # pipeline finishes; a call can push several errors before it ends.
         await engine.end_call_with_reason(
             EndTaskReason.PIPELINE_ERROR.value, abort_immediately=True
         )
@@ -226,6 +253,10 @@ def register_event_handlers(
         _frame: Frame,
     ):
         logger.debug("In on_pipeline_finished callback handler")
+
+        # Count the call's outcome first, so a failure in the persistence
+        # below can't skip it.
+        await _record_pipeline_outcome()
 
         # Turn and feedback observers run on independent queues. Drain them
         # before finalizing immutable transcripts and taking the DB snapshot.

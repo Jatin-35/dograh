@@ -161,9 +161,10 @@ async def calling_paused(endpoint: Any) -> None:
     await raise_alert(
         endpoint,
         CALLING_PAUSED,
-        "Calling was paused because too many calls failed in a row (for "
-        "example a telephony or number problem). Leads are still being "
-        "stored. Fix the cause, then press Resume calling on the endpoint.",
+        "Calling was paused: a provider rejected the account's key or "
+        "credit (HTTP 401/402/403), or too many calls failed (for example a "
+        "telephony outage). The campaign log names the cause. Leads are still "
+        "being stored. Fix the cause, then press Resume calling on the endpoint.",
     )
 
 

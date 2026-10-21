@@ -1087,3 +1087,140 @@ class TestAcquireConcurrentSlotScoping:
             scope_max_concurrent=None,
             retry_interval=1,
         )
+
+
+class TestPausedWhileWaitingForASlot:
+    """Waiting for a free call slot can take a while; a provider error on
+    another call can pause the campaign meanwhile. The waiting call must not
+    dial, its slot must be released, and every undialled lead goes back to
+    the queue for when the campaign is resumed."""
+
+    @pytest.mark.asyncio
+    async def test_a_pause_during_the_slot_wait_stops_the_dial(
+        self, campaign_test_data, mock_rate_limiter, db_session_factory, mock_call_concurrency
+    ):
+        async def slot_after_pause(organization_id, campaign):
+            async with db_session_factory() as session:
+                await session.execute(
+                    text("UPDATE campaigns SET state = 'paused' WHERE id = :campaign_id"),
+                    {"campaign_id": campaign_test_data.campaign_id},
+                )
+                await session.commit()
+            return MagicMock()
+
+        dispatched = []
+
+        async def record_dispatch(queued_run, campaign, slot):
+            dispatched.append(queued_run.id)
+            return MagicMock(id=1)
+
+        dispatcher = CampaignCallDispatcher()
+        with (
+            patch("api.services.campaign.campaign_call_dispatcher.rate_limiter") as mock_rl,
+            patch.object(dispatcher, "acquire_concurrent_slot", side_effect=slot_after_pause),
+            patch.object(dispatcher, "dispatch_call", side_effect=record_dispatch),
+        ):
+            mock_rl.acquire_token = AsyncMock(side_effect=mock_rate_limiter["acquire_token"])
+            mock_rl.initialize_from_number_pool = AsyncMock()
+            processed = await dispatcher.process_batch(
+                campaign_id=campaign_test_data.campaign_id, batch_size=10
+            )
+
+        assert processed == 0
+        assert dispatched == []
+        mock_call_concurrency.release_slot.assert_awaited_once()
+        async with db_session_factory() as session:
+            result = await session.execute(
+                text(
+                    "SELECT state, COUNT(*) FROM queued_runs "
+                    "WHERE campaign_id = :campaign_id GROUP BY state"
+                ),
+                {"campaign_id": campaign_test_data.campaign_id},
+            )
+            states = {row[0]: row[1] for row in result.fetchall()}
+        assert states.get("queued", 0) == 10
+        assert states.get("processing", 0) == 0
+        assert states.get("failed", 0) == 0
+
+class TestTelephonyRejectsTheAccountMidBatch:
+    """The first dial of a 10-lead batch is refused with HTTP 401 (the
+    telephony account was disabled). The campaign pauses there: that lead is
+    marked failed (it was attempted), the other 9 go back to the queue
+    untouched, and nothing else is dialled."""
+
+    @pytest.mark.asyncio
+    async def test_first_dial_401_pauses_and_keeps_the_rest_queued(
+        self, campaign_test_data, mock_rate_limiter, db_session_factory
+    ):
+        from api.services.campaign.circuit_breaker import circuit_breaker
+
+        class _Unauthorized(Exception):
+            status_code = 401
+
+        dials = []
+
+        async def dial_refused(queued_run, campaign, slot):
+            dials.append(queued_run.id)
+            async with db_session_factory() as session:
+                run = WorkflowRunModel(
+                    name="refused dial",
+                    workflow_id=campaign_test_data.workflow_id,
+                    mode="voicelink",
+                    campaign_id=campaign_test_data.campaign_id,
+                )
+                session.add(run)
+                await session.commit()
+                run_id = run.id
+            error = _Unauthorized("telephony account disabled")
+            # What dispatch_call does when initiate_call raises.
+            await circuit_breaker.pause_on_provider_error(
+                organization_id=campaign_test_data.organization_id,
+                workflow_run_id=run_id,
+                provider="voicelink",
+                service="telephony",
+                exception=error,
+            )
+            raise error
+
+        dispatcher = CampaignCallDispatcher()
+        with (
+            patch("api.services.campaign.campaign_call_dispatcher.rate_limiter") as mock_rl,
+            patch.object(dispatcher, "acquire_concurrent_slot", AsyncMock(return_value=MagicMock())),
+            patch.object(dispatcher, "dispatch_call", side_effect=dial_refused),
+            patch(
+                "api.services.campaign.campaign_call_dispatcher.webhook_sync_calling.call_not_started",
+                AsyncMock(),
+            ),
+        ):
+            mock_rl.acquire_token = AsyncMock(side_effect=mock_rate_limiter["acquire_token"])
+            mock_rl.initialize_from_number_pool = AsyncMock()
+            processed = await dispatcher.process_batch(
+                campaign_id=campaign_test_data.campaign_id, batch_size=10
+            )
+
+        assert processed == 0
+        assert len(dials) == 1  # nothing dialled after the pause
+        async with db_session_factory() as session:
+            state = (
+                await session.execute(
+                    text("SELECT state, logs FROM campaigns WHERE id = :id"),
+                    {"id": campaign_test_data.campaign_id},
+                )
+            ).one()
+            states = {
+                row[0]: row[1]
+                for row in (
+                    await session.execute(
+                        text(
+                            "SELECT state, COUNT(*) FROM queued_runs "
+                            "WHERE campaign_id = :id GROUP BY state"
+                        ),
+                        {"id": campaign_test_data.campaign_id},
+                    )
+                ).fetchall()
+            }
+        assert state[0] == "paused"
+        assert any(log["event"] == "provider_error_circuit_breaker_tripped" for log in state[1])
+        assert states.get("failed", 0) == 1
+        assert states.get("queued", 0) == 9
+        assert states.get("processing", 0) == 0

@@ -13,8 +13,9 @@ from api.services.call_concurrency import (
     CallConcurrencySlot,
     call_concurrency,
 )
-from api.services.campaign.circuit_breaker import circuit_breaker
+from api.services.campaign.circuit_breaker import circuit_breaker, telephony_outage
 from api.services.campaign.errors import (
+    CampaignDispatchPaused,
     ConcurrentSlotAcquisitionError,
     PhoneNumberPoolExhaustedError,
 )
@@ -146,6 +147,17 @@ class CampaignCallDispatcher:
                     campaign.organization_id, campaign
                 )
 
+                # Waiting for a slot can take a while, and a provider error on
+                # another call can pause the campaign meanwhile. Check again
+                # right before creating the run and dialing.
+                try:
+                    await self._ensure_campaign_running(
+                        campaign_id, campaign.organization_id
+                    )
+                except CampaignDispatchPaused:
+                    await call_concurrency.release_slot(concurrency_slot)
+                    raise
+
                 # Dispatch the call
                 workflow_run = await self.dispatch_call(
                     queued_run, campaign, concurrency_slot
@@ -179,6 +191,16 @@ class CampaignCallDispatcher:
                     queued_runs, processed_run_ids, reason="task_cancelled"
                 )
                 raise
+
+            except CampaignDispatchPaused as e:
+                logger.info(
+                    f"Campaign {campaign_id} paused before dialing ({e}); "
+                    "returning claimed queued runs that were not dispatched"
+                )
+                await self._return_unprocessed_claims(
+                    queued_runs, processed_run_ids, reason="campaign_paused_before_dial"
+                )
+                break
 
             except PhoneNumberPoolExhaustedError as e:
                 logger.warning(
@@ -458,19 +480,48 @@ class CampaignCallDispatcher:
                 },
             )
 
-            # Record call initiation failure in circuit breaker
-            await circuit_breaker.record_and_evaluate(
-                campaign.id,
-                is_failure=True,
+            # The telephony provider refusing our credentials or account
+            # (HTTP 401/402/403) pauses the campaign at once. Otherwise a
+            # rejected dial counts toward the failure rate only when the
+            # provider itself is failing (5xx, timeout, connection error):
+            # a bad number in the list (4xx) must not pause a healthy campaign,
+            # but an outage must, or every remaining lead fails one by one.
+            await circuit_breaker.pause_on_provider_error(
+                organization_id=campaign.organization_id,
                 workflow_run_id=workflow_run.id,
-                reason="call_initiation_failed",
+                provider=provider.PROVIDER_NAME,
+                service="telephony",
+                exception=e,
             )
+            if telephony_outage(e):
+                await circuit_breaker.record_and_evaluate(
+                    campaign.id,
+                    is_failure=True,
+                    workflow_run_id=workflow_run.id,
+                    reason="telephony_unavailable",
+                )
 
             await self.release_call_slot(workflow_run.id)
 
             raise
 
         return workflow_run
+
+    @staticmethod
+    async def _ensure_campaign_running(campaign_id: int, organization_id: int) -> None:
+        """Raise CampaignDispatchPaused unless the campaign is still running."""
+        try:
+            current = await db_client.get_campaign(campaign_id, organization_id)
+        except Exception as exc:
+            logger.error(
+                f"Cannot verify campaign {campaign_id} state before dialing "
+                f"({type(exc).__name__})"
+            )
+            raise CampaignDispatchPaused(
+                "Cannot verify campaign state before dialing"
+            ) from exc
+        if current is None or current.state != "running":
+            raise CampaignDispatchPaused("Campaign is no longer running")
 
     async def apply_rate_limit(self, organization_id: int, rate_limit: int) -> None:
         """

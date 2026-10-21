@@ -28,6 +28,8 @@ from pipecat.services.settings import TTSSettings
 from pipecat.services.tts_service import TextAggregationMode, WebsocketTTSService
 from pipecat.utils.tracing.service_decorators import traced_tts
 
+from api.services.pipecat.provider_rejection import ProviderRejectionAwareWebsocket
+
 try:
     from websockets.asyncio.client import ClientConnection
     from websockets.asyncio.client import connect as websocket_connect
@@ -37,7 +39,7 @@ except ModuleNotFoundError as e:
     raise Exception(f"Missing module: {e}") from e
 
 
-class MurfTTSService(WebsocketTTSService):
+class MurfTTSService(ProviderRejectionAwareWebsocket, WebsocketTTSService):
     """Murf AI WebSocket-based text-to-speech service."""
 
     class InputParams(BaseModel):

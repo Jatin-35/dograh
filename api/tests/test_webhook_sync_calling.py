@@ -526,7 +526,7 @@ def _dispatcher_patches(dispatcher_module, provider, quota_ok=True):
         patch.object(
             dispatcher_module,
             "circuit_breaker",
-            SimpleNamespace(record_and_evaluate=AsyncMock()),
+            SimpleNamespace(pause_on_provider_error=AsyncMock()),
         ),
         patch.object(
             dispatcher_module,
@@ -589,9 +589,6 @@ async def test_the_real_dispatcher_marks_the_lead_calling(env, no_kick):
     with (
         patch.object(
             status_processor.campaign_call_dispatcher, "release_call_slot", AsyncMock()
-        ),
-        patch.object(
-            status_processor.circuit_breaker, "record_and_evaluate", AsyncMock()
         ),
         patch.object(
             status_processor.rate_limiter,

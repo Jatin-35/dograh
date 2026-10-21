@@ -17,7 +17,6 @@ from api.services.campaign.campaign_call_dispatcher import campaign_call_dispatc
 from api.services.campaign.campaign_event_publisher import (
     get_campaign_event_publisher,
 )
-from api.services.campaign.circuit_breaker import circuit_breaker
 from api.services.campaign.rate_limiter import rate_limiter
 from api.services.webhook_sync import calling as webhook_sync_calling
 from api.tasks.arq import enqueue_job
@@ -42,9 +41,6 @@ IN_FLIGHT_STATUSES = frozenset(
 )
 RETRYABLE_NOT_CONNECTED_STATUSES = frozenset(
     {TelephonyCallStatus.BUSY, TelephonyCallStatus.NO_ANSWER}
-)
-FAILURE_NOT_CONNECTED_STATUSES = frozenset(
-    {TelephonyCallStatus.ERROR, TelephonyCallStatus.FAILED}
 )
 
 
@@ -148,10 +144,8 @@ async def _process_status_update(workflow_run_id: int, status: StatusCallbackReq
 
         await campaign_call_dispatcher.release_call_slot(workflow_run_id)
 
-        if workflow_run.campaign_id:
-            await circuit_breaker.record_and_evaluate(
-                workflow_run.campaign_id, is_failure=False
-            )
+        # Campaign health is counted when the call's pipeline finishes, not
+        # here: a "completed" phone call can still have failed in STT/LLM/TTS.
 
         if workflow_run.state != WorkflowRunState.COMPLETED.value:
             await db_client.update_workflow_run(
@@ -174,8 +168,7 @@ async def _process_status_update(workflow_run_id: int, status: StatusCallbackReq
         )
         # Some providers report the end of one call twice (VoiceLink sends
         # call.failed or call.ended, then call.completed). queued_runs has no
-        # unique key, so a second pass would schedule a duplicate retry and
-        # count the call twice toward the circuit breaker.
+        # unique key, so a second pass would schedule a duplicate retry.
         already_reported = isinstance(existing_tags, list) and (
             "not_connected" in existing_tags
         )
@@ -185,15 +178,6 @@ async def _process_status_update(workflow_run_id: int, status: StatusCallbackReq
             # atomic.
             already_reported = not await rate_limiter.claim_not_connected_report(
                 workflow_run_id
-            )
-
-        if workflow_run.campaign_id and not already_reported:
-            is_failure = normalized_status in FAILURE_NOT_CONNECTED_STATUSES
-            await circuit_breaker.record_and_evaluate(
-                workflow_run.campaign_id,
-                is_failure=is_failure,
-                workflow_run_id=workflow_run_id if is_failure else None,
-                reason=normalized_status.value if is_failure else None,
             )
 
         if workflow_run.campaign_id and not already_reported:

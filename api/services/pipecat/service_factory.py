@@ -31,6 +31,7 @@ from api.services.pipecat.gemini_json_schema_adapter import (
 )
 from api.services.pipecat.minimax_tts import MiniMaxOwnedSessionTTSService
 from api.services.pipecat.anthropic_llm import DograhAnthropicLLMService
+from api.services.pipecat.deepgram_stt import DograhDeepgramSTTService
 from api.services.pipecat.murf_tts import MurfTTSService
 from api.utils.url_security import validate_user_configured_service_url
 from pipecat.services.assemblyai.stt import AssemblyAISTTService, AssemblyAISTTSettings
@@ -50,7 +51,7 @@ from pipecat.services.deepgram.flux.stt import (
     DeepgramFluxSTTService,
     DeepgramFluxSTTSettings,
 )
-from pipecat.services.deepgram.stt import DeepgramSTTService, DeepgramSTTSettings
+from pipecat.services.deepgram.stt import DeepgramSTTSettings
 from pipecat.services.deepgram.tts import DeepgramTTSService, DeepgramTTSSettings
 from pipecat.services.dograh.flux.stt import DograhFluxSTTService
 from pipecat.services.dograh.llm import DograhLLMService
@@ -270,7 +271,7 @@ def create_stt_service(
         # Other models than flux
         # Use language from user config, defaulting to "multi" for multilingual support
         language = getattr(user_config.stt, "language", None) or "multi"
-        return DeepgramSTTService(
+        return DograhDeepgramSTTService(
             api_key=user_config.stt.api_key,
             settings=DeepgramSTTSettings(
                 language=language,

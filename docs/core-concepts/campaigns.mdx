@@ -69,17 +69,33 @@ BotrixAI can automatically retry contacts who didn't answer, were busy, or went 
 
 ## Circuit breaker
 
-The circuit breaker automatically pauses a campaign when the call failure rate gets too high — protecting against wasted spend and telephony reputation issues caused by a misconfigured agent or a bad contact list.
+The circuit breaker pauses a campaign automatically so a broken setup can't burn through your contact list. It pauses for two reasons.
 
-When enabled, BotrixAI monitors the failure rate within a rolling time window. If it exceeds the threshold, the campaign is paused automatically and must be manually resumed after the issue is investigated.
+### Provider errors (immediate)
+
+If a campaign call's speech-to-text, voice, LLM or realtime provider, or the telephony provider placing the call, rejects your account with **HTTP 401, 402 or 403** (an invalid or expired key, no credit, access denied), the campaign is paused **on the first such error**. You don't need to wait for a failure rate to build up. The campaign log records which provider and status code caused the pause, and the call it happened on.
+
+Contacts that were waiting to be dialled stay queued, and calls already in progress finish normally. Fix the key or the account, then resume the campaign. Another 401, 402 or 403 pauses it again.
+
+An error from one of your agent's own tools (for example a CRM API returning 401) does not pause the campaign.
+
+### Failure rate
+
+The campaign is also paused when too many calls fail within a rolling time window:
+
+- **Counts as a failure:** a connected call whose AI pipeline failed (an STT, LLM or TTS error), or a dial the telephony provider couldn't place because it is down (a server error, timeout or connection failure).
+- **Counts as a success:** a connected call that ended any other way.
+- **Not counted:** busy, no-answer and calls rejected for a bad number. A contact list with many unreachable numbers can't pause a healthy campaign.
+
+Each call is counted once, however many times its status is reported.
 
 | Setting | Default | Description |
 |---|---|---|
-| Failure Threshold (%) | `50` | Pause when the failure rate within the window exceeds this percentage |
+| Failure Threshold (%) | `50` | Pause when the failure rate within the window meets or exceeds this percentage |
 | Window (seconds) | `120` | Rolling time window over which the failure rate is calculated |
-| Min Calls in Window | `5` | Minimum number of calls required before the circuit breaker can trip — prevents false positives on small samples |
+| Min Calls in Window | `5` | Minimum number of counted calls before the circuit breaker can trip, which prevents false positives on small samples |
 
-A campaign paused by the circuit breaker behaves the same as a manually paused campaign — in-flight calls complete normally, and it can be resumed once the underlying issue is resolved.
+A campaign paused by the circuit breaker behaves the same as a manually paused campaign: in-flight calls complete normally, and it can be resumed once the issue is resolved. Resuming starts the failure-rate window afresh.
 
 ## Campaign lifecycle
 

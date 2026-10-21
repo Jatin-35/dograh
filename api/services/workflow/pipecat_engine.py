@@ -96,6 +96,10 @@ class PipecatEngine:
         self._node_transition_callback = node_transition_callback
         self._initialized = False
         self._call_disposed = False
+        # Why the call ended (an EndTaskReason value), set once by the first
+        # end_call_with_reason. Unlike call_disposition it is never replaced by
+        # a disposition extracted from the conversation.
+        self._end_reason: str | None = None
         self._current_node: Optional[Node] = None
         self._gathered_context: dict = {}
         self._user_response_timeout_task: Optional[asyncio.Task] = None
@@ -763,6 +767,7 @@ class PipecatEngine:
             return
 
         self._call_disposed = True
+        self._end_reason = reason
 
         # Mute the pipeline
         self._mute_pipeline = True
@@ -919,6 +924,11 @@ class PipecatEngine:
     async def handle_llm_text_frame(self, text: str):
         """Accumulate LLM text frames to build reference text."""
         self._current_llm_generation_reference_text += text
+
+    @property
+    def end_reason(self) -> str | None:
+        """Why the call ended, or None if it hasn't been ended through the engine."""
+        return self._end_reason
 
     def is_call_disposed(self):
         """Check whether a call has been disposed by the engine"""

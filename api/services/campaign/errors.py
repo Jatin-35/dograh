@@ -25,3 +25,7 @@ class PhoneNumberPoolExhaustedError(Exception):
             f"All phone numbers are in use for org {organization_id}. "
             f"No available from_number in pool."
         )
+
+
+class CampaignDispatchPaused(Exception):
+    """Campaign stopped before dialing; keep the contact queued for resume."""

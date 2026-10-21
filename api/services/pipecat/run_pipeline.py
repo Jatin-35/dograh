@@ -66,6 +66,7 @@ from api.services.pipecat.tracing_config import (
     ensure_tracing,
 )
 from api.services.pipecat.transcript_log_coordinator import TranscriptLogCoordinator
+from api.services.campaign.circuit_breaker import register_campaign_provider_error_handler
 from api.services.pipecat.ambient_sound import attach_ambient_sound_gate
 from api.services.pipecat.empty_turn_recovery import (
     BotActivityObserver,
@@ -728,6 +729,29 @@ async def _run_pipeline_impl(
         )
         llm = create_llm_service(user_config, correlation_id=mps_correlation_id)
         inference_llm = None
+
+    # A campaign call whose STT/TTS/LLM provider rejects our key or account
+    # (HTTP 401/402/403) pauses the campaign at once instead of failing the
+    # rest of the lead list call by call.
+    if workflow_run.campaign_id:
+        for service, provider, source in (
+            (stt, user_config.stt.provider if stt else None, "stt"),
+            (tts, user_config.tts.provider if tts else None, "tts"),
+            (
+                llm,
+                (user_config.realtime if is_realtime else user_config.llm).provider,
+                "realtime" if is_realtime else "llm",
+            ),
+            (inference_llm, user_config.llm.provider if inference_llm else None, "llm"),
+        ):
+            if service is not None:
+                register_campaign_provider_error_handler(
+                    service,
+                    provider=provider,
+                    source=source,
+                    workflow_run_id=workflow_run_id,
+                    organization_id=workflow.organization_id,
+                )
 
     # Stamp the providers/models actually resolved for this run onto
     # initial_context so they're available for post-call analytics
