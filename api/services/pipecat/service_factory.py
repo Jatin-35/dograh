@@ -13,6 +13,7 @@ from api.services.configuration.options import (
 )
 from api.services.configuration.registry import (
     HOPPER_API_BASE_URL,
+    INCEPTION_API_BASE_URL,
     ServiceProviders,
     strip_vakyam_voice_gender_suffix,
 )
@@ -33,6 +34,7 @@ from api.services.pipecat.anthropic_llm import DograhAnthropicLLMService
 from api.services.pipecat.murf_tts import MurfTTSService
 from api.utils.url_security import validate_user_configured_service_url
 from pipecat.services.assemblyai.stt import AssemblyAISTTService, AssemblyAISTTSettings
+from pipecat.services.inception.llm import InceptionLLMService
 from pipecat.services.aws.llm import AWSBedrockLLMService, AWSBedrockLLMSettings
 from pipecat.services.azure.llm import AzureLLMService, AzureLLMSettings
 from pipecat.services.azure.stt import AzureSTTService, AzureSTTSettings
@@ -955,6 +957,49 @@ def _migrate_deprecated_google_model(model: str) -> str:
     return model
 
 
+def inception_reasoning_effort(model: str, reasoning_effort: str | None) -> str:
+    """The reasoning effort to send for a Mercury model.
+
+    "instant" is Inception's recommendation for voice, but Mercury Voice only
+    takes low/medium/high, so it gets "low", its fastest setting.
+    """
+    effort = reasoning_effort or "instant"
+    if effort == "instant" and "voice" in model.lower():
+        return "low"
+    return effort
+
+
+def create_inception_llm_service(
+    api_key: str | None,
+    model: str,
+    *,
+    base_url: str | None = None,
+    reasoning_effort: str | None = None,
+):
+    """Inception's Mercury models through pipecat's InceptionLLMService.
+
+    It sends Inception's ``realtime`` flag (a quicker first block of the reply)
+    and leaves temperature unset: Mercury rejects values below 0.5, so the 0.1
+    the plain OpenAI provider sends would fail every request.
+    """
+    if not api_key:
+        # Without this the OpenAI client falls back to OPENAI_API_KEY from the
+        # environment and sends our OpenAI key to Inception (fixed upstream in
+        # pipecat #6193, which this pipecat predates).
+        raise HTTPException(status_code=400, detail="Inception needs an API key")
+    base_url = base_url or INCEPTION_API_BASE_URL
+    _validate_runtime_service_url(base_url, "base_url")
+    return InceptionLLMService(
+        api_key=api_key,
+        base_url=base_url,
+        settings=InceptionLLMService.Settings(
+            model=model,
+            reasoning_effort=inception_reasoning_effort(model, reasoning_effort),
+            realtime=True,
+        ),
+    )
+
+
 def create_llm_service_from_provider(
     provider: str,
     model: str,
@@ -971,6 +1016,7 @@ def create_llm_service_from_provider(
     credentials: str | None = None,
     temperature: float | None = None,
     bill_to: str | None = None,
+    reasoning_effort: str | None = None,
 ):
     """Create an LLM service from explicit provider/model/api_key.
 
@@ -1031,6 +1077,10 @@ def create_llm_service_from_provider(
             settings=DograhAnthropicLLMService.Settings(
                 model=model, enable_prompt_caching=True
             ),
+        )
+    elif provider == ServiceProviders.INCEPTION.value:
+        return create_inception_llm_service(
+            api_key, model, base_url=base_url, reasoning_effort=reasoning_effort
         )
     elif provider == ServiceProviders.GROQ.value:
         return GroqLLMService(
@@ -1429,6 +1479,9 @@ def llm_provider_kwargs(provider: str, get) -> dict:
         kwargs["base_url"] = get("base_url")
     elif provider == ServiceProviders.OPENROUTER.value:
         kwargs["base_url"] = get("base_url")
+    elif provider == ServiceProviders.INCEPTION.value:
+        kwargs["base_url"] = get("base_url")
+        kwargs["reasoning_effort"] = get("reasoning_effort")
     elif provider == ServiceProviders.AZURE.value:
         kwargs["endpoint"] = get("endpoint")
     elif provider == ServiceProviders.SPEACHES.value:

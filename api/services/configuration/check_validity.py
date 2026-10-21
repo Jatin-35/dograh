@@ -14,6 +14,7 @@ from api.schemas.ai_model_configuration import (
 )
 from api.services.configuration.registry import (
     HOPPER_API_BASE_URL,
+    INCEPTION_API_BASE_URL,
     ServiceConfig,
     ServiceProviders,
 )
@@ -40,10 +41,12 @@ class APIKeyStatusResponse(TypedDict):
 # error messages, and their default endpoint when no base_url is saved.
 _OPENAI_COMPATIBLE_PROVIDER_NAMES = {
     ServiceProviders.HOPPER.value: "Hopper",
+    ServiceProviders.INCEPTION.value: "Inception",
 }
 
 _OPENAI_COMPATIBLE_PROVIDER_BASE_URLS = {
     ServiceProviders.HOPPER.value: HOPPER_API_BASE_URL,
+    ServiceProviders.INCEPTION.value: INCEPTION_API_BASE_URL,
 }
 
 
@@ -63,6 +66,7 @@ class UserConfigurationValidator:
         self._validator_map = {
             ServiceProviders.OPENAI.value: self._check_openai_api_key,
             ServiceProviders.HOPPER.value: self._check_openai_api_key,
+            ServiceProviders.INCEPTION.value: self._check_openai_api_key,
             ServiceProviders.DEEPGRAM.value: self._check_deepgram_api_key,
             ServiceProviders.GROQ.value: self._check_groq_api_key,
             ServiceProviders.ANTHROPIC.value: self._check_anthropic_api_key,
@@ -261,6 +265,7 @@ class UserConfigurationValidator:
         if provider in (
             ServiceProviders.OPENAI.value,
             ServiceProviders.HOPPER.value,
+            ServiceProviders.INCEPTION.value,
             ServiceProviders.OPENAI_REALTIME.value,
         ):
             return validator(provider, api_key, service_config)

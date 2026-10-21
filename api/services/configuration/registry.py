@@ -101,6 +101,7 @@ class ServiceProviders(str, Enum):
     XAI = "xai"
     MURF = "murf"
     ANTHROPIC = "anthropic"
+    INCEPTION = "inception"
 
 
 class BaseServiceConfiguration(BaseModel):
@@ -110,6 +111,7 @@ class BaseServiceConfiguration(BaseModel):
         ServiceProviders.DEEPGRAM,
         ServiceProviders.GROQ,
         ServiceProviders.ANTHROPIC,
+        ServiceProviders.INCEPTION,
         ServiceProviders.OPENROUTER,
         ServiceProviders.INWORLD,
         ServiceProviders.ELEVENLABS,
@@ -263,6 +265,11 @@ GOOGLE_PROVIDER_MODEL_CONFIG = provider_model_config("Google")
 GROQ_PROVIDER_MODEL_CONFIG = provider_model_config("Groq")
 OPENROUTER_PROVIDER_MODEL_CONFIG = provider_model_config("Open Router")
 ANTHROPIC_PROVIDER_MODEL_CONFIG = provider_model_config("Anthropic")
+INCEPTION_PROVIDER_MODEL_CONFIG = provider_model_config(
+    "Inception",
+    description="Mercury diffusion models: very fast replies for live calls.",
+    provider_docs_url="https://docs.inceptionlabs.ai/get-started/models",
+)
 AZURE_OPENAI_PROVIDER_MODEL_CONFIG = provider_model_config("Azure OpenAI")
 DOGRAH_PROVIDER_MODEL_CONFIG = provider_model_config("Dograh")
 AWS_BEDROCK_PROVIDER_MODEL_CONFIG = provider_model_config("AWS Bedrock")
@@ -357,6 +364,12 @@ ANTHROPIC_MODELS = [
     "claude-sonnet-5-5",
     "claude-opus-5-5",
     "claude-haiku-4-5",
+]
+INCEPTION_API_BASE_URL = "https://api.inceptionlabs.ai/v1"
+INCEPTION_MODELS = [
+    "mercury-3",
+    "mercury-2.5",
+    "mercury-2",
 ]
 GROQ_MODELS = [
     "llama-3.3-70b-versatile",
@@ -491,6 +504,39 @@ class AnthropicLLMConfiguration(BaseLLMConfiguration):
             "Sonnet and Opus are stronger but slower."
         ),
         json_schema_extra={"examples": ANTHROPIC_MODELS, "allow_custom_input": True},
+    )
+
+
+@register_llm
+class InceptionLLMConfiguration(BaseLLMConfiguration):
+    model_config = INCEPTION_PROVIDER_MODEL_CONFIG
+    provider: Literal[ServiceProviders.INCEPTION] = ServiceProviders.INCEPTION
+    api_key: str | list[str] = Field(
+        description="API key from your Inception platform account.",
+        json_schema_extra={
+            "docs_url": "https://platform.inceptionlabs.ai",
+            "docs_label": "Create a key",
+        },
+    )
+    model: str = Field(
+        default="mercury-3",
+        description=(
+            "Mercury model ID. For Mercury Voice (enterprise), enter the model "
+            "ID Inception gives you."
+        ),
+        json_schema_extra={"examples": INCEPTION_MODELS, "allow_custom_input": True},
+    )
+    reasoning_effort: Literal["instant", "low", "medium", "high"] = Field(
+        default="instant",
+        description=(
+            "How much the model thinks before answering. Instant is the "
+            "fastest and suits live calls; higher is smarter but slower. "
+            "Mercury Voice has no instant and uses low instead."
+        ),
+    )
+    base_url: str = Field(
+        default=INCEPTION_API_BASE_URL,
+        description="Override only for a dedicated Inception endpoint.",
     )
 
 
@@ -982,6 +1028,7 @@ LLMConfig = Annotated[
         GoogleVertexLLMConfiguration,
         GroqLLMService,
         AnthropicLLMConfiguration,
+        InceptionLLMConfiguration,
         OpenRouterLLMConfiguration,
         GoogleLLMService,
         AzureLLMService,
