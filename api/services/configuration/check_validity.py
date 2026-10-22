@@ -1,5 +1,7 @@
 from typing import Optional, TypedDict
 
+import uuid
+
 import httpx
 import openai
 from deepgram import DeepgramClient
@@ -88,7 +90,7 @@ class UserConfigurationValidator:
             ServiceProviders.GOOGLE_VERTEX.value: self._check_google_vertex_llm_api_key,
             ServiceProviders.OPENAI_REALTIME.value: self._check_openai_api_key,
             ServiceProviders.GROK_REALTIME.value: self._check_grok_realtime_api_key,
-            ServiceProviders.INWORLD_REALTIME.value: self._check_inworld_api_key,
+            ServiceProviders.INWORLD_REALTIME.value: self._check_inworld_realtime_api_key,
             ServiceProviders.ULTRAVOX_REALTIME.value: self._check_ultravox_realtime_api_key,
             ServiceProviders.GOOGLE_REALTIME.value: self._check_google_api_key,
             ServiceProviders.GEMINI_LIVE_38.value: self._check_google_api_key,
@@ -505,6 +507,36 @@ class UserConfigurationValidator:
 
     def _check_grok_realtime_api_key(self, model: str, api_key: str) -> bool:
         return True
+
+    def _check_inworld_realtime_api_key(self, model: str, api_key: str) -> bool:
+        # Open a Realtime session itself: a Realtime key need not have voice
+        # read access, which the Inworld TTS check above requires.
+        from websockets.exceptions import InvalidStatus
+        from websockets.sync.client import connect
+
+        url = (
+            "wss://api.inworld.ai/api/v1/realtime/session"
+            f"?key=dograh-check-{uuid.uuid4().hex}&protocol=realtime"
+        )
+        try:
+            with connect(
+                url,
+                additional_headers={"Authorization": f"Basic {api_key}"},
+                open_timeout=10,
+            ):
+                return True
+        except InvalidStatus as exc:
+            if exc.response.status_code in (401, 403):
+                raise ValueError(
+                    "Invalid Inworld API key. The key was rejected by Inworld Realtime. "
+                    "Please verify that your API key is correct and active."
+                ) from exc
+            return True
+        except (OSError, TimeoutError) as exc:
+            raise ValueError(
+                "Could not connect to Inworld Realtime. Please check your network "
+                "connection and try again."
+            ) from exc
 
     def _check_xai_api_key(self, model: str, api_key: str) -> bool:
         # Use the TTS voices endpoint as a best-effort smoke test. Some xAI keys

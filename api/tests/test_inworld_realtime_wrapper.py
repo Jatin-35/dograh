@@ -370,3 +370,60 @@ def test_factory_creates_the_dograh_inworld_service():
     assert props.audio.input.transcription.model == "assemblyai/u3-rt-pro"
     assert service._dograh_language == "en"
     assert service.api_key == "inworld-key"
+
+
+# ── API key check ─────────────────────────────────────────────────────
+
+
+def _validate_key():
+    from api.services.configuration.check_validity import UserConfigurationValidator
+
+    return UserConfigurationValidator()._validate_service(
+        InworldRealtimeLLMConfiguration(api_key="realtime-key"), "realtime"
+    )
+
+
+class _Socket:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def _rejected(status):
+    from websockets.exceptions import InvalidStatus
+    from websockets.http11 import Response
+
+    return InvalidStatus(Response(status, "", None))
+
+
+def test_a_realtime_key_without_voice_access_saves():
+    seen = {}
+
+    def fake_connect(url, additional_headers, open_timeout):
+        seen.update(url=url, headers=additional_headers)
+        return _Socket()
+
+    with patch("websockets.sync.client.connect", fake_connect):
+        assert _validate_key() == []
+    assert seen["url"].startswith("wss://api.inworld.ai/api/v1/realtime/session?key=")
+    assert seen["headers"] == {"Authorization": "Basic realtime-key"}
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_a_rejected_key_blocks_the_save(status):
+    with patch("websockets.sync.client.connect", side_effect=_rejected(status)):
+        (err,) = _validate_key()
+    assert "Invalid Inworld API key" in err["message"]
+
+
+def test_other_statuses_do_not_block_the_save():
+    with patch("websockets.sync.client.connect", side_effect=_rejected(503)):
+        assert _validate_key() == []
+
+
+def test_unreachable_inworld_is_reported():
+    with patch("websockets.sync.client.connect", side_effect=TimeoutError()):
+        (err,) = _validate_key()
+    assert "Could not connect to Inworld Realtime" in err["message"]
