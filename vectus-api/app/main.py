@@ -2,6 +2,7 @@
 
     POST /lookup   {product, city?, district?, state?}  ->  {status, ...}
     POST /tanks    {brand?, state?, model?, capacity?, colour?, ...}  ->  {status, ...}
+    POST /products {product?, model?, item?, category?, detail?}  ->  {status, ...}
     GET  /health
 
 Always answers HTTP 200 with a ``status`` for anything the bot can act on;
@@ -28,7 +29,11 @@ from fastapi.responses import JSONResponse
 from . import mavis
 from .data import KBError, build_index, load_index
 from .matching import Lookup, lookup
-from .schemas import LookupRequest, TankRequest
+from .products import ProductCatalogError
+from .products import compact as compact_product_reply
+from .products import find as find_products
+from .products import load_catalog as load_products
+from .schemas import LookupRequest, ProductRequest, TankRequest
 from .tanks import CatalogError, load_catalog
 from .tanks import compact as compact_tank_reply
 from .tanks import find as find_tanks
@@ -38,6 +43,9 @@ KB_PATH = os.environ.get(
 )
 TANKS_PATH = os.environ.get(
     "VECTUS_TANKS_PATH", str(Path(__file__).resolve().parent.parent / "data" / "Tank_details.xlsx")
+)
+PRODUCTS_PATH = os.environ.get(
+    "VECTUS_PRODUCTS_PATH", str(Path(__file__).resolve().parent.parent / "data" / "products.json")
 )
 API_KEY = os.environ.get("VECTUS_API_KEY", "")
 # Live area-manager table (LeadSquared Mavis). Unset = serve the KB file only.
@@ -93,6 +101,15 @@ async def lifespan(app: FastAPI):
     except CatalogError as exc:
         app.state.tanks_error = str(exc)
         log.error("tank sheet not loaded, /tanks is unavailable: %s", exc)
+    # Same for the bath-ware / household list: /products only.
+    app.state.products, app.state.products_error = None, None
+    try:
+        app.state.products = load_products(PRODUCTS_PATH)
+        log.info("loaded %d products from %s", len(app.state.products.products),
+                 app.state.products.source)
+    except ProductCatalogError as exc:
+        app.state.products_error = str(exc)
+        log.error("product list not loaded, /products is unavailable: %s", exc)
     app.state.loaded_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     app.state.refresh_error = None
     task = None
@@ -142,7 +159,9 @@ async def health(request: Request):
             "source": ix.source, "loaded_at": request.app.state.loaded_at,
             "refresh_error": request.app.state.refresh_error,
             "tanks": len(request.app.state.tanks.tanks) if request.app.state.tanks else 0,
-            "tanks_error": request.app.state.tanks_error}
+            "tanks_error": request.app.state.tanks_error,
+            "products": len(request.app.state.products.products) if request.app.state.products else 0,
+            "products_error": request.app.state.products_error}
 
 
 @app.post("/lookup")
@@ -189,6 +208,36 @@ async def post_tanks(body: TankRequest, request: Request,
         "brand": result.get("brand"),
         "tanks": [t["name"] for t in result.get("tanks", [])],
         "ignored": result.get("ignored"),
+        "ms": round((time.perf_counter() - started) * 1000, 2),
+    }, ensure_ascii=False))
+    return result
+
+
+@app.post("/products")
+@app.post("/products/", include_in_schema=False)
+async def post_products(body: ProductRequest, request: Request,
+                        x_api_key: str | None = Header(default=None)):
+    _check_key(x_api_key)
+    started = time.perf_counter()
+    asked = body.model_dump(exclude_none=True)
+    if request.app.state.products is None:
+        result = {"status": "unavailable",
+                  "message": "Product details are not available right now. Do not say whether "
+                             "Vectus sells it; say the Area Manager will confirm."}
+    else:
+        query = request.query_params
+        # summary=1 is the default already (features only with detail = full);
+        # accepted so the tool URL can read the same as the tank tool's.
+        result = find_products(request.app.state.products, **asked)
+        if query.get("compact") in {"1", "true", "yes"}:
+            result = compact_product_reply(result)
+    log.info(json.dumps({
+        "event": "products",
+        "request": asked,
+        "status": result["status"],
+        "product": result.get("product"),
+        "model": result.get("model"),
+        "unmatched": result.get("unmatched"),
         "ms": round((time.perf_counter() - started) * 1000, 2),
     }, ensure_ascii=False))
     return result

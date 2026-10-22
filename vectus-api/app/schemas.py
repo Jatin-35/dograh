@@ -1,4 +1,4 @@
-"""Request shapes for POST /lookup and POST /tanks.
+"""Request shapes for POST /lookup, POST /tanks and POST /products.
 
 The response is a plain dict keyed by ``status`` (see matching.py) — the bot
 branches on ``status`` and reads ``message`` for what to say next, so a rigid
@@ -61,6 +61,26 @@ class TankRequest(BaseModel):
         if isinstance(data, dict) and "color" in data and not data.get("colour"):
             data = {**data, "colour": data["color"]}
         return data
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def _blank_is_none(cls, v):
+        if isinstance(v, str) and len(v) > 200:
+            return v[:200]
+        return _blank_to_none(v)
+
+
+class ProductRequest(BaseModel):
+    """POST /products. Every field is optional; send what the customer said."""
+
+    model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
+
+    product: Loose = Field(default=None)   # "seat cover", "angle cock", "balti"
+    model: Loose = Field(default=None)     # "Hush", "Chic Dual", "Ganga"
+    item: Loose = Field(default=None)      # a tap item: "angle cock", "swan neck"
+    category: Loose = Field(default=None)  # "bathware", "household", "garden"
+    # "full" adds the product's features; otherwise left out, as on /tanks.
+    detail: Loose = Field(default=None)
 
     @field_validator("*", mode="before")
     @classmethod

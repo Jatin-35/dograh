@@ -230,3 +230,115 @@ read (missing column, a name without a brand, no capacities, a blank
 guarantee) is never half-used: `/tanks` answers `unavailable` and
 `tanks_error` says which row is wrong, while the Area Manager lookup keeps
 working. Fix the sheet and rebuild.
+
+---
+
+# Product lookup (`POST /products`)
+
+Answers bath-ware, household and Maali garden questions (cistern, seat cover,
+taps and tap items, sinks, showers, health faucets, accessories, buckets, tubs,
+dustbins, stools, planters, garden pipes...) from `data/products.json`, which
+was read page by page from the Vectus catalogue PDF. Warranty is included;
+prices are deliberately not in the data. Water tanks stay with `/tanks`.
+
+## Tool (Tools → New → HTTP API)
+
+| Field | Value |
+|---|---|
+| Name | `vectus_product_lookup` |
+| Method | `POST` |
+| URL | `http://vectus-api:8080/products?compact=1&summary=1` |
+| Credential | the same one as `vectus_area_manager_lookup` |
+| Timeout | `5000` ms |
+
+**Description:**
+
+> Looks up Vectus bath-ware, household and garden products (cistern, toilet
+> seat cover, PTMT taps and items like angle cock or bib cock, kitchen sinks,
+> showers, health faucets, bath accessories, buckets, tubs, dustbins, stools,
+> planters, garden pipes) with their models, sizes, colours and warranty. Call
+> it for ANY non-tank product question, before saying whether Vectus sells
+> something. Send only the product words the customer said. Answer only from
+> `data.message`; never say Vectus does or does not sell something that is not
+> in this tool's result, and never quote a price.
+
+**Parameters** (all `string`, all optional):
+
+| name | description |
+|---|---|
+| `product` | The product the customer named, in their words, e.g. `seat cover`, `flush tank`, `angle cock`, `balti`, `gamla`, `garden pipe`. Only the product words, no extra sentence. |
+| `model` | A model or series name if the customer said one, e.g. `Hush`, `Chic Dual`, `Ganga`. |
+| `item` | A tap item if separate from the product, e.g. `angle cock`, `swan neck`. |
+| `category` | `bathware`, `household` or `garden`, only when the customer asks generally what Vectus has in that range. |
+| `detail` | `full` only when the customer asks about features; otherwise leave it out. |
+
+`compact=1` drops the lists and cards that repeat `data.message` (tested: no
+fact is lost); `summary=1` is accepted so the URL reads like the tank tool's;
+features come only with `detail = full`.
+
+## What it returns (`data.status`)
+
+| status | meaning |
+|---|---|
+| `found` | one model (details, warranty, a tap series' items), or a tap item and every series that makes it, with warranty per series |
+| `product` | Vectus sells it: the models and warranty; ask which model |
+| `multiple` | two or more products in one ask ("bucket aur mug"): one answer each, all in `data.message` |
+| `partial` | Vectus sells part of it, but a word is not in the list ("brass" tap, "shoe" rack): do not confirm that part |
+| `model_not_found` | the product is sold, but not that model: the real models |
+| `item_not_in_model` | that tap series does not make that item: the series that do |
+| `category` / `catalogue` | the products in a range / in all ranges |
+| `ambiguous` | a name several products share (Silk, Smart, Pro): ask which product |
+| `not_sold` | plumbing supply pipes and fittings (PPR, CPVC, UPVC, GI) |
+| `clarify` | a bare "pipe": garden, washing-machine and PVC waste pipes are sold, supply pipes are not |
+| `use_tank_lookup` | a water tank question: call `vectus_tank_lookup` instead |
+| `no_match` | not in the list (also wash basin, commode, geyser): do not say yes or no; the Area Manager will confirm |
+| `unavailable` | the file failed to load: give no details, say the Area Manager will confirm |
+
+## Main Agenda prompt change
+
+Replace the bath-ware/household stop-gap line, and narrow "For plumbing
+items/pipes/fittings, say Vectus currently does not deal" to supply pipes, with:
+
+```
+## Bath-ware, Household & Garden Questions
+For ANY non-tank product question — does Vectus sell X, models, sizes, colours,
+warranty, tap items like angle cock — call vectus_product_lookup with no speech
+in the same turn. Send only the product words the customer said (plus model or
+item if said). Answer only from data.message, in 1-2 short sentences; never quote
+a price.
+- found / product: answer what was asked; for a list, say a few names and ask which.
+- multiple: answer each product briefly, in the order asked.
+- partial: offer only what data.message says Vectus has; never confirm the rest.
+- model_not_found / item_not_in_model / ambiguous: offer the options given, or ask which.
+- not_sold: say Vectus does not sell plumbing supply pipes or fittings.
+- clarify: ask which pipe they need.
+- use_tank_lookup: call vectus_tank_lookup instead.
+- no_match, unavailable or a tool error: do not say whether Vectus sells it; say
+  the Area Manager will confirm, and offer their number.
+Do not call it again for a question already answered in this call.
+```
+
+Attach `vectus_product_lookup` to the node. Publish only after the test calls.
+
+## Test calls
+
+| Say | Expect |
+|---|---|
+| toilet seat cover milta hai? | yes, Silk, Smart, Pro, Hush; 24 months |
+| soft close seat cover | Hush |
+| angle cock | the series list; 36 / 24 / 12 months by series |
+| PPR pipe | Vectus does not sell supply pipes |
+| brass tap | the brass kitchen tap with flexible spout, 12 months |
+| chrome tap | no chrome tap confirmed; PTMT taps offered |
+| geyser | not confirmed either way; Area Manager will confirm |
+| 1000 litre tanki | the tank lookup answers, not this tool |
+
+## Updating the products
+
+Edit `data/products.json`, run `python -m pytest tests/test_products*.py`, then on
+the VM: `cd ~/dograh/vectus-api && docker compose up -d --build` and check
+`/health` shows `"products": 29` and `"products_error": null`. A file with a
+hole in it (a product without models, a model without details, a warranty not
+like "24 months", a price in a description, a tap series without items) is
+never half-used: `/products` answers `unavailable` and `products_error` names
+the product, while the Area Manager and tank lookups keep working.
