@@ -153,7 +153,7 @@ def test_a_bad_file_is_refused_and_names_the_problem(tmp_path, change, says):
 
 
 def test_the_shipped_file_loads(cat):
-    assert len(cat.products) == 29
+    assert len(cat.products) == 34
 
 
 # ── The endpoint, as the tool calls it ────────────────────────────────

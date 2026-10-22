@@ -349,6 +349,11 @@ def lookup(index: Index, req: Lookup) -> dict:
         )[:FUZZY_MAX_SUGGESTIONS] or _fuzzy(index, terms, product, allowed)
         if suggestions:
             return _confirm(suggestions)
+        if req.city and not req.district:
+            # A village or small town is often missing while its district is
+            # listed (Khatauli -> Muzaffarnagar): try the district before
+            # giving up. Telling the bot to call back here made it skip that.
+            return _not_found(product, " / ".join(t.title() for t in terms), ask_district=True)
         return _not_found(product, " / ".join(t.title() for t in terms))
 
     if len(resolved) == 2:
@@ -469,11 +474,13 @@ def _need_state(records: list[Record], said: str, stated: str | None = None) -> 
             "message": message}
 
 
-def _not_found(product: str, what: str) -> dict:
-    return {
-        "status": "not_found",
-        # "Moundling" is the KB's spelling; say the real word to the caller.
-        "message": f"No Vectus {'moulding' if product == A.MOULDING else 'water tank'} "
-                   f"contact is listed for {what}. "
-                   "Tell the caller our team will call them back.",
-    }
+def _not_found(product: str, what: str, ask_district: bool = False) -> dict:
+    # "Moundling" is the KB's spelling; say the real word to the caller.
+    head = (f"No Vectus {'moulding' if product == A.MOULDING else 'water tank'} "
+            f"contact is listed for {what}. ")
+    if ask_district:
+        return {"status": "not_found", "ask_district": True,
+                "message": head + f"Ask the caller only which district {what} is in, then look up "
+                                  "again with that district and the state. Give the no-match line "
+                                  "only if the district is not found either."}
+    return {"status": "not_found", "message": head + "Tell the caller our team will call them back."}

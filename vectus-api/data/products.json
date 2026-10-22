@@ -1,329 +1,2200 @@
 {
-  "source": "Vectus Group.pdf (Vectus Bathware, Vectus Household Plastics and Maali by Vectus catalogues). Prices deliberately left out: the bot never quotes prices.",
+  "source": "Vectus Group.pdf (Vectus Bathware, Vectus Household Plastics and Maali by Vectus catalogues). Prices deliberately left out: the bot never quotes prices. Road safety, T-Base and the extra dustbins from vectus.in (2026-10-22).",
   "categories": [
     {
       "id": "bathware",
       "name": "Bath-ware",
-      "aliases": ["bathware", "bath ware", "bathroom", "bathroom products", "bathroom fittings", "bath fittings", "sanitary", "sanitaryware", "sanitary ware", "bathroom range", "bath range", "baathroom", "बाथवेयर", "बाथरूम"],
+      "aliases": [
+        "bathware",
+        "bath ware",
+        "bathroom",
+        "bathroom products",
+        "bathroom fittings",
+        "bath fittings",
+        "sanitary",
+        "sanitaryware",
+        "sanitary ware",
+        "bathroom range",
+        "bath range",
+        "baathroom",
+        "बाथवेयर",
+        "बाथरूम"
+      ],
       "products": [
         {
           "name": "Cistern tank",
-          "aliases": ["cistern", "cistern tank", "cisterns", "sistern", "sistan", "system tank", "systan tank", "sistern tank", "flush tank", "flush", "flushing tank", "flush tanki", "toilet tank", "toilet flush", "latrine tank", "sandas tank", "सिस्टर्न", "सिस्टम टैंक", "सिस्टन टैंक", "फ्लश टैंक", "फ्लश"],
+          "aliases": [
+            "cistern",
+            "cistern tank",
+            "cisterns",
+            "sistern",
+            "sistan",
+            "system tank",
+            "systan tank",
+            "sistern tank",
+            "flush tank",
+            "flush",
+            "flushing tank",
+            "flush tanki",
+            "toilet tank",
+            "toilet flush",
+            "latrine tank",
+            "sandas tank",
+            "सिस्टर्न",
+            "सिस्टम टैंक",
+            "सिस्टन टैंक",
+            "फ्लश टैंक",
+            "फ्लश"
+          ],
           "warranty": "24 months",
-          "features": ["single and dual flush", "made of virgin polypropylene", "easy installation"],
+          "features": [
+            "single and dual flush",
+            "made of virgin polypropylene",
+            "easy installation"
+          ],
           "models": [
-            {"name": "Pro+", "aliases": ["pro plus", "proplus"], "details": "8 litre, white"},
-            {"name": "Swift", "details": "10 litre, single flush side push, white"},
-            {"name": "Centra", "aliases": ["centra", "sentra", "centre", "center"], "details": "10 litre, single flush centre push, white"},
-            {"name": "Silk", "details": "10 litre, white"},
-            {"name": "Pro", "details": "10 litre, white or ivory, available till stock lasts"},
-            {"name": "Smart", "details": "9 litre, white"},
-            {"name": "Chic", "aliases": ["chic", "chik", "sheek", "shik", "dual flush"], "details": "dual flush, 4 litre for urinal and 8 litre for lavatory, space for an air freshener, white"}
+            {
+              "name": "Pro+",
+              "aliases": [
+                "pro plus",
+                "proplus"
+              ],
+              "details": "8 litre, white"
+            },
+            {
+              "name": "Swift",
+              "details": "10 litre, single flush side push, white"
+            },
+            {
+              "name": "Centra",
+              "aliases": [
+                "centra",
+                "sentra",
+                "centre",
+                "center"
+              ],
+              "details": "10 litre, single flush centre push, white"
+            },
+            {
+              "name": "Silk",
+              "details": "10 litre, white"
+            },
+            {
+              "name": "Pro",
+              "details": "10 litre, white or ivory, available till stock lasts"
+            },
+            {
+              "name": "Smart",
+              "details": "9 litre, white"
+            },
+            {
+              "name": "Chic",
+              "aliases": [
+                "chic",
+                "chik",
+                "sheek",
+                "shik",
+                "dual flush"
+              ],
+              "details": "dual flush, 4 litre for urinal and 8 litre for lavatory, space for an air freshener, white"
+            }
           ]
         },
         {
           "name": "Toilet seat cover",
-          "aliases": ["toilet seat cover", "seat cover", "toilet seat", "toilet cover", "commode cover", "commode seat", "commode seat cover", "western toilet seat", "seat", "टॉयलेट सीट कवर", "सीट कवर", "टॉयलेट सीट", "कमोड कवर"],
+          "aliases": [
+            "toilet seat cover",
+            "seat cover",
+            "toilet seat",
+            "toilet cover",
+            "commode cover",
+            "commode seat",
+            "commode seat cover",
+            "western toilet seat",
+            "seat",
+            "टॉयलेट सीट कवर",
+            "सीट कवर",
+            "टॉयलेट सीट",
+            "कमोड कवर"
+          ],
           "warranty": "24 months",
-          "features": ["ergonomic", "sturdy", "easy to clean"],
+          "features": [
+            "ergonomic",
+            "sturdy",
+            "easy to clean"
+          ],
           "models": [
-            {"name": "Silk", "details": "white or ivory"},
-            {"name": "Smart", "details": "white"},
-            {"name": "Pro without jet", "aliases": ["pro", "pro without jet", "without jet"], "details": "white, without jet"},
-            {"name": "Pro with jet", "aliases": ["pro with jet", "with jet", "jet"], "details": "white, with jet"},
-            {"name": "Hush", "aliases": ["hush", "soft close", "softclose", "slow close"], "details": "soft close, white"}
+            {
+              "name": "Silk",
+              "details": "white or ivory"
+            },
+            {
+              "name": "Smart",
+              "details": "white"
+            },
+            {
+              "name": "Pro without jet",
+              "aliases": [
+                "pro",
+                "pro without jet",
+                "without jet"
+              ],
+              "details": "white, without jet"
+            },
+            {
+              "name": "Pro with jet",
+              "aliases": [
+                "pro with jet",
+                "with jet",
+                "jet"
+              ],
+              "details": "white, with jet"
+            },
+            {
+              "name": "Hush",
+              "aliases": [
+                "hush",
+                "soft close",
+                "softclose",
+                "slow close"
+              ],
+              "details": "soft close, white"
+            }
           ]
         },
         {
           "name": "PTMT taps",
           "kind": "taps",
-          "aliases": ["tap", "taps", "ptmt", "ptmt tap", "ptmt taps", "tonti", "tonti tap", "toti", "tooti", "nal", "nall", "nalka", "faucet", "faucets", "cock", "water tap", "plastic tap", "टोंटी", "टूटी", "नल", "टैप"],
-          "features": ["rust free", "durable against hard water", "safe against theft", "most series suit cold and hot water up to 75 degrees"],
+          "aliases": [
+            "tap",
+            "taps",
+            "ptmt",
+            "ptmt tap",
+            "ptmt taps",
+            "tonti",
+            "tonti tap",
+            "toti",
+            "tooti",
+            "nal",
+            "nall",
+            "nalka",
+            "faucet",
+            "faucets",
+            "cock",
+            "water tap",
+            "plastic tap",
+            "टोंटी",
+            "टूटी",
+            "नल",
+            "टैप"
+          ],
+          "features": [
+            "rust free",
+            "durable against hard water",
+            "safe against theft",
+            "most series suit cold and hot water up to 75 degrees"
+          ],
           "models": [
-            {"name": "Chic Dual", "aliases": ["chic dual", "chik dual"], "warranty": "36 months", "details": "white body with blue handle, or ivory body with yellow handle; quarter turn",
-             "items": ["angle cock", "bib cock", "nozzle cock", "long bib cock", "pillar cock", "2 way angle cock", "2 way bib cock", "sink cock", "swan neck", "basin mixer", "wall mixer with L-bend", "wall mixer non-telephonic", "sink mixer"]},
-            {"name": "Chic", "aliases": ["chic", "chik", "sheek"], "warranty": "36 months", "details": "white or ivory; quarter turn",
-             "items": ["angle cock", "bib cock", "nozzle cock", "long bib cock", "pillar cock", "2 way angle cock", "2 way bib cock", "sink cock", "swan neck", "wall mixer non-telephonic", "sink mixer", "basin mixer", "wall mixer with L-bend"]},
-            {"name": "Wave", "warranty": "36 months", "details": "newly launched; white body with blue handle, or white body with grey handle; quarter turn",
-             "items": ["angle cock", "bib cock", "bib cock nozzle body", "long bib cock", "pillar cock", "washing machine cock", "2 way angle cock", "2 way bib cock", "sink cock", "swan neck", "wall mixer non-telephonic", "sink mixer", "center hole mixer", "wall mixer with L-bend"]},
-            {"name": "Smart Dual", "aliases": ["smart dual"], "warranty": "36 months", "details": "white body with blue handle, or ivory body with yellow handle; quarter turn",
-             "items": ["angle cock", "bib cock", "nozzle cock", "long body bib cock", "pillar cock", "2 way angle cock", "2 way bib cock", "mini sink cock", "mini swan neck", "sink cock", "swan neck", "wall mixer non-telephonic", "sink mixer", "basin mixer", "wall mixer with L-bend"]},
-            {"name": "Smart", "warranty": "36 months", "details": "white or ivory; quarter turn; bib cock, angle cock, long body bib cock and pillar cock also come with the ISI mark",
-             "items": ["angle cock", "bib cock", "nozzle cock", "long body bib cock", "pillar cock", "2 way angle cock", "2 way bib cock", "mini sink cock", "mini swan neck", "sink cock", "swan neck", "wall mixer non-telephonic", "sink mixer", "basin mixer", "wall mixer with L-bend"]},
-            {"name": "Silk", "warranty": "36 months", "details": "ivory; quarter turn; bib cock, angle cock, long body bib cock and pillar cock also come with the ISI mark",
-             "items": ["angle cock", "bib cock", "nozzle cock", "long body bib cock", "pillar cock", "2 way angle cock", "2 way bib cock", "mini sink cock", "mini swan neck", "sink cock", "swan neck", "wall mixer non-telephonic", "sink mixer", "basin mixer", "wall mixer with L-bend"]},
-            {"name": "Renova", "aliases": ["renova", "renowa", "rinova"], "warranty": "36 months", "details": "white body with blue handle; quarter turn",
-             "items": ["angle cock", "bib cock", "bib cock nozzle body", "long bib cock", "pillar cock", "washing machine cock", "2 way angle cock", "2 way bib cock", "sink cock", "swan neck", "wall mixer non-telephonic", "sink mixer", "center hole mixer", "wall mixer with L-bend"]},
-            {"name": "Pro", "warranty": "36 months", "details": "white body with black handle; full turn",
-             "items": ["angle cock", "stop cock female", "stop cock male", "bib cock", "nozzle cock", "long body bib cock", "pillar cock", "2 way angle cock", "2 way bib cock", "mini sink cock", "mini swan neck", "sink cock", "swan neck", "sink mixer", "wall mixer with L-bend"]},
-            {"name": "Sonic", "aliases": ["sonic", "sonik"], "warranty": "36 months", "details": "white body with blue handle, or ivory body with yellow handle; quarter turn",
-             "items": ["angle cock", "bib cock", "bib cock nozzle body", "long bib cock", "pillar cock", "washing machine cock", "2 way angle cock", "2 way bib cock", "sink cock", "swan neck", "wall mixer non-telephonic", "sink mixer", "center hole mixer", "wall mixer with L-bend"]},
-            {"name": "Casa", "aliases": ["casa", "kasa"], "warranty": "36 months", "details": "newly launched; white body with blue handle; quarter turn",
-             "items": ["long bib cock", "bib cock", "angle cock", "pillar cock"]},
-            {"name": "Rhino", "aliases": ["rhino", "raino", "rino"], "warranty": "24 months", "details": "newly launched; white body with blue handle, or ivory body with yellow handle; quarter turn",
-             "items": ["angle cock", "bib cock", "bib cock nozzle body", "long bib cock", "pillar cock", "washing machine cock", "2 way angle cock", "2 way bib cock", "sink cock", "swan neck"]},
-            {"name": "Presto", "aliases": ["presto", "presso"], "warranty": "24 months", "details": "newly launched; white body with blue handle; quarter turn",
-             "items": ["angle cock", "bib cock", "bib cock nozzle body", "long bib cock", "pillar cock", "washing machine cock", "2 way angle cock", "2 way bib cock", "sink cock", "swan neck"]},
-            {"name": "Tee", "aliases": ["tee", "tee series"], "warranty": "36 months", "details": "white",
-             "items": ["long bib cock", "bib cock", "angle cock"]},
-            {"name": "Sony", "aliases": ["sony"], "warranty": "12 months", "details": "white", "items": ["sony tap"]},
-            {"name": "Eco", "aliases": ["eco", "eko"], "warranty": "12 months", "details": "white and blue; poly packing or box packing",
-             "items": ["angle cock", "bib cock", "nozzle cock", "long bib cock", "pillar cock", "washing machine cock", "2 way angle cock", "2 way bib cock", "sink cock", "swan neck"]}
+            {
+              "name": "Chic Dual",
+              "aliases": [
+                "chic dual",
+                "chik dual"
+              ],
+              "warranty": "36 months",
+              "details": "white body with blue handle, or ivory body with yellow handle; quarter turn",
+              "items": [
+                "angle cock",
+                "bib cock",
+                "nozzle cock",
+                "long bib cock",
+                "pillar cock",
+                "2 way angle cock",
+                "2 way bib cock",
+                "sink cock",
+                "swan neck",
+                "basin mixer",
+                "wall mixer with L-bend",
+                "wall mixer non-telephonic",
+                "sink mixer"
+              ]
+            },
+            {
+              "name": "Chic",
+              "aliases": [
+                "chic",
+                "chik",
+                "sheek"
+              ],
+              "warranty": "36 months",
+              "details": "white or ivory; quarter turn",
+              "items": [
+                "angle cock",
+                "bib cock",
+                "nozzle cock",
+                "long bib cock",
+                "pillar cock",
+                "2 way angle cock",
+                "2 way bib cock",
+                "sink cock",
+                "swan neck",
+                "wall mixer non-telephonic",
+                "sink mixer",
+                "basin mixer",
+                "wall mixer with L-bend"
+              ]
+            },
+            {
+              "name": "Wave",
+              "warranty": "36 months",
+              "details": "newly launched; white body with blue handle, or white body with grey handle; quarter turn",
+              "items": [
+                "angle cock",
+                "bib cock",
+                "bib cock nozzle body",
+                "long bib cock",
+                "pillar cock",
+                "washing machine cock",
+                "2 way angle cock",
+                "2 way bib cock",
+                "sink cock",
+                "swan neck",
+                "wall mixer non-telephonic",
+                "sink mixer",
+                "center hole mixer",
+                "wall mixer with L-bend"
+              ]
+            },
+            {
+              "name": "Smart Dual",
+              "aliases": [
+                "smart dual"
+              ],
+              "warranty": "36 months",
+              "details": "white body with blue handle, or ivory body with yellow handle; quarter turn",
+              "items": [
+                "angle cock",
+                "bib cock",
+                "nozzle cock",
+                "long body bib cock",
+                "pillar cock",
+                "2 way angle cock",
+                "2 way bib cock",
+                "mini sink cock",
+                "mini swan neck",
+                "sink cock",
+                "swan neck",
+                "wall mixer non-telephonic",
+                "sink mixer",
+                "basin mixer",
+                "wall mixer with L-bend"
+              ]
+            },
+            {
+              "name": "Smart",
+              "warranty": "36 months",
+              "details": "white or ivory; quarter turn; bib cock, angle cock, long body bib cock and pillar cock also come with the ISI mark",
+              "items": [
+                "angle cock",
+                "bib cock",
+                "nozzle cock",
+                "long body bib cock",
+                "pillar cock",
+                "2 way angle cock",
+                "2 way bib cock",
+                "mini sink cock",
+                "mini swan neck",
+                "sink cock",
+                "swan neck",
+                "wall mixer non-telephonic",
+                "sink mixer",
+                "basin mixer",
+                "wall mixer with L-bend"
+              ]
+            },
+            {
+              "name": "Silk",
+              "warranty": "36 months",
+              "details": "ivory; quarter turn; bib cock, angle cock, long body bib cock and pillar cock also come with the ISI mark",
+              "items": [
+                "angle cock",
+                "bib cock",
+                "nozzle cock",
+                "long body bib cock",
+                "pillar cock",
+                "2 way angle cock",
+                "2 way bib cock",
+                "mini sink cock",
+                "mini swan neck",
+                "sink cock",
+                "swan neck",
+                "wall mixer non-telephonic",
+                "sink mixer",
+                "basin mixer",
+                "wall mixer with L-bend"
+              ]
+            },
+            {
+              "name": "Renova",
+              "aliases": [
+                "renova",
+                "renowa",
+                "rinova"
+              ],
+              "warranty": "36 months",
+              "details": "white body with blue handle; quarter turn",
+              "items": [
+                "angle cock",
+                "bib cock",
+                "bib cock nozzle body",
+                "long bib cock",
+                "pillar cock",
+                "washing machine cock",
+                "2 way angle cock",
+                "2 way bib cock",
+                "sink cock",
+                "swan neck",
+                "wall mixer non-telephonic",
+                "sink mixer",
+                "center hole mixer",
+                "wall mixer with L-bend"
+              ]
+            },
+            {
+              "name": "Pro",
+              "warranty": "36 months",
+              "details": "white body with black handle; full turn",
+              "items": [
+                "angle cock",
+                "stop cock female",
+                "stop cock male",
+                "bib cock",
+                "nozzle cock",
+                "long body bib cock",
+                "pillar cock",
+                "2 way angle cock",
+                "2 way bib cock",
+                "mini sink cock",
+                "mini swan neck",
+                "sink cock",
+                "swan neck",
+                "sink mixer",
+                "wall mixer with L-bend"
+              ]
+            },
+            {
+              "name": "Sonic",
+              "aliases": [
+                "sonic",
+                "sonik"
+              ],
+              "warranty": "36 months",
+              "details": "white body with blue handle, or ivory body with yellow handle; quarter turn",
+              "items": [
+                "angle cock",
+                "bib cock",
+                "bib cock nozzle body",
+                "long bib cock",
+                "pillar cock",
+                "washing machine cock",
+                "2 way angle cock",
+                "2 way bib cock",
+                "sink cock",
+                "swan neck",
+                "wall mixer non-telephonic",
+                "sink mixer",
+                "center hole mixer",
+                "wall mixer with L-bend"
+              ]
+            },
+            {
+              "name": "Casa",
+              "aliases": [
+                "casa",
+                "kasa"
+              ],
+              "warranty": "36 months",
+              "details": "newly launched; white body with blue handle; quarter turn",
+              "items": [
+                "long bib cock",
+                "bib cock",
+                "angle cock",
+                "pillar cock"
+              ]
+            },
+            {
+              "name": "Rhino",
+              "aliases": [
+                "rhino",
+                "raino",
+                "rino"
+              ],
+              "warranty": "24 months",
+              "details": "newly launched; white body with blue handle, or ivory body with yellow handle; quarter turn",
+              "items": [
+                "angle cock",
+                "bib cock",
+                "bib cock nozzle body",
+                "long bib cock",
+                "pillar cock",
+                "washing machine cock",
+                "2 way angle cock",
+                "2 way bib cock",
+                "sink cock",
+                "swan neck"
+              ]
+            },
+            {
+              "name": "Presto",
+              "aliases": [
+                "presto",
+                "presso"
+              ],
+              "warranty": "24 months",
+              "details": "newly launched; white body with blue handle; quarter turn",
+              "items": [
+                "angle cock",
+                "bib cock",
+                "bib cock nozzle body",
+                "long bib cock",
+                "pillar cock",
+                "washing machine cock",
+                "2 way angle cock",
+                "2 way bib cock",
+                "sink cock",
+                "swan neck"
+              ]
+            },
+            {
+              "name": "Tee",
+              "aliases": [
+                "tee",
+                "tee series"
+              ],
+              "warranty": "36 months",
+              "details": "white",
+              "items": [
+                "long bib cock",
+                "bib cock",
+                "angle cock"
+              ]
+            },
+            {
+              "name": "Sony",
+              "aliases": [
+                "sony"
+              ],
+              "warranty": "12 months",
+              "details": "white",
+              "items": [
+                "sony tap"
+              ]
+            },
+            {
+              "name": "Eco",
+              "aliases": [
+                "eco",
+                "eko"
+              ],
+              "warranty": "12 months",
+              "details": "white and blue; poly packing or box packing",
+              "items": [
+                "angle cock",
+                "bib cock",
+                "nozzle cock",
+                "long bib cock",
+                "pillar cock",
+                "washing machine cock",
+                "2 way angle cock",
+                "2 way bib cock",
+                "sink cock",
+                "swan neck"
+              ]
+            }
           ]
         },
         {
           "name": "Maria basin mixer",
-          "aliases": ["maria basin mixer", "single lever basin mixer", "single lever mixer", "tall basin mixer", "basin mixer tall body"],
+          "aliases": [
+            "maria basin mixer",
+            "single lever basin mixer",
+            "single lever mixer",
+            "tall basin mixer",
+            "basin mixer tall body"
+          ],
           "warranty": "36 months",
           "models": [
-            {"name": "Maria single lever basin mixer, tall body", "aliases": ["maria"], "details": "9 inch tall; white body with blue handle, or ivory body with yellow handle"}
+            {
+              "name": "Maria single lever basin mixer, tall body",
+              "aliases": [
+                "maria"
+              ],
+              "details": "9 inch tall; white body with blue handle, or ivory body with yellow handle"
+            }
           ]
         },
         {
           "name": "Kitchen sink",
-          "aliases": ["kitchen sink", "sink", "steel sink", "stainless steel sink", "ss sink", "kitchen basin", "sinc", "सिंक", "किचन सिंक"],
+          "aliases": [
+            "kitchen sink",
+            "sink",
+            "steel sink",
+            "stainless steel sink",
+            "ss sink",
+            "kitchen basin",
+            "sinc",
+            "सिंक",
+            "किचन सिंक"
+          ],
           "warranty": "5 years",
           "models": [
-            {"name": "Silk single bowl", "aliases": ["silk", "silk single bowl", "single bowl"], "details": "Silk series, 18x16x9 or 24x18x9 inch"},
-            {"name": "Silk single bowl with drain board", "aliases": ["drain board", "drainboard", "silk drain board"], "details": "Silk series, 37x18x8 or 45x20x8 inch"},
-            {"name": "Silk double bowl", "aliases": ["silk double bowl", "double bowl"], "details": "Silk series, 37x18x9 or 45x20x10 inch"},
-            {"name": "Chic single bowl handmade", "aliases": ["chic", "handmade", "chic single bowl"], "details": "Chic series, handmade, 24x18x10 inch, with or without tap hole"},
-            {"name": "Chic double bowl handmade", "aliases": ["chic double bowl"], "details": "Chic series, handmade, 37x18x10 or 45x20x10 inch, with or without tap hole"},
-            {"name": "Brass sink cock or swan neck with flexible spout", "aliases": ["flexible spout", "brass sink cock", "brass swan neck", "brass tap", "brass nal", "brass kitchen tap", "flexible tap"], "warranty": "12 months", "details": "newly launched brass kitchen tap with a flexible spout, sink cock or swan neck"}
+            {
+              "name": "Silk single bowl",
+              "aliases": [
+                "silk",
+                "silk single bowl",
+                "single bowl"
+              ],
+              "details": "Silk series, 18x16x9 or 24x18x9 inch"
+            },
+            {
+              "name": "Silk single bowl with drain board",
+              "aliases": [
+                "drain board",
+                "drainboard",
+                "silk drain board"
+              ],
+              "details": "Silk series, 37x18x8 or 45x20x8 inch"
+            },
+            {
+              "name": "Silk double bowl",
+              "aliases": [
+                "silk double bowl",
+                "double bowl"
+              ],
+              "details": "Silk series, 37x18x9 or 45x20x10 inch"
+            },
+            {
+              "name": "Chic single bowl handmade",
+              "aliases": [
+                "chic",
+                "handmade",
+                "chic single bowl"
+              ],
+              "details": "Chic series, handmade, 24x18x10 inch, with or without tap hole"
+            },
+            {
+              "name": "Chic double bowl handmade",
+              "aliases": [
+                "chic double bowl"
+              ],
+              "details": "Chic series, handmade, 37x18x10 or 45x20x10 inch, with or without tap hole"
+            },
+            {
+              "name": "Brass sink cock or swan neck with flexible spout",
+              "aliases": [
+                "flexible spout",
+                "brass sink cock",
+                "brass swan neck",
+                "brass tap",
+                "brass nal",
+                "brass kitchen tap",
+                "flexible tap"
+              ],
+              "warranty": "12 months",
+              "details": "newly launched brass kitchen tap with a flexible spout, sink cock or swan neck"
+            }
           ]
         },
         {
           "name": "Shower",
-          "aliases": ["shower", "showers", "overhead shower", "shower head", "fawara", "fuvvara", "phuvvara", "hand shower", "shawar", "shavar", "sower", "फव्वारा", "शावर"],
+          "aliases": [
+            "shower",
+            "showers",
+            "overhead shower",
+            "shower head",
+            "fawara",
+            "fuvvara",
+            "phuvvara",
+            "hand shower",
+            "shawar",
+            "shavar",
+            "sower",
+            "फव्वारा",
+            "शावर"
+          ],
           "warranty": "24 months",
           "models": [
-            {"name": "Skymist", "details": "with arm and flange, 6x8 inch; white and blue, or yellow and ivory"},
-            {"name": "Theo", "details": "with arm and flange, 5x9 inch; white and blue, or yellow and ivory"},
-            {"name": "Leo", "details": "with arm and flange, 3x9 inch; white and blue, or yellow and ivory"},
-            {"name": "Juno", "details": "with arm and flange, 4x5 inch; white and blue, or yellow and ivory"},
-            {"name": "Calvin", "details": "with steel arm and flange, 6 or 4 inch"},
-            {"name": "Delta", "details": "with steel arm and flange, 4 inch"},
-            {"name": "Donna", "details": "with steel arm and flange, 4x6 inch"},
-            {"name": "Creta", "details": "multiflow; white or ivory"},
-            {"name": "Stella", "details": "with steel arm and flange, 80 mm or 125 mm"},
-            {"name": "Luca", "details": "with arm and flange, 6 or 4 inch; white and blue, or yellow and ivory"},
-            {"name": "Eric hand shower", "aliases": ["eric", "ptmt hand shower"], "details": "PTMT hand shower with tube and hook, 1.5 m or 1 m"},
-            {"name": "Chrome hand shower", "aliases": ["chrome hand shower"], "details": "with 1.5 m steel chain and hook"}
+            {
+              "name": "Skymist",
+              "details": "with arm and flange, 6x8 inch; white and blue, or yellow and ivory"
+            },
+            {
+              "name": "Theo",
+              "details": "with arm and flange, 5x9 inch; white and blue, or yellow and ivory"
+            },
+            {
+              "name": "Leo",
+              "details": "with arm and flange, 3x9 inch; white and blue, or yellow and ivory"
+            },
+            {
+              "name": "Juno",
+              "details": "with arm and flange, 4x5 inch; white and blue, or yellow and ivory"
+            },
+            {
+              "name": "Calvin",
+              "details": "with steel arm and flange, 6 or 4 inch"
+            },
+            {
+              "name": "Delta",
+              "details": "with steel arm and flange, 4 inch"
+            },
+            {
+              "name": "Donna",
+              "details": "with steel arm and flange, 4x6 inch"
+            },
+            {
+              "name": "Creta",
+              "details": "multiflow; white or ivory"
+            },
+            {
+              "name": "Stella",
+              "details": "with steel arm and flange, 80 mm or 125 mm"
+            },
+            {
+              "name": "Luca",
+              "details": "with arm and flange, 6 or 4 inch; white and blue, or yellow and ivory"
+            },
+            {
+              "name": "Eric hand shower",
+              "aliases": [
+                "eric",
+                "ptmt hand shower"
+              ],
+              "details": "PTMT hand shower with tube and hook, 1.5 m or 1 m"
+            },
+            {
+              "name": "Chrome hand shower",
+              "aliases": [
+                "chrome hand shower"
+              ],
+              "details": "with 1.5 m steel chain and hook"
+            }
           ]
         },
         {
           "name": "Health faucet",
-          "aliases": ["health faucet", "health faucets", "health fosset", "muslim shower", "bidet", "bidet spray", "toilet spray", "toilet jet", "hand spray", "हेल्थ फॉसेट"],
+          "aliases": [
+            "health faucet",
+            "health faucets",
+            "health fosset",
+            "muslim shower",
+            "bidet",
+            "bidet spray",
+            "toilet spray",
+            "toilet jet",
+            "hand spray",
+            "हेल्थ फॉसेट"
+          ],
           "warranty": "12 months",
-          "features": ["trigger control", "flexible body", "chrome, black or white"],
+          "features": [
+            "trigger control",
+            "flexible body",
+            "chrome, black or white"
+          ],
           "models": [
-            {"name": "Nova", "details": "chrome, 1 m hose and hook"},
-            {"name": "Luna", "details": "1 m steel chain, tube and hook"},
-            {"name": "Casper", "details": "1 m steel chain and hook"},
-            {"name": "Silk Black", "aliases": ["silk black", "black"], "details": "black, 1.2 m black hose and hook"},
-            {"name": "Silk White", "aliases": ["silk white", "white"], "details": "white, 1 m hose and hook"},
-            {"name": "Pablo", "details": "with tube, 1 m, and hook"},
-            {"name": "Emris", "details": "with tube, 1.5 m or 1 m, and hook"}
+            {
+              "name": "Nova",
+              "details": "chrome, 1 m hose and hook"
+            },
+            {
+              "name": "Luna",
+              "details": "1 m steel chain, tube and hook"
+            },
+            {
+              "name": "Casper",
+              "details": "1 m steel chain and hook"
+            },
+            {
+              "name": "Silk Black",
+              "aliases": [
+                "silk black",
+                "black"
+              ],
+              "details": "black, 1.2 m black hose and hook"
+            },
+            {
+              "name": "Silk White",
+              "aliases": [
+                "silk white",
+                "white"
+              ],
+              "details": "white, 1 m hose and hook"
+            },
+            {
+              "name": "Pablo",
+              "details": "with tube, 1 m, and hook"
+            },
+            {
+              "name": "Emris",
+              "details": "with tube, 1.5 m or 1 m, and hook"
+            }
           ]
         },
         {
           "name": "Bath accessories",
-          "aliases": ["bath accessories", "bathroom accessories", "accessories", "bath accessory", "bathroom accessory"],
+          "aliases": [
+            "bath accessories",
+            "bathroom accessories",
+            "accessories",
+            "bath accessory",
+            "bathroom accessory"
+          ],
           "models": [
-            {"name": "Corner cabinet", "aliases": ["corner cabinet"], "details": "newly launched; ivory or white"},
-            {"name": "Cabinet mirror", "aliases": ["mirror", "cabinet mirror", "mirror cabinet", "bathroom mirror", "shisha", "aaina", "शीशा"], "details": "bathroom cabinet with mirror"},
-            {"name": "Soap dish", "aliases": ["soap dish", "soap dish square", "soap dish round", "double soap dish", "sabun dani", "sabundani"], "details": "single square, single round or double square; acrylic or white"},
-            {"name": "PTMT tumbler holder", "aliases": ["tumbler holder", "tumbler", "glass holder"], "details": "acrylic or white"},
-            {"name": "Shelf", "aliases": ["shelf", "single shelf", "corner shelf", "self", "rack shelf"], "details": "single shelf 18 inch, or 3-piece corner shelf; acrylic or white"},
-            {"name": "Towel rod and towel ring", "aliases": ["towel rod", "towel ring", "towel holder", "towel hanger", "tauliya"], "details": "towel rod 24 inch; towel ring round or square"},
-            {"name": "Soap dispenser", "aliases": ["soap dispenser", "liquid soap dispenser", "dispenser"], "details": "black or white"},
-            {"name": "Grating", "aliases": ["grating", "jali", "drain jali", "floor trap jali", "cockroach grating", "round grating", "square grating", "nali jali"], "details": "PTMT round or square grating, 102, 127 or 152 mm; square cockroach grating 152 mm"},
-            {"name": "Jet spray", "aliases": ["jet spray", "jetspray", "ss jet spray", "ptmt jet spray", "जेट स्प्रे"], "warranty": "24 months", "details": "steel American, Multi or Butterfly, 1 m or 1.5 m; or PTMT jet spray in white or ivory"},
-            {"name": "Long bend", "aliases": ["long bend", "bend", "detachable long bend"], "details": "plain, with adaptor, or detachable; white"},
-            {"name": "Foot valve", "aliases": ["foot valve", "footvalve"], "details": "25 mm, blue"},
-            {"name": "Bottle trap", "aliases": ["bottle trap"], "details": "ivory"},
-            {"name": "Washing machine pipe", "aliases": ["washing machine pipe", "washing machine inlet pipe", "washing machine outlet pipe", "inlet pipe", "outlet pipe", "washing machine hose"], "warranty": "24 months", "details": "inlet pipe 1.5, 2, 3 or 4 m; outlet pipe 1.5 or 3 m"},
-            {"name": "Hose", "aliases": ["braided hose", "ss braided hose", "shower hose", "ss chain shower hose", "connecting hose", "connection pipe", "connector"], "details": "steel braided hose 18 or 24 inch; steel chain shower hose 1 to 1.2 m or 1.5 to 1.7 m; connecting hose, with or without key, 450 to 1500 mm; 12 months warranty on steel hoses"},
-            {"name": "Sink coupling", "aliases": ["sink coupling", "waste coupling", "coupling"], "details": "kitchen sink coupling round or sink coupling square, 12 months warranty; PTMT full thread waste coupling in ivory or white, 24 months warranty"},
-            {"name": "PVC waste pipe", "aliases": ["waste pipe", "pvc waste pipe", "collapsible pipe", "drain pipe for basin"], "details": "PVC waste pipe and collapsible pipe, white"},
-            {"name": "PTMT ball cock", "aliases": ["ball cock", "ballcock", "float valve", "tank float"], "warranty": "24 months", "details": "with rod and ball, 15, 20 or 25 mm"},
-            {"name": "PTMT push cock", "aliases": ["push cock"], "details": "ivory"},
-            {"name": "PTFE thread seal tape", "aliases": ["teflon tape", "thread seal tape", "ptfe tape", "tape"], "details": "12 mm, 5 m or 10 m"},
-            {"name": "Extension nipple", "aliases": ["extension nipple", "nipple"], "details": "25, 40 or 55 mm"}
+            {
+              "name": "Corner cabinet",
+              "aliases": [
+                "corner cabinet"
+              ],
+              "details": "newly launched; ivory or white"
+            },
+            {
+              "name": "Cabinet mirror",
+              "aliases": [
+                "mirror",
+                "cabinet mirror",
+                "mirror cabinet",
+                "bathroom mirror",
+                "shisha",
+                "aaina",
+                "शीशा"
+              ],
+              "details": "bathroom cabinet with mirror"
+            },
+            {
+              "name": "Soap dish",
+              "aliases": [
+                "soap dish",
+                "soap dish square",
+                "soap dish round",
+                "double soap dish",
+                "sabun dani",
+                "sabundani"
+              ],
+              "details": "single square, single round or double square; acrylic or white"
+            },
+            {
+              "name": "PTMT tumbler holder",
+              "aliases": [
+                "tumbler holder",
+                "tumbler",
+                "glass holder"
+              ],
+              "details": "acrylic or white"
+            },
+            {
+              "name": "Shelf",
+              "aliases": [
+                "shelf",
+                "single shelf",
+                "corner shelf",
+                "self",
+                "rack shelf"
+              ],
+              "details": "single shelf 18 inch, or 3-piece corner shelf; acrylic or white"
+            },
+            {
+              "name": "Towel rod and towel ring",
+              "aliases": [
+                "towel rod",
+                "towel ring",
+                "towel holder",
+                "towel hanger",
+                "tauliya"
+              ],
+              "details": "towel rod 24 inch; towel ring round or square"
+            },
+            {
+              "name": "Soap dispenser",
+              "aliases": [
+                "soap dispenser",
+                "liquid soap dispenser",
+                "dispenser"
+              ],
+              "details": "black or white"
+            },
+            {
+              "name": "Grating",
+              "aliases": [
+                "grating",
+                "jali",
+                "drain jali",
+                "floor trap jali",
+                "cockroach grating",
+                "round grating",
+                "square grating",
+                "nali jali"
+              ],
+              "details": "PTMT round or square grating, 102, 127 or 152 mm; square cockroach grating 152 mm"
+            },
+            {
+              "name": "Jet spray",
+              "aliases": [
+                "jet spray",
+                "jetspray",
+                "ss jet spray",
+                "ptmt jet spray",
+                "जेट स्प्रे"
+              ],
+              "warranty": "24 months",
+              "details": "steel American, Multi or Butterfly, 1 m or 1.5 m; or PTMT jet spray in white or ivory"
+            },
+            {
+              "name": "Long bend",
+              "aliases": [
+                "long bend",
+                "bend",
+                "detachable long bend"
+              ],
+              "details": "plain, with adaptor, or detachable; white"
+            },
+            {
+              "name": "Foot valve",
+              "aliases": [
+                "foot valve",
+                "footvalve"
+              ],
+              "details": "25 mm, blue"
+            },
+            {
+              "name": "Bottle trap",
+              "aliases": [
+                "bottle trap"
+              ],
+              "details": "ivory"
+            },
+            {
+              "name": "Washing machine pipe",
+              "aliases": [
+                "washing machine pipe",
+                "washing machine inlet pipe",
+                "washing machine outlet pipe",
+                "inlet pipe",
+                "outlet pipe",
+                "washing machine hose"
+              ],
+              "warranty": "24 months",
+              "details": "inlet pipe 1.5, 2, 3 or 4 m; outlet pipe 1.5 or 3 m"
+            },
+            {
+              "name": "Hose",
+              "aliases": [
+                "braided hose",
+                "ss braided hose",
+                "shower hose",
+                "ss chain shower hose",
+                "connecting hose",
+                "connection pipe",
+                "connector"
+              ],
+              "details": "steel braided hose 18 or 24 inch; steel chain shower hose 1 to 1.2 m or 1.5 to 1.7 m; connecting hose, with or without key, 450 to 1500 mm; 12 months warranty on steel hoses"
+            },
+            {
+              "name": "Sink coupling",
+              "aliases": [
+                "sink coupling",
+                "waste coupling",
+                "coupling"
+              ],
+              "details": "kitchen sink coupling round or sink coupling square, 12 months warranty; PTMT full thread waste coupling in ivory or white, 24 months warranty"
+            },
+            {
+              "name": "PVC waste pipe",
+              "aliases": [
+                "waste pipe",
+                "pvc waste pipe",
+                "collapsible pipe",
+                "drain pipe for basin"
+              ],
+              "details": "PVC waste pipe and collapsible pipe, white"
+            },
+            {
+              "name": "PTMT ball cock",
+              "aliases": [
+                "ball cock",
+                "ballcock",
+                "float valve",
+                "tank float"
+              ],
+              "warranty": "24 months",
+              "details": "with rod and ball, 15, 20 or 25 mm"
+            },
+            {
+              "name": "PTMT push cock",
+              "aliases": [
+                "push cock"
+              ],
+              "details": "ivory"
+            },
+            {
+              "name": "PTFE thread seal tape",
+              "aliases": [
+                "teflon tape",
+                "thread seal tape",
+                "ptfe tape",
+                "tape"
+              ],
+              "details": "12 mm, 5 m or 10 m"
+            },
+            {
+              "name": "Extension nipple",
+              "aliases": [
+                "extension nipple",
+                "nipple"
+              ],
+              "details": "25, 40 or 55 mm"
+            }
           ]
         },
         {
           "name": "Plastic manhole chamber cover",
-          "aliases": ["manhole cover", "manhole", "chamber cover", "manhole chamber cover", "gutter cover", "ढक्कन"],
+          "aliases": [
+            "manhole cover",
+            "manhole",
+            "chamber cover",
+            "manhole chamber cover",
+            "gutter cover",
+            "ढक्कन"
+          ],
           "models": [
-            {"name": "Manhole chamber cover", "aliases": ["manhole"], "details": "250x250, 300x300, 450x450, 450x600 or 600x600 mm"}
+            {
+              "name": "Manhole chamber cover",
+              "aliases": [
+                "manhole"
+              ],
+              "details": "250x250, 300x300, 450x450, 450x600 or 600x600 mm"
+            }
           ]
         },
         {
           "name": "Cistern spare parts",
-          "aliases": ["spare parts", "cistern spare parts", "cistern fitting", "cistern fitting set", "syphon", "siphon", "cistern handle", "flush handle", "ballcock spare"],
+          "aliases": [
+            "spare parts",
+            "cistern spare parts",
+            "cistern fitting",
+            "cistern fitting set",
+            "syphon",
+            "siphon",
+            "cistern handle",
+            "flush handle",
+            "ballcock spare"
+          ],
           "models": [
-            {"name": "Cistern fitting set", "details": "complete fitting set"},
-            {"name": "Single flush syphon", "aliases": ["syphon", "siphon"], "details": "spare part"},
-            {"name": "Single flush ballcock", "details": "spare part"},
-            {"name": "Long ballcock", "details": "spare part"},
-            {"name": "Cistern handle assembly", "aliases": ["handle"], "details": "spare part"}
+            {
+              "name": "Cistern fitting set",
+              "details": "complete fitting set"
+            },
+            {
+              "name": "Single flush syphon",
+              "aliases": [
+                "syphon",
+                "siphon"
+              ],
+              "details": "spare part"
+            },
+            {
+              "name": "Single flush ballcock",
+              "details": "spare part"
+            },
+            {
+              "name": "Long ballcock",
+              "details": "spare part"
+            },
+            {
+              "name": "Cistern handle assembly",
+              "aliases": [
+                "handle"
+              ],
+              "details": "spare part"
+            }
           ]
         },
         {
-          "name": "Tank filter",
-          "aliases": ["tank filter", "water filter for tank", "y screen filter", "y filter", "screen filter", "filter"],
-          "features": ["for cleaning domestic home water tanks"],
+          "name": "Garden pipe",
+          "aliases": [
+            "garden pipe",
+            "garden hose",
+            "hose pipe",
+            "pipe for garden",
+            "braided pipe",
+            "europa pipe",
+            "indus pipe",
+            "paani ka pipe garden",
+            "गार्डन पाइप"
+          ],
           "models": [
-            {"name": "Y screen filter", "details": "3/4 inch (20 mm), 1 inch (25 mm), 1-1/4 inch (32 mm) or 1-1/2 inch (40 mm)"}
-          ]
+            {
+              "name": "Europa garden pipe",
+              "aliases": [
+                "europa"
+              ],
+              "details": "blue, 30 m, 1/2, 3/4 or 1 inch"
+            },
+            {
+              "name": "Indus garden pipe",
+              "aliases": [
+                "indus"
+              ],
+              "details": "light green, 30 m, 1/2, 3/4, 1 or 1-1/4 inch"
+            },
+            {
+              "name": "Braided pipe",
+              "aliases": [
+                "braided"
+              ],
+              "details": "30 m, 1/2, 3/4 or 1 inch"
+            }
+          ],
+          "area_manager": "Moulding"
         }
-      ]
+      ],
+      "area_manager": "Water tank"
     },
     {
       "id": "household",
       "name": "Household",
-      "aliases": ["household", "household products", "household items", "house hold", "ghar ka saman", "ghar ka product", "ghar ke product", "plastic products", "plastic items", "plasticware", "हाउसहोल्ड", "घर का सामान"],
+      "aliases": [
+        "household",
+        "household products",
+        "household items",
+        "house hold",
+        "ghar ka saman",
+        "ghar ka product",
+        "ghar ke product",
+        "plastic products",
+        "plastic items",
+        "plasticware",
+        "हाउसहोल्ड",
+        "घर का सामान"
+      ],
       "products": [
-        {"name": "Bucket", "aliases": ["bucket", "buckets", "balti", "baalti", "baltiyan", "बाल्टी"],
-         "models": [
-           {"name": "Kaveri", "details": "5 litre"}, {"name": "Narmada", "details": "9 litre"},
-           {"name": "Jhanvi", "aliases": ["jhanvi", "jahnavi"], "details": "13 litre, with or without lid"},
-           {"name": "Ganga", "details": "16 litre, with or without lid"},
-           {"name": "Mandakini", "details": "19 litre, with or without lid"},
-           {"name": "Bhagirathi", "details": "22 litre, with or without lid"},
-           {"name": "Alakananda", "aliases": ["alaknanda", "alakananda"], "details": "25 litre, with or without lid"},
-           {"name": "Printed bucket", "aliases": ["printed bucket", "printed"], "details": "5, 9, 13, 16, 19, 22 or 25 litre"},
-           {"name": "Vectus Silk bucket", "aliases": ["silk bucket", "silk"], "details": "13, 16, 19, 22 or 25 litre"}
-         ]},
-        {"name": "Milk bucket", "aliases": ["milk bucket", "milk can", "doodh ki balti", "doodh ka dibba", "doodh can", "dudh balti", "maxima", "दूध की बाल्टी"],
-         "models": [
-           {"name": "Maxima with MS handle", "aliases": ["maxima ms handle"], "details": "5, 10, 15 or 20 litre"},
-           {"name": "ND Maxima with MS handle", "aliases": ["nd maxima"], "details": "20 litre"},
-           {"name": "Maxima", "details": "20, 30 or 40 litre"},
-           {"name": "Milk bucket with MS handle", "details": "3.5 or 7.5 litre"},
-           {"name": "Milk bucket", "details": "20 litre"}
-         ]},
-        {"name": "Tub", "aliases": ["tub", "tubs", "deep tub", "tab", "bath tub plastic", "टब"],
-         "models": [
-           {"name": "Printed Amber", "aliases": ["printed amber"], "details": "35 litre, without handle"},
-           {"name": "Ambar", "aliases": ["amber", "ambar"], "details": "35 litre, with or without handle"},
-           {"name": "Gagan", "details": "50 litre, with or without handle"},
-           {"name": "Aakash", "aliases": ["aakash", "akash"], "details": "65 litre, with or without handle"},
-           {"name": "Swami", "details": "70 litre, with or without handle"},
-           {"name": "Singham", "details": "100 litre, with handle"}
-         ]},
-        {"name": "Tasla", "aliases": ["tasla", "taslas", "tasala", "agri tasla", "silk tasla", "ghamela", "tagari", "तसला"],
-         "models": [
-           {"name": "Agri plastic taslas", "aliases": ["agri plastic tasla"], "details": "Sudhakar, Suraj, Surya, Dinesh, Aditya, Bhaskar, Diwakar, Dinkar, Prabhakar, Karan, Arun, Ravi and Tasla-240 H"},
-           {"name": "Agri silk taslas", "aliases": ["agri silk tasla", "silk tasla"], "details": "16, 17, 18, 20 and 22 inch, and CN 18 inch"}
-         ]},
-        {"name": "Mug", "aliases": ["mug", "mugs", "mag", "bathroom mug", "मग"],
-         "models": [
-           {"name": "Silk mug", "aliases": ["silk"], "details": "1 or 1.5 litre"},
-           {"name": "Mug", "details": "1 or 1.5 litre"},
-           {"name": "Printed mug", "aliases": ["printed"], "details": "1 or 1.5 litre"}
-         ]},
-        {"name": "Soap case", "aliases": ["soap case", "soap box", "sabun case", "sabun dibba"],
-         "models": [{"name": "Soap case", "details": "without lid"}, {"name": "Soap case with lid", "details": "with lid"}]},
-        {"name": "Dust pan", "aliases": ["dust pan", "dustpan", "kachra uthane wala", "supdi"],
-         "models": [{"name": "Small", "details": "small"}, {"name": "Big", "details": "big"}]},
-        {"name": "Sup, gagar and lota", "aliases": ["gagar", "gagri", "matka", "lota", "sup", "soop", "supa", "गागर", "लोटा"],
-         "models": [
-           {"name": "Sup", "aliases": ["sup", "soop", "supa"], "details": "16x16 inch"},
-           {"name": "Gagar", "aliases": ["gagar", "gagri", "matka"], "details": "5, 10, 14 or 17 litre, without lid"},
-           {"name": "Lota", "aliases": ["lota"], "details": "2.5 litre, with or without lid"}
-         ]},
-        {"name": "Basin", "aliases": ["basin", "patila", "plastic basin"],
-         "models": [{"name": "Sameer", "details": "8 inch, with or without lid"}, {"name": "Pawan", "details": "10 inch, with or without lid"}]},
-        {"name": "Racks and baskets", "aliases": ["rack", "racks", "basket", "baskets", "laundry basket", "picnic basket", "tea basket", "kilta", "corner rack", "round rack", "rectangular rack", "tokri", "टोकरी"],
-         "models": [
-           {"name": "Corner rack", "aliases": ["corner rack"], "details": "corner rack"},
-           {"name": "Round rack", "aliases": ["round rack"], "details": "round rack"},
-           {"name": "Rectangular rack", "aliases": ["rectangular rack"], "details": "rectangular rack"},
-           {"name": "Picnic basket", "aliases": ["picnic basket"], "details": "picnic basket"},
-           {"name": "Laundry basket", "aliases": ["laundry basket", "kapde ki tokri"], "details": "round or square, with lid"},
-           {"name": "Tea basket kilta", "aliases": ["tea basket", "kilta"], "details": "tea basket kilta"}
-         ]},
-        {"name": "Kitchen trays and jaalis", "aliases": ["kitchen tray", "tray", "jaali", "jali", "colander", "vegetable basket", "chandramukhi", "surajmukhi"],
-         "models": [
-           {"name": "Kitchen tray", "aliases": ["kitchen tray", "tray"], "details": "small or big"},
-           {"name": "Chandramukhi", "details": "jaali basket"},
-           {"name": "Surajmukhi", "details": "jaali basket"},
-           {"name": "Jaali multiuse", "aliases": ["jaali", "multiuse jaali"], "details": "multipurpose jaali"}
-         ]},
-        {"name": "Jug, crate and drum", "aliases": ["jug", "jag", "crate", "crates", "drum", "drums", "जग", "ड्रम"],
-         "models": [
-           {"name": "Jug", "aliases": ["jug", "jag"], "details": "2 litre, plain or printed"},
-           {"name": "Crate", "aliases": ["crate", "crates"], "details": "20 kg capacity"},
-           {"name": "Drum", "aliases": ["drum", "drums", "plastic drum", "ड्रम"], "details": "30 or 60 litre with lid, 40 litre with or without lid"}
-         ]},
-        {"name": "Dustbin", "aliases": ["dustbin", "dust bin", "dustbins", "kooda daan", "kudedan", "kachra dibba", "garbage bin", "garbage bucket", "pedal bin", "swing bin", "कूड़ादान", "डस्टबिन"],
-         "models": [
-           {"name": "Pedal bin", "aliases": ["pedal bin", "pedal"], "details": "small 7 litre, Ujjwal 11 litre, large 13 litre"},
-           {"name": "Household bin", "aliases": ["household bin"], "details": "10 litre, with or without lid"},
-           {"name": "Swing bin", "aliases": ["swing bin", "swing"], "details": "7 or 11 litre, with or without swing lid"},
-           {"name": "Garbage bucket swing", "aliases": ["garbage bucket"], "details": "25, 30, 40 or 60 litre"},
-           {"name": "Printed garbage bucket", "aliases": ["printed garbage bucket", "printed dustbin"], "details": "11 litre swing, or 7 or 13 litre pedal"}
-         ]},
-        {"name": "Stool", "aliases": ["stool", "stools", "patla", "patra", "peedha", "pidha", "bathroom stool", "plastic stool", "स्टूल", "पटला", "पीढ़ा"],
-         "models": [
-           {"name": "Gold", "details": "5 legs"}, {"name": "Printed round patla", "aliases": ["printed patla", "round patla"], "details": "5 legs"},
-           {"name": "Diamond", "details": "stool"}, {"name": "Shiva", "details": "stool"},
-           {"name": "Pearl", "details": "8.5 inch"}, {"name": "Solid round", "aliases": ["solid round"], "details": "stool"},
-           {"name": "Strong square", "aliases": ["strong square"], "details": "stool"},
-           {"name": "Prithvi", "details": "8, 10.3 or 12.75 inch"},
-           {"name": "Bhumi", "details": "8.5, 12 or 18 inch"},
-           {"name": "Vasundhara", "details": "11.75 or 17 inch"},
-           {"name": "Platinum", "details": "stool"},
-           {"name": "Dhara", "details": "18.5 inch"},
-           {"name": "Dharti", "details": "18.5 inch"}
-         ]},
-        {"name": "Bathroom set", "aliases": ["bathroom set", "bath set", "printed bathroom set"],
-         "models": [
-           {"name": "6 piece printed bathroom set", "aliases": ["6 piece", "six piece"], "details": "tub 35 litre, bucket 19 litre, mug 1.5 litre, dustbin 11 litre, round patla and soap case"},
-           {"name": "5 piece printed bathroom set", "aliases": ["5 piece", "five piece"], "details": "bucket 22 litre, mug 1.5 litre, dustbin 11 litre, round patla and soap case"}
-         ]}
-      ]
+        {
+          "name": "Bucket",
+          "aliases": [
+            "bucket",
+            "buckets",
+            "balti",
+            "baalti",
+            "baltiyan",
+            "बाल्टी"
+          ],
+          "models": [
+            {
+              "name": "Kaveri",
+              "details": "5 litre"
+            },
+            {
+              "name": "Narmada",
+              "details": "9 litre"
+            },
+            {
+              "name": "Jhanvi",
+              "aliases": [
+                "jhanvi",
+                "jahnavi"
+              ],
+              "details": "13 litre, with or without lid"
+            },
+            {
+              "name": "Ganga",
+              "details": "16 litre, with or without lid"
+            },
+            {
+              "name": "Mandakini",
+              "details": "19 litre, with or without lid"
+            },
+            {
+              "name": "Bhagirathi",
+              "details": "22 litre, with or without lid"
+            },
+            {
+              "name": "Alakananda",
+              "aliases": [
+                "alaknanda",
+                "alakananda"
+              ],
+              "details": "25 litre, with or without lid"
+            },
+            {
+              "name": "Printed bucket",
+              "aliases": [
+                "printed bucket",
+                "printed"
+              ],
+              "details": "5, 9, 13, 16, 19, 22 or 25 litre"
+            },
+            {
+              "name": "Vectus Silk bucket",
+              "aliases": [
+                "silk bucket",
+                "silk"
+              ],
+              "details": "13, 16, 19, 22 or 25 litre"
+            }
+          ]
+        },
+        {
+          "name": "Milk bucket",
+          "aliases": [
+            "milk bucket",
+            "milk can",
+            "doodh ki balti",
+            "doodh ka dibba",
+            "doodh can",
+            "dudh balti",
+            "maxima",
+            "दूध की बाल्टी"
+          ],
+          "models": [
+            {
+              "name": "Maxima with MS handle",
+              "aliases": [
+                "maxima ms handle"
+              ],
+              "details": "5, 10, 15 or 20 litre"
+            },
+            {
+              "name": "ND Maxima with MS handle",
+              "aliases": [
+                "nd maxima"
+              ],
+              "details": "20 litre"
+            },
+            {
+              "name": "Maxima",
+              "details": "20, 30 or 40 litre"
+            },
+            {
+              "name": "Milk bucket with MS handle",
+              "details": "3.5 or 7.5 litre"
+            },
+            {
+              "name": "Milk bucket",
+              "details": "20 litre"
+            }
+          ]
+        },
+        {
+          "name": "Tub",
+          "aliases": [
+            "tub",
+            "tubs",
+            "deep tub",
+            "tab",
+            "bath tub plastic",
+            "टब"
+          ],
+          "models": [
+            {
+              "name": "Printed Amber",
+              "aliases": [
+                "printed amber"
+              ],
+              "details": "35 litre, without handle"
+            },
+            {
+              "name": "Ambar",
+              "aliases": [
+                "amber",
+                "ambar"
+              ],
+              "details": "35 litre, with or without handle"
+            },
+            {
+              "name": "Gagan",
+              "details": "50 litre, with or without handle"
+            },
+            {
+              "name": "Aakash",
+              "aliases": [
+                "aakash",
+                "akash"
+              ],
+              "details": "65 litre, with or without handle"
+            },
+            {
+              "name": "Swami",
+              "details": "70 litre, with or without handle"
+            },
+            {
+              "name": "Singham",
+              "details": "100 litre, with handle"
+            }
+          ]
+        },
+        {
+          "name": "Tasla",
+          "aliases": [
+            "tasla",
+            "taslas",
+            "tasala",
+            "agri tasla",
+            "silk tasla",
+            "ghamela",
+            "tagari",
+            "तसला"
+          ],
+          "models": [
+            {
+              "name": "Agri plastic taslas",
+              "aliases": [
+                "agri plastic tasla"
+              ],
+              "details": "Sudhakar, Suraj, Surya, Dinesh, Aditya, Bhaskar, Diwakar, Dinkar, Prabhakar, Karan, Arun, Ravi and Tasla-240 H"
+            },
+            {
+              "name": "Agri silk taslas",
+              "aliases": [
+                "agri silk tasla",
+                "silk tasla"
+              ],
+              "details": "16, 17, 18, 20 and 22 inch, and CN 18 inch"
+            }
+          ]
+        },
+        {
+          "name": "Mug",
+          "aliases": [
+            "mug",
+            "mugs",
+            "mag",
+            "bathroom mug",
+            "मग"
+          ],
+          "models": [
+            {
+              "name": "Silk mug",
+              "aliases": [
+                "silk"
+              ],
+              "details": "1 or 1.5 litre"
+            },
+            {
+              "name": "Mug",
+              "details": "1 or 1.5 litre"
+            },
+            {
+              "name": "Printed mug",
+              "aliases": [
+                "printed"
+              ],
+              "details": "1 or 1.5 litre"
+            }
+          ]
+        },
+        {
+          "name": "Soap case",
+          "aliases": [
+            "soap case",
+            "soap box",
+            "sabun case",
+            "sabun dibba"
+          ],
+          "models": [
+            {
+              "name": "Soap case",
+              "details": "without lid"
+            },
+            {
+              "name": "Soap case with lid",
+              "details": "with lid"
+            }
+          ]
+        },
+        {
+          "name": "Dust pan",
+          "aliases": [
+            "dust pan",
+            "dustpan",
+            "kachra uthane wala",
+            "supdi"
+          ],
+          "models": [
+            {
+              "name": "Small",
+              "details": "small"
+            },
+            {
+              "name": "Big",
+              "details": "big"
+            }
+          ]
+        },
+        {
+          "name": "Sup, gagar and lota",
+          "aliases": [
+            "gagar",
+            "gagri",
+            "matka",
+            "lota",
+            "sup",
+            "soop",
+            "supa",
+            "गागर",
+            "लोटा"
+          ],
+          "models": [
+            {
+              "name": "Sup",
+              "aliases": [
+                "sup",
+                "soop",
+                "supa"
+              ],
+              "details": "16x16 inch"
+            },
+            {
+              "name": "Gagar",
+              "aliases": [
+                "gagar",
+                "gagri",
+                "matka"
+              ],
+              "details": "5, 10, 14 or 17 litre, without lid"
+            },
+            {
+              "name": "Lota",
+              "aliases": [
+                "lota"
+              ],
+              "details": "2.5 litre, with or without lid"
+            }
+          ]
+        },
+        {
+          "name": "Basin",
+          "aliases": [
+            "basin",
+            "patila",
+            "plastic basin"
+          ],
+          "models": [
+            {
+              "name": "Sameer",
+              "details": "8 inch, with or without lid"
+            },
+            {
+              "name": "Pawan",
+              "details": "10 inch, with or without lid"
+            }
+          ]
+        },
+        {
+          "name": "Racks and baskets",
+          "aliases": [
+            "rack",
+            "racks",
+            "basket",
+            "baskets",
+            "laundry basket",
+            "picnic basket",
+            "tea basket",
+            "kilta",
+            "corner rack",
+            "round rack",
+            "rectangular rack",
+            "tokri",
+            "टोकरी"
+          ],
+          "models": [
+            {
+              "name": "Corner rack",
+              "aliases": [
+                "corner rack"
+              ],
+              "details": "corner rack"
+            },
+            {
+              "name": "Round rack",
+              "aliases": [
+                "round rack"
+              ],
+              "details": "round rack"
+            },
+            {
+              "name": "Rectangular rack",
+              "aliases": [
+                "rectangular rack"
+              ],
+              "details": "rectangular rack"
+            },
+            {
+              "name": "Picnic basket",
+              "aliases": [
+                "picnic basket"
+              ],
+              "details": "picnic basket"
+            },
+            {
+              "name": "Laundry basket",
+              "aliases": [
+                "laundry basket",
+                "kapde ki tokri"
+              ],
+              "details": "round or square, with lid"
+            },
+            {
+              "name": "Tea basket kilta",
+              "aliases": [
+                "tea basket",
+                "kilta"
+              ],
+              "details": "tea basket kilta"
+            }
+          ]
+        },
+        {
+          "name": "Kitchen trays and jaalis",
+          "aliases": [
+            "kitchen tray",
+            "tray",
+            "jaali",
+            "jali",
+            "colander",
+            "vegetable basket",
+            "chandramukhi",
+            "surajmukhi"
+          ],
+          "models": [
+            {
+              "name": "Kitchen tray",
+              "aliases": [
+                "kitchen tray",
+                "tray"
+              ],
+              "details": "small or big"
+            },
+            {
+              "name": "Chandramukhi",
+              "details": "jaali basket"
+            },
+            {
+              "name": "Surajmukhi",
+              "details": "jaali basket"
+            },
+            {
+              "name": "Jaali multiuse",
+              "aliases": [
+                "jaali",
+                "multiuse jaali"
+              ],
+              "details": "multipurpose jaali"
+            }
+          ]
+        },
+        {
+          "name": "Jug, crate and drum",
+          "aliases": [
+            "jug",
+            "jag",
+            "crate",
+            "crates",
+            "drum",
+            "drums",
+            "जग",
+            "ड्रम"
+          ],
+          "models": [
+            {
+              "name": "Jug",
+              "aliases": [
+                "jug",
+                "jag"
+              ],
+              "details": "2 litre, plain or printed"
+            },
+            {
+              "name": "Crate",
+              "aliases": [
+                "crate",
+                "crates"
+              ],
+              "details": "20 kg capacity"
+            },
+            {
+              "name": "Drum",
+              "aliases": [
+                "drum",
+                "drums",
+                "plastic drum",
+                "ड्रम"
+              ],
+              "details": "30 or 60 litre with lid, 40 litre with or without lid"
+            }
+          ]
+        },
+        {
+          "name": "Dustbin",
+          "aliases": [
+            "dustbin",
+            "dust bin",
+            "dustbins",
+            "kooda daan",
+            "kudedan",
+            "kachra dibba",
+            "garbage bin",
+            "garbage bucket",
+            "pedal bin",
+            "swing bin",
+            "कूड़ादान",
+            "डस्टबिन"
+          ],
+          "models": [
+            {
+              "name": "Pedal bin",
+              "aliases": [
+                "pedal bin",
+                "pedal"
+              ],
+              "details": "small 7 litre, Ujjwal 11 litre, large 13 litre"
+            },
+            {
+              "name": "Household bin",
+              "aliases": [
+                "household bin"
+              ],
+              "details": "10 litre, with or without lid"
+            },
+            {
+              "name": "Swing bin",
+              "aliases": [
+                "swing bin",
+                "swing"
+              ],
+              "details": "7 or 11 litre, with or without swing lid"
+            },
+            {
+              "name": "Garbage bucket swing",
+              "aliases": [
+                "garbage bucket"
+              ],
+              "details": "25, 30, 40 or 60 litre"
+            },
+            {
+              "name": "Printed garbage bucket",
+              "aliases": [
+                "printed garbage bucket",
+                "printed dustbin",
+                "floral swing bin",
+                "floral dustbin",
+                "floral bin"
+              ],
+              "details": "11 litre swing, or 7 or 13 litre pedal"
+            },
+            {
+              "name": "Roadside bin",
+              "aliases": [
+                "roadside bin",
+                "road side bin",
+                "roadside dustbin",
+                "public dustbin"
+              ],
+              "details": "large bin for roadside use; the Area Manager will confirm sizes"
+            },
+            {
+              "name": "Community bin",
+              "aliases": [
+                "community bin",
+                "community dustbin",
+                "society dustbin",
+                "big dustbin",
+                "bada dustbin"
+              ],
+              "details": "large bin for community or society use; the Area Manager will confirm sizes"
+            }
+          ]
+        },
+        {
+          "name": "Stool",
+          "aliases": [
+            "stool",
+            "stools",
+            "patla",
+            "patra",
+            "peedha",
+            "pidha",
+            "bathroom stool",
+            "plastic stool",
+            "स्टूल",
+            "पटला",
+            "पीढ़ा"
+          ],
+          "models": [
+            {
+              "name": "Gold",
+              "details": "5 legs"
+            },
+            {
+              "name": "Printed round patla",
+              "aliases": [
+                "printed patla",
+                "round patla"
+              ],
+              "details": "5 legs"
+            },
+            {
+              "name": "Diamond",
+              "details": "stool"
+            },
+            {
+              "name": "Shiva",
+              "details": "stool"
+            },
+            {
+              "name": "Pearl",
+              "details": "8.5 inch"
+            },
+            {
+              "name": "Solid round",
+              "aliases": [
+                "solid round"
+              ],
+              "details": "stool"
+            },
+            {
+              "name": "Strong square",
+              "aliases": [
+                "strong square"
+              ],
+              "details": "stool"
+            },
+            {
+              "name": "Prithvi",
+              "details": "8, 10.3 or 12.75 inch"
+            },
+            {
+              "name": "Bhumi",
+              "details": "8.5, 12 or 18 inch"
+            },
+            {
+              "name": "Vasundhara",
+              "details": "11.75 or 17 inch"
+            },
+            {
+              "name": "Platinum",
+              "details": "stool"
+            },
+            {
+              "name": "Dhara",
+              "details": "18.5 inch"
+            },
+            {
+              "name": "Dharti",
+              "details": "18.5 inch"
+            }
+          ]
+        },
+        {
+          "name": "Bathroom set",
+          "aliases": [
+            "bathroom set",
+            "bath set",
+            "printed bathroom set"
+          ],
+          "models": [
+            {
+              "name": "6 piece printed bathroom set",
+              "aliases": [
+                "6 piece",
+                "six piece"
+              ],
+              "details": "tub 35 litre, bucket 19 litre, mug 1.5 litre, dustbin 11 litre, round patla and soap case"
+            },
+            {
+              "name": "5 piece printed bathroom set",
+              "aliases": [
+                "5 piece",
+                "five piece"
+              ],
+              "details": "bucket 22 litre, mug 1.5 litre, dustbin 11 litre, round patla and soap case"
+            }
+          ]
+        }
+      ],
+      "area_manager": "Moulding"
     },
     {
       "id": "garden",
       "name": "Maali planters and garden",
-      "aliases": ["garden", "garden products", "maali", "mali", "planters", "planter range", "गार्डन"],
+      "aliases": [
+        "garden",
+        "garden products",
+        "maali",
+        "mali",
+        "planters",
+        "planter range",
+        "गार्डन"
+      ],
       "products": [
-        {"name": "Planter", "aliases": ["planter", "planters", "gamla", "gamle", "gamala", "flower pot", "pot", "plant pot", "flowerpot", "गमला", "गमले"],
-         "features": ["Maali by Vectus indoor and outdoor decorative planters", "weather and UV resistant"],
-         "models": [
-           {"name": "Europa range", "aliases": ["europa"], "details": "Diablo, Casper, Emris, Blake, Camilia, Pablo, Maria, Serac, Karen, Eric; white, ivory or grey granite"},
-           {"name": "Ridges range", "aliases": ["ridges"], "details": "Creta, Stella, Luca, Delta, Donna, Julia"},
-           {"name": "Designer planters", "aliases": ["brian", "hazel", "calvin", "verona", "bruno", "nova", "vinto", "bruce", "perch"], "details": "Brian, Hazel, Calvin, Verona, Bruno, Wave, Nova, Vinto, Bruce, Perch"},
-           {"name": "Roto range", "aliases": ["roto"], "details": "Harris, Lincoln, Laurel, Becca, Kelly, William, Skylar, Charles, Nico"},
-           {"name": "Indus range", "aliases": ["indus"], "details": "Oak, Lotus, Teak, Jasmine, Lavender, Walnut, Chestnut, Pine, Lily, Orchid, Sunflower, Tulip, Daisy, Rose"},
-           {"name": "Classico range", "aliases": ["classico", "terracotta"], "details": "terracotta planters and plates, red and green planter set, white planters"},
-           {"name": "Classico Plus range", "aliases": ["classico plus"], "details": "terracotta, white, red and green planters"},
-           {"name": "Patio range", "aliases": ["patio", "hanging planter"], "details": "Cherry, Willow, Maple, Plum"},
-           {"name": "Euro basket", "aliases": ["euro basket", "hanging basket"], "details": "hanging basket; red, white, yellow, orange or lime green"},
-           {"name": "Decorative planter", "aliases": ["decorative"], "details": "small, medium, large or oval; red, blue, yellow or green; also an assorted box"}
-         ]},
-        {"name": "Garden pipe", "aliases": ["garden pipe", "garden hose", "hose pipe", "pipe for garden", "braided pipe", "europa pipe", "indus pipe", "paani ka pipe garden", "गार्डन पाइप"],
-         "models": [
-           {"name": "Europa garden pipe", "aliases": ["europa"], "details": "blue, 30 m, 1/2, 3/4 or 1 inch"},
-           {"name": "Indus garden pipe", "aliases": ["indus"], "details": "light green, 30 m, 1/2, 3/4, 1 or 1-1/4 inch"},
-           {"name": "Braided pipe", "aliases": ["braided"], "details": "30 m, 1/2, 3/4 or 1 inch"}
-         ]},
-        {"name": "Watering can", "aliases": ["watering can", "jhari", "jhaari", "hazara", "water can for plants"],
-         "models": [
-           {"name": "Hazara watering can", "aliases": ["hazara"], "details": "5 litre in red or blue, 10 litre in red, blue or green"}
-         ]}
-      ]
+        {
+          "name": "Planter",
+          "aliases": [
+            "planter",
+            "planters",
+            "gamla",
+            "gamle",
+            "gamala",
+            "flower pot",
+            "pot",
+            "plant pot",
+            "flowerpot",
+            "गमला",
+            "गमले"
+          ],
+          "features": [
+            "Maali by Vectus indoor and outdoor decorative planters",
+            "weather and UV resistant"
+          ],
+          "models": [
+            {
+              "name": "Europa range",
+              "aliases": [
+                "europa"
+              ],
+              "details": "Diablo, Casper, Emris, Blake, Camilia, Pablo, Maria, Serac, Karen, Eric; white, ivory or grey granite"
+            },
+            {
+              "name": "Ridges range",
+              "aliases": [
+                "ridges"
+              ],
+              "details": "Creta, Stella, Luca, Delta, Donna, Julia"
+            },
+            {
+              "name": "Designer planters",
+              "aliases": [
+                "brian",
+                "hazel",
+                "calvin",
+                "verona",
+                "bruno",
+                "nova",
+                "vinto",
+                "bruce",
+                "perch"
+              ],
+              "details": "Brian, Hazel, Calvin, Verona, Bruno, Wave, Nova, Vinto, Bruce, Perch"
+            },
+            {
+              "name": "Roto range",
+              "aliases": [
+                "roto"
+              ],
+              "details": "Harris, Lincoln, Laurel, Becca, Kelly, William, Skylar, Charles, Nico"
+            },
+            {
+              "name": "Indus range",
+              "aliases": [
+                "indus"
+              ],
+              "details": "Oak, Lotus, Teak, Jasmine, Lavender, Walnut, Chestnut, Pine, Lily, Orchid, Sunflower, Tulip, Daisy, Rose"
+            },
+            {
+              "name": "Classico range",
+              "aliases": [
+                "classico",
+                "terracotta"
+              ],
+              "details": "terracotta planters and plates, red and green planter set, white planters"
+            },
+            {
+              "name": "Classico Plus range",
+              "aliases": [
+                "classico plus"
+              ],
+              "details": "terracotta, white, red and green planters"
+            },
+            {
+              "name": "Patio range",
+              "aliases": [
+                "patio",
+                "hanging planter"
+              ],
+              "details": "Cherry, Willow, Maple, Plum"
+            },
+            {
+              "name": "Euro basket",
+              "aliases": [
+                "euro basket",
+                "hanging basket"
+              ],
+              "details": "hanging basket; red, white, yellow, orange or lime green"
+            },
+            {
+              "name": "Decorative planter",
+              "aliases": [
+                "decorative"
+              ],
+              "details": "small, medium, large or oval; red, blue, yellow or green; also an assorted box"
+            }
+          ]
+        },
+        {
+          "name": "Watering can",
+          "aliases": [
+            "watering can",
+            "jhari",
+            "jhaari",
+            "hazara",
+            "water can for plants"
+          ],
+          "models": [
+            {
+              "name": "Hazara watering can",
+              "aliases": [
+                "hazara"
+              ],
+              "details": "5 litre in red or blue, 10 litre in red, blue or green"
+            }
+          ]
+        }
+      ],
+      "area_manager": "Moulding"
+    },
+    {
+      "id": "tank_accessories",
+      "name": "Tank accessories",
+      "aliases": [
+        "tank accessories",
+        "tank accessory",
+        "tank ka saman"
+      ],
+      "products": [
+        {
+          "name": "T-Base tank stand",
+          "aliases": [
+            "t base",
+            "t-base",
+            "tbase",
+            "tank base",
+            "tank stand",
+            "tanki stand",
+            "tanki ka stand",
+            "tank platform",
+            "water tank stand",
+            "टैंक स्टैंड",
+            "टंकी स्टैंड"
+          ],
+          "features": [
+            "uniform surface",
+            "quick and easy installation",
+            "durable yet lightweight",
+            "heavy load-bearing capacity",
+            "easy cleaning"
+          ],
+          "models": [
+            {
+              "name": "TB-50",
+              "aliases": [
+                "tb 50",
+                "tb50"
+              ],
+              "details": "for 500 and 550 litre tanks, 875 mm outer diameter, 130 mm high"
+            },
+            {
+              "name": "TB-100",
+              "aliases": [
+                "tb 100",
+                "tb100"
+              ],
+              "details": "for 700, 750, 1000 and 1100 litre tanks, 1090 mm outer diameter, 165 mm high"
+            }
+          ]
+        },
+        {
+          "name": "Tank filter",
+          "aliases": [
+            "tank filter",
+            "water filter for tank",
+            "y screen filter",
+            "y filter",
+            "screen filter",
+            "filter"
+          ],
+          "features": [
+            "for cleaning domestic home water tanks"
+          ],
+          "models": [
+            {
+              "name": "Y screen filter",
+              "details": "3/4 inch (20 mm), 1 inch (25 mm), 1-1/4 inch (32 mm) or 1-1/2 inch (40 mm)"
+            }
+          ]
+        }
+      ],
+      "area_manager": "Water tank"
+    },
+    {
+      "id": "road_safety",
+      "name": "Road safety",
+      "aliases": [
+        "road safety",
+        "road safety products",
+        "traffic safety",
+        "traffic products",
+        "traffic management",
+        "road products",
+        "safety products",
+        "सड़क सुरक्षा"
+      ],
+      "products": [
+        {
+          "name": "Barricade",
+          "aliases": [
+            "barricade",
+            "barricades",
+            "barrier",
+            "barriers",
+            "road barrier",
+            "traffic barrier",
+            "fence barrier",
+            "water barrier",
+            "plastic barricade",
+            "बैरिकेड"
+          ],
+          "features": [
+            "UV stabilised PE, high impact resistant",
+            "interlocking for a continuous line",
+            "quick to set up and remove",
+            "space for reflective tape"
+          ],
+          "models": [
+            {
+              "name": "Fence with stand",
+              "aliases": [
+                "fence",
+                "fence with stand"
+              ],
+              "details": "2010 x 1010 mm, red; yellow or white only on bulk orders"
+            },
+            {
+              "name": "Barrier 6 Vertical",
+              "aliases": [
+                "6 vertical",
+                "barrier 6"
+              ],
+              "details": "1610 x 415 x 1020 mm, 60 litre water ballast, red; yellow or white only on bulk orders"
+            },
+            {
+              "name": "Barrier 2 Oval",
+              "aliases": [
+                "2 oval",
+                "oval barrier",
+                "barrier 2"
+              ],
+              "details": "2140 x 400 x 1000 mm, 100 litre water ballast, red; yellow or white only on bulk orders"
+            },
+            {
+              "name": "Barrier Pyramid",
+              "aliases": [
+                "pyramid",
+                "pyramid barrier"
+              ],
+              "details": "1000 x 490 x 815 mm, 25 litre water ballast, red; yellow or white only on bulk orders"
+            },
+            {
+              "name": "Pyramid with connector",
+              "aliases": [
+                "connector",
+                "pyramid connector"
+              ],
+              "details": "connector 1470 x 150 x 500 mm, 10 litre water ballast in the connector, red; yellow or white only on bulk orders"
+            }
+          ]
+        },
+        {
+          "name": "Traffic cone",
+          "aliases": [
+            "traffic cone",
+            "traffic cones",
+            "cone",
+            "cones",
+            "parking cone",
+            "parking cones",
+            "safety cone",
+            "road cone",
+            "कोन"
+          ],
+          "models": [
+            {
+              "name": "Parking cone",
+              "aliases": [
+                "parking cone"
+              ],
+              "details": "750 or 1000 mm high, 380 x 380 mm base; yellow or white only on bulk orders"
+            },
+            {
+              "name": "Parking cone RM",
+              "aliases": [
+                "rm cone",
+                "parking cone rm"
+              ],
+              "details": "750 or 1000 mm high, 425 x 370 mm base; yellow or white only on bulk orders"
+            }
+          ]
+        },
+        {
+          "name": "Spring post",
+          "aliases": [
+            "spring post",
+            "spring posts",
+            "delineator",
+            "lane divider post",
+            "road divider post",
+            "traffic post",
+            "bollard"
+          ],
+          "models": [
+            {
+              "name": "Spring post",
+              "details": "80 mm diameter, 200 mm base, 750 mm high; yellow or white only on bulk orders"
+            },
+            {
+              "name": "Small spring post",
+              "aliases": [
+                "small spring post"
+              ],
+              "details": "80 mm diameter, 200 mm base, 300 mm high; yellow or white only on bulk orders"
+            }
+          ]
+        },
+        {
+          "name": "Road safety accessories",
+          "aliases": [
+            "road safety accessories",
+            "safety accessories",
+            "road accessories"
+          ],
+          "features": [
+            "LDPE, UV stabilised, long-lasting colours",
+            "high load-bearing capacity",
+            "logo printing possible"
+          ],
+          "models": [
+            {
+              "name": "Road stud",
+              "aliases": [
+                "road stud",
+                "road studs",
+                "cat eye",
+                "cats eye",
+                "road reflector"
+              ],
+              "details": "100 x 90 x 20 mm; red, yellow or white"
+            },
+            {
+              "name": "Speed breaker",
+              "aliases": [
+                "speed breaker",
+                "speed breakers",
+                "speed bump",
+                "speed hump",
+                "brekar",
+                "स्पीड ब्रेकर"
+              ],
+              "details": "250 x 350 x 50 mm, yellow and black"
+            },
+            {
+              "name": "Convex mirror",
+              "aliases": [
+                "convex mirror",
+                "road mirror",
+                "traffic mirror",
+                "blind spot mirror",
+                "turning mirror"
+              ],
+              "details": "450, 600, 800 or 1000 mm diameter, red"
+            },
+            {
+              "name": "Corner guard",
+              "aliases": [
+                "corner guard",
+                "corner guards",
+                "pillar guard",
+                "wall corner guard"
+              ],
+              "details": "900 or 500 x 100 x 10 mm, yellow and black"
+            },
+            {
+              "name": "Wheel stopper",
+              "aliases": [
+                "wheel stopper",
+                "parking stopper",
+                "car stopper",
+                "wheel stop"
+              ],
+              "details": "500 x 160 x 125 mm or 500 x 125 x 100 mm"
+            },
+            {
+              "name": "Road marking thermoplastic paint",
+              "aliases": [
+                "thermoplastic paint",
+                "road marking paint",
+                "road paint",
+                "road marking"
+              ],
+              "details": "sold per square metre"
+            }
+          ]
+        }
+      ],
+      "area_manager": null
     }
   ],
   "not_listed": {
-    "aliases": ["wash basin", "washbasin", "ceramic", "ceramic basin", "commode", "western toilet", "indian toilet", "wc", "water closet", "mixer grinder", "air cooler", "room cooler", "desert cooler", "geyser", "water heater", "water purifier", "purifier", "ro"],
+    "aliases": [
+      "wash basin",
+      "washbasin",
+      "ceramic",
+      "ceramic basin",
+      "commode",
+      "western toilet",
+      "indian toilet",
+      "wc",
+      "water closet",
+      "mixer grinder",
+      "air cooler",
+      "room cooler",
+      "desert cooler",
+      "geyser",
+      "water heater",
+      "water purifier",
+      "purifier",
+      "ro"
+    ],
     "note": "Not in the catalogue, which does not prove Vectus does not sell them: the bot must not say yes or no."
   },
   "not_sold": {
-    "aliases": ["ppr pipe", "ppr", "cpvc pipe", "cpvc", "upvc pipe", "upvc", "gi pipe", "plumbing pipe", "plumbing pipes", "water supply pipe", "pipe fitting", "pipe fittings", "plumbing fittings", "elbow", "tee joint", "socket joint", "pvc pipe fitting"],
+    "aliases": [
+      "ppr pipe",
+      "ppr",
+      "cpvc pipe",
+      "cpvc",
+      "upvc pipe",
+      "upvc",
+      "gi pipe",
+      "plumbing pipe",
+      "plumbing pipes",
+      "water supply pipe",
+      "pipe fitting",
+      "pipe fittings",
+      "plumbing fittings",
+      "elbow",
+      "tee joint",
+      "socket joint",
+      "pvc pipe fitting"
+    ],
     "message": "Vectus does not sell plumbing supply pipes (PPR, CPVC, UPVC, GI) or their fittings. Say this briefly and ask if they need anything else from Vectus."
-  }
+  },
+  "area_manager_note": "Which vectus_area_manager_lookup product each category goes to, as Vectus confirmed on 2026-10-22: household and garden items (garden pipe included, though listed under bath-ware) -> Moulding; water tanks, tank accessories and bath-ware -> Water tank. Road safety: not confirmed yet (null)."
 }

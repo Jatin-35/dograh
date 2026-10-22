@@ -188,6 +188,19 @@ customer asks what a layer does or about features beyond the layer names.`
 | `catalogue` | nothing to filter on: ask the capacity |
 | `unavailable` | the sheet failed to load: give no details, say the Area Manager will confirm |
 
+## Which Area Manager (`data.area_manager_product`)
+
+Every answer about a product carries the `vectus_area_manager_lookup` product
+Vectus set for it (confirmed by Vectus on 2026-10-22):
+
+| Products | Area Manager product |
+|---|---|
+| Water tanks, tank accessories (T-Base, tank filter), bath-ware | `Water tank` |
+| Household, Maali garden items, and the garden pipe (listed under bath-ware) | `Moulding` |
+| Road safety | `null`: not confirmed by Vectus yet; the bot notes the requirement and does not look an Area Manager up |
+
+Two products in one ask get one value: `Water tank` if either needs it.
+
 `data.message` always carries the facts in one sentence per tank, ready to
 paraphrase. Home enquiries are not offered Chemical, ISI, Underground or the
 15,000+ L tank unless the customer asks for them, says commercial/underground,

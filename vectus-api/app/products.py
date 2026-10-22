@@ -155,6 +155,9 @@ class Product:
     warranty: str | None = None
     features: list[str] = field(default_factory=list)
     kind: str | None = None
+    # The vectus_area_manager_lookup product: "Water tank", "Moulding", or
+    # None when Vectus has not said yet (road safety).
+    area_manager: str | None = None
 
 
 @dataclass
@@ -172,6 +175,11 @@ class ProductCatalog:
     def taps(self) -> Product | None:
         return next((p for p in self.products if p.kind == "taps"), None)
 
+
+AREA_MANAGER_PRODUCTS = ("Water tank", "Moulding", None)
+_NO_AREA_MANAGER = ("Vectus has not set an Area Manager for this product yet: do not call "
+                    "vectus_area_manager_lookup for it; note the requirement and say the team will "
+                    "contact them.")
 
 _WARRANTY = re.compile(r"^\d+ (months|years)$")
 _PRICE = re.compile(r"₹|\brs\.?\s*\d|\brupees?\b|\bm\.?r\.?p\b", re.I)
@@ -200,6 +208,9 @@ def _validate(products: list["Product"], not_sold: dict) -> None:
                 raise ProductCatalogError(f"{where}: model {m.name!r} has no name or details")
             if _PRICE.search(m.details):
                 raise ProductCatalogError(f"{where} / {m.name}: details carry a price")
+        if p.area_manager not in AREA_MANAGER_PRODUCTS:
+            raise ProductCatalogError(f"{where}: area_manager {p.area_manager!r} is not "
+                                      "'Water tank', 'Moulding' or null")
         if p.kind == "taps" and not all(m.items and (m.warranty or p.warranty) for m in p.models):
             raise ProductCatalogError(f"{where}: every tap series needs items and a warranty")
     if not not_sold.get("aliases") or not not_sold.get("message"):
@@ -222,7 +233,8 @@ def load_catalog(path: str | Path) -> ProductCatalog:
                 products.append(Product(name=p["name"], category=cat["name"],
                                         aliases=[p["name"], *p.get("aliases", [])],
                                         models=models, warranty=p.get("warranty"),
-                                        features=p.get("features", []), kind=p.get("kind")))
+                                        features=p.get("features", []), kind=p.get("kind"),
+                                        area_manager=p.get("area_manager", cat.get("area_manager"))))
                 names.append(p["name"])
             categories[cat["name"]] = {"aliases": [cat["name"], *cat.get("aliases", [])],
                                        "products": names}
@@ -318,6 +330,8 @@ def _fuzzy(catalog: ProductCatalog, text: str, exact_words: set[str]):
                     continue  # "fridge" is not "ridge"
                 if min(len(gram), len(key)) < 0.8 * max(len(gram), len(key)):
                     continue  # "ss tap" only fits inside "brass tap"
+                if {w for w in gram.split() if w.isdigit()} != {w for w in key.split() if w.isdigit()}:
+                    continue  # a number is never "close": "barrier 25" is not "barrier 2"
                 score = fuzz.ratio(gram, key)
                 if score >= (80 if n > 1 else 85) and score > best[0]:
                     best = (score, (key, kind, target, gram))
@@ -347,10 +361,16 @@ def _match_model(product: Product, text: str) -> Model | None:
                 best = (len(k), m)
     if best[1]:
         return best[1]
-    # A name that only appears in the details: "Ujjwal" dustbin, "Sudhakar" tasla, "Maria" planter.
-    for m in product.models:
-        if any(_find_phrase(t, _key(m.details)) for t in text.split() if len(t) >= 4):
-            return m
+    # A name or size that only appears in the details: "Ujjwal" dustbin,
+    # "Sudhakar" tasla, "1000 litre" T-Base. Units and filler never count
+    # ("litre" is in every bucket), and a tie picks no model.
+    words = [t for t in text.split()
+             if t not in _NEUTRAL and t not in _FILLER and (len(t) >= 4 or t.isdigit())]
+    if words:
+        hits = sorted(((sum(_find_phrase(t, _key(m.details)) for t in words), i)
+                       for i, m in enumerate(product.models)), reverse=True)
+        if hits[0][0] and (len(hits) == 1 or hits[0][0] > hits[1][0]):
+            return product.models[hits[0][1]]
     scored = [(fuzz.ratio(text, _key(a)), m) for m in product.models for a in m.aliases if len(a) >= 4]
     score, m = max(scored, key=lambda x: x[0], default=(0, None))
     return m if score >= 85 else None
@@ -398,6 +418,29 @@ _SPLIT = re.compile(r"\s*(?:,|;|&|\baur\b|\band\b|\bor\b|\bya\b|\bphir\b|और|
 _ANSWERED = ("found", "product", "partial", "model_not_found", "item_not_in_model")
 
 
+def _area_manager_of(catalog: ProductCatalog, result: dict) -> tuple[bool, str | None]:
+    prod = next((p for p in catalog.products if p.name == result.get("product")), None)
+    return (prod is not None, prod.area_manager if prod else None)
+
+
+def _with_area_manager(catalog: ProductCatalog, result: dict) -> dict:
+    """Add the Area Manager lookup product Vectus set for what was answered."""
+    if result["status"] == "multiple":
+        found = [_area_manager_of(catalog, r) for r in result["results"]]
+        result["results"] = [_with_area_manager(catalog, r) for r in result["results"]]
+        wanted = {am for known, am in found if known}
+        # One lookup per requirement: a tank-side item wins (prompt rule).
+        pick = "Water tank" if "Water tank" in wanted else "Moulding" if "Moulding" in wanted else None
+        return {**result, "area_manager_product": pick}
+    known, am = _area_manager_of(catalog, result)
+    if not known or result["status"] not in _ANSWERED:
+        return result
+    out = {**result, "area_manager_product": am}
+    if am is None:
+        out["message"] = f"{result['message']} {_NO_AREA_MANAGER}"
+    return out
+
+
 def _several(catalog: ProductCatalog, text: str) -> dict | None:
     """"bucket aur mug", "seat cover and flush tank": one answer per product."""
     # A name with "and" in it ("Racks and baskets", "Jug, crate and drum") is one product.
@@ -428,6 +471,7 @@ def find(catalog: ProductCatalog, product=None, model=None, item=None, category=
         result = _several(catalog, str(product))
     if result is None:
         result = _find(catalog, product=product, model=model, item=item, category=category)
+    result = _with_area_manager(catalog, result)
     prod = next((p for p in catalog.products if p.name == result.get("product")), None)
     if (str(detail or "").strip().lower() in _DETAIL_FULL and prod and prod.features
             and result["status"] in ("found", "product", "partial")):
@@ -589,10 +633,26 @@ def _product(prod: Product, rest: str, asked: dict) -> dict:
                             f"its models. The models are {_join(names)}.{_warranty_line(prod)} "
                             f"Do not guess; ask which one they mean, or say the Area Manager "
                             f"will confirm.")}
+    # A short list carries a hint per model, so "which one is soft close?" can
+    # be answered (Hush); a long list (taps, buckets) stays names only.
+    hinted = _join([f"{m.name} ({_hint(m.details)})" for m in prod.models])
+    short = len(hinted) <= _SHORT_LIST
+    listed = hinted if short else _join(names)
     return {"status": "product", **base,
-            "message": (f"Yes, Vectus sells {prod.name}. Models: {_join(names)}."
-                        f"{_warranty_line(prod)} Ask which model they want, then look it up "
-                        f"again for its details.")}
+            "message": (f"Yes, Vectus sells {prod.name}. Models: {listed}."
+                        f"{_warranty_line(prod)} "
+                        + ("Ask which model they want. " if short else
+                           "Say only the two or three that fit what the customer asked, then ask "
+                           "which one they want. ")
+                        + "Look it up again for the chosen model's full details.")}
+
+
+_SHORT_LIST = 420  # characters: about as long as a list stays easy to say
+
+
+def _hint(details: str) -> str:
+    """The first two parts of a model's details: "dual flush, 4 litre for urinal"."""
+    return ", ".join(p.strip() for p in details.split(";")[0].split(",")[:2])
 
 
 def _tap_item(catalog: ProductCatalog, item: str, rest: str, asked: dict) -> dict:
@@ -662,7 +722,8 @@ _TANK_MODELS = _tank_models()
 # Everything the bot can say is in "message"; the lists and cards repeat it and
 # would cost tokens on every later turn of the call. Names stay, so the bot can
 # pass them back on the next lookup.
-_COMPACT_KEEP = ("status", "message", "product", "model", "item", "category", "heard", "unmatched")
+_COMPACT_KEEP = ("status", "message", "product", "model", "item", "category", "heard", "unmatched",
+                 "area_manager_product")
 
 
 def compact(result: dict) -> dict:

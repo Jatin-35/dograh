@@ -46,7 +46,7 @@ def test_the_data_has_no_prices_at_all():
 
 
 def test_every_product_has_models_and_every_tap_series_its_items_and_warranty(cat):
-    assert len(cat.products) == 29
+    assert len(cat.products) == 34
     for p in cat.products:
         assert p.models, p.name
         for m in p.models:
@@ -55,7 +55,8 @@ def test_every_product_has_models_and_every_tap_series_its_items_and_warranty(ca
 
 
 def test_the_three_categories(cat):
-    assert set(cat.categories) == {"Bath-ware", "Household", "Maali planters and garden"}
+    assert set(cat.categories) == {"Bath-ware", "Household", "Maali planters and garden",
+                                   "Tank accessories", "Road safety"}
 
 
 # ── What the tester asked ─────────────────────────────────────────────
@@ -237,7 +238,7 @@ def test_a_series_alone_lists_its_items(cat):
 
 def test_nothing_asked_gives_the_catalogue(cat):
     r = ask(cat)
-    assert r["status"] == "catalogue" and len(r["categories"]) == 3
+    assert r["status"] == "catalogue" and len(r["categories"]) == 5
 
 
 @pytest.mark.parametrize("said", ["water tank", "ganga tank", "1000 litre tanki", "टंकी"])
@@ -277,7 +278,7 @@ def client():
 
 def test_health_counts_products(client):
     body = client.get("/health").json()
-    assert body["products"] == 29 and body["products_error"] is None
+    assert body["products"] == 34 and body["products_error"] is None
 
 
 @pytest.mark.parametrize("path", ["/products", "/products/"])
