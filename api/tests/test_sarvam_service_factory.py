@@ -235,8 +235,8 @@ class TestSarvamTTSServiceFactory:
         config = SarvamTTSConfiguration(api_key="test-key")
 
         assert config.provider == ServiceProviders.SARVAM
-        assert config.model == "bulbul:v2"
-        assert config.voice == "anushka"
+        assert config.model == "bulbul:v4-flash"
+        assert config.voice == "simran_enhi_customer"
         assert config.language == "hi-IN"
         assert config.speed == 1.0
 
@@ -244,7 +244,7 @@ class TestSarvamTTSServiceFactory:
         voice_schema = SarvamTTSConfiguration.model_json_schema()["properties"]["voice"]
 
         assert voice_schema["allow_custom_input"] is True
-        assert "bulbul:v2" in voice_schema["model_options"]
+        assert "bulbul:v4-flash" in voice_schema["model_options"]
         assert "bulbul:v3" in voice_schema["model_options"]
 
     def test_create_sarvam_tts_service_maps_speed_to_pace(self):
@@ -252,7 +252,7 @@ class TestSarvamTTSServiceFactory:
             tts=SimpleNamespace(
                 provider=ServiceProviders.SARVAM.value,
                 api_key="test-key",
-                model="bulbul:v2",
+                model="bulbul:v3",
                 voice="anushka",
                 language="hi-IN",
                 speed=1.25,
@@ -269,7 +269,7 @@ class TestSarvamTTSServiceFactory:
 
         kwargs = mock_service.call_args.kwargs
         assert kwargs["api_key"] == "test-key"
-        assert kwargs["settings"].model == "bulbul:v2"
+        assert kwargs["settings"].model == "bulbul:v3"
         assert kwargs["settings"].voice == "anushka"
         assert kwargs["settings"].language == Language.HI
         assert kwargs["settings"].pace == 1.25
@@ -279,7 +279,7 @@ class TestSarvamTTSServiceFactory:
             tts=SimpleNamespace(
                 provider=ServiceProviders.SARVAM.value,
                 api_key="test-key",
-                model="bulbul:v2",
+                model="bulbul:v3",
                 voice=" Rehan ",
                 language="hi-IN",
                 speed=1.0,
@@ -317,5 +317,8 @@ class TestSarvamTTSServiceFactory:
         ) as mock_service:
             create_tts_service(user_config, audio_config)
 
+        # bulbul:v2 is deprecated (Sarvam rejects it): it runs on bulbul:v3,
+        # and a blank voice gets v3's female default.
         kwargs = mock_service.call_args.kwargs
-        assert kwargs["settings"].voice == "anushka"
+        assert kwargs["settings"].model == "bulbul:v3"
+        assert kwargs["settings"].voice == "simran"

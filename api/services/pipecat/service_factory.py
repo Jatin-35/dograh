@@ -21,6 +21,9 @@ from api.services.pipecat.sarvam_stt import (
     DograhSarvamSTTService,
     resolve_sarvam_stt_model,
 )
+from api.services.pipecat.sarvam_tts import (
+    resolve_model_and_voice as resolve_sarvam_tts_model_and_voice,
+)
 from api.services.pipecat.sarvam_llm import (
     SARVAM_DEFAULT_BASE_URL,
     DograhSarvamLLMService,
@@ -853,12 +856,14 @@ def create_tts_service(
         language = getattr(user_config.tts, "language", None)
         pipecat_language = language_mapping.get(language, Language.HI)
 
-        voice = (
-            getattr(user_config.tts, "voice", None) or ""
-        ).strip().lower() or "anushka"
+        # bulbul:v4-flash is registered there; a saved bulbul:v2 (deprecated,
+        # rejected by Sarvam) is moved to bulbul:v3.
+        model, voice = resolve_sarvam_tts_model_and_voice(
+            user_config.tts.model, getattr(user_config.tts, "voice", None)
+        )
         speed = getattr(user_config.tts, "speed", None)
         settings_kwargs = {
-            "model": user_config.tts.model,
+            "model": model,
             "voice": voice,
             "language": pipecat_language,
         }

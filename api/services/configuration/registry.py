@@ -53,6 +53,8 @@ from api.services.configuration.options import (
     SARVAM_TTS_MODELS,
     SARVAM_V2_VOICES,
     SARVAM_V3_VOICES,
+    SARVAM_V4_FLASH_DEFAULT_VOICE,
+    SARVAM_V4_FLASH_VOICES,
     SMALLEST_TTS_LANGUAGES,
     SMALLEST_TTS_MODELS,
     SMALLEST_TTS_PRO_VOICES,
@@ -1359,19 +1361,21 @@ class SarvamTTSConfiguration(BaseTTSConfiguration):
     model_config = SARVAM_PROVIDER_MODEL_CONFIG
     provider: Literal[ServiceProviders.SARVAM] = ServiceProviders.SARVAM
     model: str = Field(
-        default="bulbul:v2",
+        default="bulbul:v4-flash",
         description="Sarvam TTS model (voice list depends on this).",
         json_schema_extra={"examples": SARVAM_TTS_MODELS},
     )
     voice: str = Field(
-        default="anushka",
+        default=SARVAM_V4_FLASH_DEFAULT_VOICE,
         description="Sarvam voice name or custom voice ID.",
         json_schema_extra={
-            "examples": SARVAM_V2_VOICES,
+            "examples": SARVAM_V4_FLASH_VOICES,
             "allow_custom_input": True,
             "model_options": {
-                "bulbul:v2": SARVAM_V2_VOICES,
+                "bulbul:v4-flash": SARVAM_V4_FLASH_VOICES,
                 "bulbul:v3": SARVAM_V3_VOICES,
+                # deprecated, kept so an agent saved with it still shows its voice
+                "bulbul:v2": SARVAM_V2_VOICES,
             },
         },
     )
