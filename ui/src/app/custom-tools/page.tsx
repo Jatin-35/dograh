@@ -997,17 +997,21 @@ export default function CodeEditorPage() {
                         {envVars.map((variable) => (
                             <div
                                 key={variable.key}
-                                className={`flex items-center justify-between rounded border px-3 py-2 text-sm ${
+                                className={`flex items-center justify-between gap-3 rounded border px-3 py-2 text-sm ${
                                     editingKey === variable.key ? "border-primary bg-accent/40" : ""
                                 }`}
                             >
-                                <div>
-                                    <div className="font-mono">{variable.key}</div>
-                                    <div className="text-xs text-muted-foreground font-mono">
+                                {/* min-w-0 + break-all: the mask has one character per
+                                    character of the value, so a long token (300+) would
+                                    otherwise stretch the row and push the buttons out of
+                                    the dialog. */}
+                                <div className="min-w-0 flex-1">
+                                    <div className="font-mono break-all">{variable.key}</div>
+                                    <div className="text-xs text-muted-foreground font-mono break-all">
                                         {formatMaskedValue(variable)}
                                     </div>
                                 </div>
-                                <div className="flex items-center">
+                                <div className="flex shrink-0 items-center">
                                     <Button
                                         variant="ghost"
                                         size="sm"
