@@ -290,3 +290,13 @@ def test_workflow_config_can_override_user_turn_stop_timeout():
         )
         == 12.5
     )
+
+
+def test_inworld_realtime_uses_provider_turn_frames_without_local_vad():
+    strategies, vad_analyzer = _create_realtime_user_turn_config(
+        ServiceProviders.INWORLD_REALTIME.value
+    )
+
+    assert vad_analyzer is None
+    assert isinstance(strategies.start[0], ExternalUserTurnStartStrategy)
+    assert isinstance(strategies.stop[0], ExternalUserTurnStopStrategy)

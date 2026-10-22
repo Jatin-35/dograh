@@ -258,6 +258,9 @@ def _create_realtime_user_turn_config(provider: str):
         # Grok Voice Agent emits server-side speech-start/stop and
         # interruption signals, so local VAD should stay out of the way.
         return external_provider_turn_config()
+    if provider == ServiceProviders.INWORLD_REALTIME.value:
+        # Inworld's semantic VAD emits speech-start/stop and interruptions.
+        return external_provider_turn_config()
     if provider == ServiceProviders.ULTRAVOX_REALTIME.value:
         # Ultravox does not emit user-turn frames, so local VAD supplies
         # lifecycle signals for Dograh observers/controllers.

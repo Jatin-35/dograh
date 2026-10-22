@@ -1343,6 +1343,21 @@ def create_realtime_llm_service(user_config, audio_config: "AudioConfig"):
                 ),
             ),
         )
+    elif provider == ServiceProviders.INWORLD_REALTIME.value:
+        from api.services.pipecat.realtime.inworld_realtime import (
+            DograhInworldRealtimeLLMService,
+        )
+
+        # One Inworld session runs STT, the routed LLM and Inworld TTS, so the
+        # agent's STT and TTS choices come from this config, not the pipeline.
+        return DograhInworldRealtimeLLMService(
+            api_key=api_key,
+            llm_model=model,
+            voice=voice,
+            tts_model=getattr(realtime_config, "tts_model", None),
+            stt_model=getattr(realtime_config, "stt_model", None),
+            language=language,
+        )
     elif provider == ServiceProviders.ULTRAVOX_REALTIME.value:
         from api.services.pipecat.realtime.ultravox_realtime import (
             DograhUltravoxOneShotInputParams,

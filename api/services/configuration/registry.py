@@ -112,6 +112,7 @@ class ServiceProviders(str, Enum):
     GEMINI_LIVE_38 = "gemini_live_38"
     GOOGLE_VERTEX_REALTIME = "google_vertex_realtime"
     AZURE_REALTIME = "azure_realtime"
+    INWORLD_REALTIME = "inworld_realtime"
     SMALLEST = "smallest"
     XAI = "xai"
     MURF = "murf"
@@ -152,6 +153,7 @@ class BaseServiceConfiguration(BaseModel):
         ServiceProviders.GEMINI_LIVE_38,
         ServiceProviders.GOOGLE_VERTEX_REALTIME,
         ServiceProviders.AZURE_REALTIME,
+        ServiceProviders.INWORLD_REALTIME,
         ServiceProviders.SARVAM,
         ServiceProviders.SMALLEST,
         ServiceProviders.XAI,
@@ -305,6 +307,15 @@ GEMINI_LIVE_38_PROVIDER_MODEL_CONFIG = provider_model_config(
 )
 GOOGLE_VERTEX_REALTIME_PROVIDER_MODEL_CONFIG = provider_model_config(
     "Google Vertex Realtime"
+)
+INWORLD_REALTIME_PROVIDER_MODEL_CONFIG = provider_model_config(
+    "Inworld Realtime",
+    description=(
+        "One Inworld session runs speech-to-text, any LLM through Inworld's "
+        "router (OpenAI, Google, Anthropic...), and Inworld voices. Switch the "
+        "LLM with the model field."
+    ),
+    provider_docs_url="https://docs.inworld.ai/api-reference/realtimeAPI/realtime/realtime-websocket",
 )
 DEEPGRAM_PROVIDER_MODEL_CONFIG = provider_model_config("Deepgram")
 ELEVENLABS_PROVIDER_MODEL_CONFIG = provider_model_config("ElevenLabs")
@@ -1000,6 +1011,85 @@ class GoogleVertexRealtimeLLMConfiguration(BaseLLMConfiguration):
     )
 
 
+# The router takes "<provider>/<model>"; any model Inworld lists works, so
+# these are examples, not a closed list.
+INWORLD_REALTIME_LLM_MODELS = [
+    "openai/gpt-4.1-mini",
+    "openai/gpt-4.1-nano",
+    "openai/gpt-5-mini",
+    "google/gemini-2.5-flash-lite",
+    "google/gemini-2.5-flash",
+    "anthropic/claude-haiku-4-5",
+    # Inworld-hosted Gemma 4; open models take the inworld/models/ prefix.
+    "inworld/models/gemma-4-31b-it",
+    "inworld/models/gemma-4-26b-a4b-it",
+]
+INWORLD_REALTIME_STT_MODELS = [
+    "inworld/inworld-stt-1",
+    "assemblyai/universal-streaming-multilingual",
+    "assemblyai/u3-rt-pro",
+]
+INWORLD_REALTIME_TTS_MODELS = ["inworld-tts-2"]
+# Hindi voices first (Inworld TTS-2 lists Hindi as generally available).
+INWORLD_REALTIME_VOICES = [
+    "Riya",
+    "Aanya",
+    "Meher",
+    "Seema",
+    "Aarav",
+    "Manoj",
+    "Ashley",
+    "Sarah",
+    "Clive",
+]
+
+
+@register_service(ServiceType.REALTIME)
+class InworldRealtimeLLMConfiguration(BaseLLMConfiguration):
+    model_config = INWORLD_REALTIME_PROVIDER_MODEL_CONFIG
+    provider: Literal[ServiceProviders.INWORLD_REALTIME] = (
+        ServiceProviders.INWORLD_REALTIME
+    )
+    model: str = Field(
+        default="openai/gpt-4.1-mini",
+        description="LLM, as <provider>/<model> through Inworld's router.",
+        json_schema_extra={
+            "examples": INWORLD_REALTIME_LLM_MODELS,
+            "allow_custom_input": True,
+        },
+    )
+    voice: str = Field(
+        default="Riya",
+        description="Inworld voice.",
+        json_schema_extra={
+            "examples": INWORLD_REALTIME_VOICES,
+            "allow_custom_input": True,
+        },
+    )
+    stt_model: str = Field(
+        default="inworld/inworld-stt-1",
+        description="Speech-to-text model Inworld transcribes the caller with.",
+        json_schema_extra={
+            "examples": INWORLD_REALTIME_STT_MODELS,
+            "allow_custom_input": True,
+        },
+    )
+    tts_model: str = Field(
+        default="inworld-tts-2",
+        description="Inworld voice model.",
+        json_schema_extra={
+            "examples": INWORLD_REALTIME_TTS_MODELS,
+            "allow_custom_input": True,
+            "advanced": True,
+        },
+    )
+    language: str | None = Field(
+        default="hi",
+        description="Language the caller speaks (hi, en...). Sent to speech-to-text and the voice.",
+        json_schema_extra={"examples": ["hi", "en"], "allow_custom_input": True},
+    )
+
+
 @register_service(ServiceType.REALTIME)
 class AzureRealtimeLLMConfiguration(BaseLLMConfiguration):
     model_config = AZURE_REALTIME_PROVIDER_MODEL_CONFIG
@@ -1043,6 +1133,7 @@ REALTIME_PROVIDERS = {
     ServiceProviders.GEMINI_LIVE_38.value,
     ServiceProviders.GOOGLE_VERTEX_REALTIME.value,
     ServiceProviders.AZURE_REALTIME.value,
+    ServiceProviders.INWORLD_REALTIME.value,
 }
 
 
@@ -1076,6 +1167,7 @@ RealtimeConfig = Annotated[
         GeminiLive38LLMConfiguration,
         GoogleVertexRealtimeLLMConfiguration,
         AzureRealtimeLLMConfiguration,
+        InworldRealtimeLLMConfiguration,
     ],
     Field(discriminator="provider"),
 ]
