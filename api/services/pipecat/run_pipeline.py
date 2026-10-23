@@ -215,20 +215,28 @@ def build_user_mute_strategies(
     return strategies
 
 
-def uses_own_stt_tts(user_config) -> bool:
-    """A realtime agent whose own Dograh transcriber and voice wrap the session.
-
-    Inworld Realtime with ``stt_tts_source="dograh"``: the call runs as a
-    normal pipeline (Dograh STT, Dograh turn-taking, Dograh TTS) around the
-    Inworld Realtime session, which acts as the LLM in text mode.
-    """
+def _realtime_source_is_custom(user_config, field: str) -> bool:
     realtime = getattr(user_config, "realtime", None)
     return bool(
         getattr(user_config, "is_realtime", False)
         and realtime is not None
         and getattr(realtime, "provider", None) == ServiceProviders.INWORLD_REALTIME.value
-        and getattr(realtime, "stt_tts_source", None) == "dograh"
+        and getattr(realtime, field, None) == "custom"
     )
+
+
+def realtime_uses_custom_stt(user_config) -> bool:
+    """Inworld Realtime hearing the caller through a custom transcriber.
+
+    The transcriber sits before the user aggregator, the call's own turn rules
+    decide turns, and each turn's text goes to the Inworld session.
+    """
+    return _realtime_source_is_custom(user_config, "stt_source")
+
+
+def realtime_uses_custom_tts(user_config) -> bool:
+    """Inworld Realtime replying as text for a custom voice after the session."""
+    return _realtime_source_is_custom(user_config, "tts_source")
 
 
 def _create_realtime_user_turn_config(provider: str, realtime_config=None):
@@ -276,7 +284,7 @@ def _create_realtime_user_turn_config(provider: str, realtime_config=None):
         # interruption signals, so local VAD should stay out of the way.
         return external_provider_turn_config()
     if provider == ServiceProviders.INWORLD_REALTIME.value:
-        if getattr(realtime_config, "turn_detection", None) == "dograh_local":
+        if getattr(realtime_config, "turn_detection", None) == "local":
             # Inworld's own turn detection is off (manual mode): Dograh decides
             # turns, so noise can't cancel replies or hold turns open.
             return dograh_local_turn_config(
@@ -411,7 +419,7 @@ async def _run_pipeline_telephony_impl(
         workflow.organization_id,
         ambient_noise_config=ambient_noise_config,
         telephony_configuration_id=telephony_configuration_id,
-        is_realtime=is_realtime and not uses_own_stt_tts(user_config),
+        is_realtime=is_realtime and not realtime_uses_custom_tts(user_config),
         **transport_kwargs,
     )
     apply_noise_reduction(transport, run_configs, workflow_run_id)
@@ -562,7 +570,7 @@ async def _run_pipeline_smallwebrtc_impl(
         workflow_run_id,
         audio_config,
         ambient_noise_config,
-        is_realtime=is_realtime and not uses_own_stt_tts(user_config),
+        is_realtime=is_realtime and not realtime_uses_custom_tts(user_config),
     )
     apply_noise_reduction(transport, run_configs, workflow_run_id)
     await _run_pipeline_impl(
@@ -732,18 +740,19 @@ async def _run_pipeline_impl(
     is_realtime = user_config.is_realtime and user_config.realtime is not None
 
     # Create services based on user configuration
-    own_stt_tts = uses_own_stt_tts(user_config)
+    custom_stt = realtime_uses_custom_stt(user_config)
+    custom_tts = realtime_uses_custom_tts(user_config)
     if is_realtime:
         llm = create_realtime_llm_service(user_config, audio_config)
         stt = None
         tts = None
-        if own_stt_tts:
-            if user_config.stt is None or user_config.tts is None:
+        if custom_stt:
+            if user_config.stt is None:
                 raise HTTPException(
                     status_code=400,
                     detail=(
-                        "Inworld Realtime is set to use your own Transcriber and "
-                        "Voice, but they are not configured on this agent."
+                        "Inworld Realtime is set to use a custom Transcriber, but "
+                        "none is configured on this agent."
                     ),
                 )
             stt = create_stt_service(
@@ -753,6 +762,15 @@ async def _run_pipeline_impl(
                 correlation_id=mps_correlation_id,
                 call_reference=f"run-{workflow_run_id}",
             )
+        if custom_tts:
+            if user_config.tts is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Inworld Realtime is set to use a custom Voice, but none "
+                        "is configured on this agent."
+                    ),
+                )
             tts = create_tts_service(
                 user_config,
                 audio_config,
@@ -817,15 +835,12 @@ async def _run_pipeline_impl(
             "llm_provider": user_config.llm.provider,
             "llm_model": user_config.llm.model,
         }
-        if own_stt_tts:
-            runtime_configuration.update(
-                {
-                    "stt_provider": user_config.stt.provider,
-                    "stt_model": user_config.stt.model,
-                    "tts_provider": user_config.tts.provider,
-                    "tts_model": user_config.tts.model,
-                }
-            )
+        if custom_stt:
+            runtime_configuration["stt_provider"] = user_config.stt.provider
+            runtime_configuration["stt_model"] = user_config.stt.model
+        if custom_tts:
+            runtime_configuration["tts_provider"] = user_config.tts.provider
+            runtime_configuration["tts_model"] = user_config.tts.model
     else:
         runtime_configuration = {
             "stt_provider": user_config.stt.provider,
@@ -1005,7 +1020,7 @@ async def _run_pipeline_impl(
     user_vad_analyzer = DograhSileroVADAnalyzer(params=VADParams(stop_secs=0.2))
 
     # Configure turn strategies based on STT provider, model, and workflow configuration
-    if is_realtime and not own_stt_tts:
+    if is_realtime and not custom_stt:
         uses_external_turns = False
         # Realtime services still need user-turn tracking even when the model
         # itself owns speech generation and interruption behavior.
@@ -1055,7 +1070,7 @@ async def _run_pipeline_impl(
         context,
         assistant_params=assistant_params,
         user_params=user_params,
-        realtime_service_mode=is_realtime and not own_stt_tts,
+        realtime_service_mode=is_realtime and not custom_stt,
     )
 
     # Create usage metrics aggregator with engine's callback
@@ -1152,7 +1167,7 @@ async def _run_pipeline_impl(
         )
 
     # Build the pipeline
-    if is_realtime and not own_stt_tts:
+    if is_realtime:
         pipeline = build_realtime_pipeline(
             transport,
             llm,
@@ -1162,6 +1177,8 @@ async def _run_pipeline_impl(
             pipeline_engine_callback_processor,
             pipeline_metrics_aggregator,
             voicemail_detector=voicemail_detector,
+            stt=stt,
+            tts=tts,
         )
     else:
         pipeline = build_pipeline(
@@ -1175,7 +1192,7 @@ async def _run_pipeline_impl(
             pipeline_engine_callback_processor,
             pipeline_metrics_aggregator,
             voicemail_detector=voicemail_detector,
-            recording_router=recording_router if not is_realtime else None,
+            recording_router=recording_router,
         )
 
     # Create pipeline task with audio configuration
@@ -1212,7 +1229,7 @@ async def _run_pipeline_impl(
 
     # A caller turn that cut the bot off with no recognisable words (a cough,
     # a horn) otherwise leaves the bot silent mid-reply; ask them to repeat.
-    if (not is_realtime or own_stt_tts) and run_configs.get("empty_turn_recovery", True):
+    if (not is_realtime or custom_stt) and run_configs.get("empty_turn_recovery", True):
         bot_activity = BotActivityObserver()
         task.add_observer(bot_activity)
         EmptyTurnRecovery(bot_activity).attach(user_context_aggregator)

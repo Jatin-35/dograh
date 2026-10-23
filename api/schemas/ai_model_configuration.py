@@ -76,7 +76,7 @@ class BYOKRealtimeAIModelConfiguration(BaseModel):
     llm: LLMConfig
     embeddings: EmbeddingsConfig | None = None
     # Used only by a realtime provider set to take Dograh's own transcriber and
-    # voice (Inworld Realtime with stt_tts_source "dograh"); others ignore them.
+    # voice (Inworld Realtime with stt_source / tts_source "custom"); others ignore them.
     stt: STTConfig | None = None
     tts: TTSConfig | None = None
 

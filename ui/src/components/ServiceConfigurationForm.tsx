@@ -512,7 +512,12 @@ export function ServiceConfigurationForm({
                 // Build model_overrides for enabled services only
                 const modelOverrides: Record<string, unknown> = {};
                 const services = isRealtime
-                    ? ["realtime", "llm", ...(realtimeUsesOwnSttTts ? ["tts", "stt"] : [])]
+                    ? [
+                        "realtime",
+                        "llm",
+                        ...(realtimeCustomTts ? ["tts"] : []),
+                        ...(realtimeCustomStt ? ["stt"] : []),
+                    ]
                     : ["llm", "tts", "stt"];
                 for (const svc of services) {
                     if (enabledOverrides[svc]) {
@@ -1073,23 +1078,22 @@ export function ServiceConfigurationForm({
         );
     };
 
-    // A realtime provider set to use Dograh's own transcriber and voice
-    // (Inworld Realtime, stt_tts_source "dograh") also needs their tabs.
-    const realtimeUsesOwnSttTts =
-        isRealtime
-        && serviceProviders.realtime === "inworld_realtime"
-        && watch("realtime_stt_tts_source") === "dograh";
+    // Inworld Realtime can take a custom transcriber and/or a custom voice,
+    // chosen independently; each needs its own tab.
+    const inworldRealtime = isRealtime && serviceProviders.realtime === "inworld_realtime";
+    const realtimeCustomStt = inworldRealtime && watch("realtime_stt_source") === "custom";
+    const realtimeCustomTts = inworldRealtime && watch("realtime_tts_source") === "custom";
 
     const getVisibleTabs = () => {
         const tabs = mode === 'override'
             ? (isRealtime ? OVERRIDE_REALTIME_TABS : OVERRIDE_STANDARD_TABS)
             : (isRealtime ? REALTIME_TABS : STANDARD_TABS);
-        if (!realtimeUsesOwnSttTts) return tabs;
+        if (!realtimeCustomStt && !realtimeCustomTts) return tabs;
         const [first, ...rest] = tabs;
         return [
             first,
-            { key: "stt" as ServiceSegment, label: "Transcriber" },
-            { key: "tts" as ServiceSegment, label: "Voice" },
+            ...(realtimeCustomStt ? [{ key: "stt" as ServiceSegment, label: "Transcriber" }] : []),
+            ...(realtimeCustomTts ? [{ key: "tts" as ServiceSegment, label: "Voice" }] : []),
             ...rest,
         ];
     };

@@ -1380,7 +1380,8 @@ def create_realtime_llm_service(user_config, audio_config: "AudioConfig"):
             server_threshold=getattr(realtime_config, "server_threshold", None),
             server_silence_ms=getattr(realtime_config, "server_silence_ms", None),
             server_prefix_padding_ms=getattr(realtime_config, "server_prefix_padding_ms", None),
-            stt_tts_source=getattr(realtime_config, "stt_tts_source", None),
+            stt_source=getattr(realtime_config, "stt_source", None),
+            tts_source=getattr(realtime_config, "tts_source", None),
         )
     elif provider == ServiceProviders.ULTRAVOX_REALTIME.value:
         from api.services.pipecat.realtime.ultravox_realtime import (

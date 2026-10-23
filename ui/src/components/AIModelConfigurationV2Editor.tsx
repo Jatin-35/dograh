@@ -24,7 +24,40 @@ import { VoiceSelectorModal } from "@/components/VoiceSelectorModal";
 import { CONTACT_URL } from "@/constants/brand";
 import { LANGUAGE_DISPLAY_NAMES } from "@/constants/languages";
 import { formatRoundingPolicy } from "@/lib/billingDisplay";
-type ModelMode = "realtime" | "dograh" | "byok";
+type ModelMode = "realtime" | "inworld" | "dograh" | "byok";
+
+const INWORLD_REALTIME = "inworld_realtime";
+
+/** Inworld settings saved before the transcriber and voice were chosen separately. */
+function upgradeInworldRealtime(realtime: unknown): unknown {
+    const record = asRecord(realtime);
+    if (!record || record.provider !== INWORLD_REALTIME) return realtime;
+    const upgraded: Record<string, unknown> = { ...record };
+    if (upgraded.stt_tts_source !== undefined) {
+        if (upgraded.stt_tts_source === "dograh") {
+            upgraded.stt_source ??= "custom";
+            upgraded.tts_source ??= "custom";
+        }
+        delete upgraded.stt_tts_source;
+    }
+    if (upgraded.turn_detection === "dograh_local") upgraded.turn_detection = "local";
+    return upgraded;
+}
+
+function isInworldRealtimeConfig(config: Record<string, unknown> | null | undefined): boolean {
+    return asRecord(config?.realtime)?.provider === INWORLD_REALTIME;
+}
+
+/** The defaults with the realtime providers narrowed for one tab. */
+function withRealtimeProviders(
+    defaults: ServiceConfigurationDefaults,
+    keep: (provider: string) => boolean,
+): ServiceConfigurationDefaults {
+    const realtime = Object.fromEntries(
+        Object.entries(defaults.realtime || {}).filter(([provider]) => keep(provider)),
+    );
+    return { ...defaults, realtime };
+}
 
 // Sentinel language value for "Multilingual (Auto-detect)".
 const MULTILINGUAL_LANGUAGE_CODE = "multi";
@@ -121,7 +154,7 @@ export function byokConfigToLegacyShape(config: Record<string, unknown> | null):
         const realtime = asRecord(byok.realtime);
         return {
             is_realtime: true,
-            realtime: realtime?.realtime,
+            realtime: upgradeInworldRealtime(realtime?.realtime),
             llm: realtime?.llm,
             embeddings: realtime?.embeddings,
             stt: realtime?.stt,
@@ -146,7 +179,7 @@ function effectiveConfigToLegacyShape(config: Record<string, unknown> | null): R
         llm: config.llm,
         tts: config.tts,
         stt: config.stt,
-        realtime: config.realtime,
+        realtime: upgradeInworldRealtime(config.realtime),
         embeddings: config.embeddings,
     };
 }
@@ -218,16 +251,19 @@ function buildDograhState(
     };
 }
 
-function preferredMode(
+export function preferredMode(
     configuration: Record<string, unknown> | null,
     effectiveConfiguration: Record<string, unknown> | null,
 ): ModelMode {
     if (configuration?.mode === "dograh") return "dograh";
     if (configuration?.mode === "byok") {
-        return asRecord(configuration.byok)?.mode === "realtime" ? "realtime" : "byok";
+        const byok = asRecord(configuration.byok);
+        if (byok?.mode !== "realtime") return "byok";
+        return isInworldRealtimeConfig(asRecord(byok.realtime)) ? "inworld" : "realtime";
     }
     if (isDograhEffectiveConfig(effectiveConfiguration)) return "dograh";
-    return Boolean(effectiveConfiguration?.is_realtime) ? "realtime" : "byok";
+    if (!effectiveConfiguration?.is_realtime) return "byok";
+    return isInworldRealtimeConfig(effectiveConfiguration) ? "inworld" : "realtime";
 }
 
 function hasRequiredApiKey(
@@ -281,11 +317,12 @@ export function buildByokConfigurationBody(
     const isRealtime = Boolean(config.is_realtime);
     const llm = requireByokService(config, "llm", defaults);
     const embeddings = optionalByokService(config, "embeddings");
-    // Inworld Realtime set to use our own transcriber and voice saves them
-    // with the realtime configuration; other realtime providers don't.
+    // Inworld Realtime with a custom transcriber and/or voice saves them with
+    // the realtime configuration; other realtime providers don't.
     const realtimeService = isRealtime ? asRecord(config.realtime) : null;
-    const ownSttTts = realtimeService?.provider === "inworld_realtime"
-        && realtimeService?.stt_tts_source === "dograh";
+    const inworld = realtimeService?.provider === INWORLD_REALTIME;
+    const customStt = inworld && realtimeService?.stt_source === "custom";
+    const customTts = inworld && realtimeService?.tts_source === "custom";
     const body: OrganizationAiModelConfigurationV2 = {
         version: 2,
         mode: "byok",
@@ -296,12 +333,8 @@ export function buildByokConfigurationBody(
                     realtime: requireByokService(config, "realtime", defaults) as never,
                     llm: llm as never,
                     ...(embeddings ? { embeddings: embeddings as never } : {}),
-                    ...(ownSttTts
-                        ? {
-                            stt: requireByokService(config, "stt", defaults) as never,
-                            tts: requireByokService(config, "tts", defaults) as never,
-                        }
-                        : {}),
+                    ...(customStt ? { stt: requireByokService(config, "stt", defaults) as never } : {}),
+                    ...(customTts ? { tts: requireByokService(config, "tts", defaults) as never } : {}),
                 },
             }
             : {
@@ -404,6 +437,14 @@ export function AIModelConfigurationV2Editor({
     submitLabel = "Save Configuration",
 }: AIModelConfigurationV2EditorProps) {
     const defaultsForByok = useMemo(() => byokDefaults(defaults), [defaults]);
+    const defaultsForSpeechToSpeech = useMemo(
+        () => withRealtimeProviders(defaultsForByok, (provider) => provider !== INWORLD_REALTIME),
+        [defaultsForByok],
+    );
+    const defaultsForInworld = useMemo(
+        () => withRealtimeProviders(defaultsForByok, (provider) => provider === INWORLD_REALTIME),
+        [defaultsForByok],
+    );
     const [mode, setMode] = useState<ModelMode>("dograh");
     const [dograh, setDograh] = useState<DograhFormState>(() => ({
         api_key: "",
@@ -412,6 +453,7 @@ export function AIModelConfigurationV2Editor({
         language: defaults.dograh.defaults.language,
     }));
     const [realtimeInitialConfig, setRealtimeInitialConfig] = useState<Record<string, unknown> | null>(null);
+    const [inworldInitialConfig, setInworldInitialConfig] = useState<Record<string, unknown> | null>(null);
     const [pipelineInitialConfig, setPipelineInitialConfig] = useState<Record<string, unknown> | null>(null);
     const [isSavingDograh, setIsSavingDograh] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -430,7 +472,11 @@ export function AIModelConfigurationV2Editor({
         setMode(preferredMode(rawConfiguration, rawEffectiveConfiguration));
         const nextDograh = buildDograhState(defaults, rawConfiguration, rawEffectiveConfiguration);
         setDograh(nextDograh);
-        setRealtimeInitialConfig(getByokInitialConfig(rawConfiguration, rawEffectiveConfiguration, true));
+        const savedRealtime = getByokInitialConfig(rawConfiguration, rawEffectiveConfiguration, true);
+        // A saved Inworld Realtime configuration opens on its own tab.
+        const inworldSaved = isInworldRealtimeConfig(savedRealtime);
+        setInworldInitialConfig(inworldSaved ? savedRealtime : emptyByokInitialConfig(true));
+        setRealtimeInitialConfig(inworldSaved ? emptyByokInitialConfig(true) : savedRealtime);
         setPipelineInitialConfig(getByokInitialConfig(rawConfiguration, rawEffectiveConfiguration, false));
     }, [configuration, defaults, effectiveConfiguration, allowCustomVoice]);
 
@@ -478,8 +524,9 @@ export function AIModelConfigurationV2Editor({
             )}
 
             <Tabs value={mode} onValueChange={(value) => setMode(value as ModelMode)} className="space-y-6">
-                <TabsList className="grid w-full grid-cols-3">
+                <TabsList className="grid w-full grid-cols-4">
                     <TabsTrigger value="realtime">Speech to Speech</TabsTrigger>
+                    <TabsTrigger value="inworld">Inworld Realtime</TabsTrigger>
                     <TabsTrigger value="dograh">BotrixAI</TabsTrigger>
                     <TabsTrigger value="byok">BYOK</TabsTrigger>
                 </TabsList>
@@ -493,8 +540,27 @@ export function AIModelConfigurationV2Editor({
                         key={`realtime-${JSON.stringify(realtimeInitialConfig)}`}
                         mode="global"
                         forceRealtime
-                        configurationDefaults={defaultsForByok}
+                        configurationDefaults={defaultsForSpeechToSpeech}
                         initialConfig={realtimeInitialConfig}
+                        submitLabel={submitLabel}
+                        onSave={saveByokConfiguration}
+                    />
+                    <ThirdPartyProviderNotice />
+                </TabsContent>
+
+                <TabsContent value="inworld" className="mt-0">
+                    <p className="mb-4 text-sm text-muted-foreground">
+                        One low-latency Inworld Realtime session runs the LLM. Choose Inworld or a custom
+                        provider for the transcriber and the voice separately; a custom one gets its own tab
+                        with all of its options. An LLM is still required for variable extraction and QA.
+                    </p>
+                    <PricingSummary pricing={pricing} includeDograhModel={false} thirdPartyModels />
+                    <ServiceConfigurationForm
+                        key={`inworld-${JSON.stringify(inworldInitialConfig)}`}
+                        mode="global"
+                        forceRealtime
+                        configurationDefaults={defaultsForInworld}
+                        initialConfig={inworldInitialConfig}
                         submitLabel={submitLabel}
                         onSave={saveByokConfiguration}
                     />

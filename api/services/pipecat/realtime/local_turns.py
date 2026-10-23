@@ -1,6 +1,6 @@
 """Dograh-driven turn detection for a realtime service in manual mode.
 
-Used when an Inworld Realtime agent sets turn detection to ``dograh_local``:
+Used when an Inworld Realtime agent sets turn detection to ``local``:
 Inworld's own turn detection is off, and Dograh decides turns from the
 caller's audio (after RNNoise) with Silero VAD, as pipecat's
 ``realtime-inworld-locally-driven-turns`` example does.

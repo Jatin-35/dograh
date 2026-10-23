@@ -1,4 +1,4 @@
-"""Dograh-driven turns for Inworld Realtime (turn detection "dograh_local").
+"""Locally decided turns for Inworld Realtime (turn detection "local").
 
 Inworld's own turn detection is switched off (manual mode) and Dograh decides
 turns. Covers the word-gated start rule, how a call wires it up, and the
@@ -209,9 +209,9 @@ def test_unset_local_settings_use_the_defaults():
     assert strategies.stop[0]._user_speech_timeout == 0.6
 
 
-def test_an_inworld_agent_on_dograh_local_gets_dograh_turns():
+def test_an_inworld_agent_on_local_turns_gets_local_turns():
     cfg = InworldRealtimeLLMConfiguration(
-        api_key="k", turn_detection="dograh_local", local_min_words=3, local_silence_secs=0.8
+        api_key="k", turn_detection="local", local_min_words=3, local_silence_secs=0.8
     )
     strategies, vad = _create_realtime_user_turn_config(ServiceProviders.INWORLD_REALTIME.value, cfg)
     assert isinstance(strategies.start[0], WordGatedVADUserTurnStartStrategy)
@@ -234,11 +234,12 @@ def test_callers_that_pass_no_config_are_unchanged():
     assert vad is None
 
 
-def test_dograh_local_settings_show_only_in_that_mode():
+def test_local_settings_show_only_in_that_mode():
     props = InworldRealtimeLLMConfiguration.model_json_schema()["properties"]
-    assert "dograh_local" in props["turn_detection"]["enum"]
+    assert "local" in props["turn_detection"]["enum"]
+    assert "dograh_local" not in props["turn_detection"]["enum"]
     for field in ("local_min_words", "local_silence_secs", "local_barge_in_secs"):
-        assert props[field]["visible_when"] == {"stt_tts_source": "inworld", "turn_detection": "dograh_local"}
+        assert props[field]["visible_when"] == {"stt_source": "inworld", "turn_detection": "local"}
 
 
 @pytest.mark.parametrize("field,value", [
@@ -266,7 +267,7 @@ class _FakeSocket:
 
 
 def _local_service(**kwargs):
-    service = DograhInworldRealtimeLLMService(api_key="k", turn_detection="dograh_local", **kwargs)
+    service = DograhInworldRealtimeLLMService(api_key="k", turn_detection="local", **kwargs)
     service._llm_needs_conversation_setup = False
     sock = _FakeSocket()
     service._websocket = sock
@@ -443,11 +444,15 @@ async def test_inworld_modes_other_than_local_still_stream_all_audio():
     assert sock.types().count("input_audio_buffer.append") >= 3
 
 
-def test_factory_builds_a_manual_mode_service_for_dograh_local():
+def test_factory_builds_a_manual_mode_service_for_local_turns():
     effective_config = EffectiveAIModelConfiguration(
         is_realtime=True,
-        realtime=InworldRealtimeLLMConfiguration(api_key="k", turn_detection="dograh_local"),
+        realtime=InworldRealtimeLLMConfiguration(api_key="k", turn_detection="local"),
     )
     service = create_realtime_llm_service(effective_config, audio_config=SimpleNamespace())
     assert service._local_turns is True
     assert service._is_manual_turn_detection() is True
+
+
+def test_agents_saved_with_the_old_value_get_local_turns():
+    assert InworldRealtimeLLMConfiguration(api_key="k", turn_detection="dograh_local").turn_detection == "local"

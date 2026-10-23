@@ -103,11 +103,15 @@ def build_realtime_pipeline(
     pipeline_engine_callback_processor,
     pipeline_metrics_aggregator,
     voicemail_detector=None,
+    stt=None,
+    tts=None,
 ):
     """Build a pipeline for realtime (speech-to-speech) LLM services.
 
     Realtime services (e.g. OpenAI Realtime, Gemini Live) handle STT+LLM+TTS
-    internally, so no separate STT or TTS processors are needed.
+    internally, so no separate STT or TTS processors are needed. A service set
+    to use a custom transcriber or voice (Inworld Realtime) gets ``stt``
+    before the user aggregator and/or ``tts`` after itself.
 
     Args:
         voicemail_detector: Optional VoicemailDetector. Placed *below* the
@@ -131,6 +135,7 @@ def build_realtime_pipeline(
     """
     processors = [
         transport.input(),
+        *([stt] if stt is not None else []),
         user_context_aggregator,
         realtime_llm,
     ]
@@ -142,6 +147,7 @@ def build_realtime_pipeline(
     processors.extend(
         [
             pipeline_engine_callback_processor,
+            *([tts] if tts is not None else []),
             transport.output(),
             audio_buffer,
             assistant_context_aggregator,

@@ -831,9 +831,9 @@ def test_factory_passes_the_second_batch():
 def test_server_fields_show_only_with_server_vad_and_semantic_ones_only_without():
     props = InworldRealtimeLLMConfiguration.model_json_schema()["properties"]
     for field in ("server_threshold", "server_silence_ms", "server_prefix_padding_ms"):
-        assert props[field]["visible_when"] == {"stt_tts_source": "inworld", "turn_detection": "server_vad"}
+        assert props[field]["visible_when"] == {"stt_source": "inworld", "turn_detection": "server_vad"}
     for field in ("eagerness", "speech_threshold", "min_silence_ms", "max_silence_ms", "turn_confidence"):
-        assert props[field]["visible_when"] == {"stt_tts_source": "inworld", "turn_detection": "semantic_vad"}
+        assert props[field]["visible_when"] == {"stt_source": "inworld", "turn_detection": "semantic_vad"}
 
 
 @pytest.mark.parametrize("field,value", [

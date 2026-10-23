@@ -36,11 +36,14 @@ every turn). The agent's other controls map to Inworld's documented session
 fields: noise reduction, max output tokens, sampling and penalties, memory,
 and semantic or server VAD turn detection with their tuning.
 
-With ``stt_tts_source="dograh"`` the session runs in text mode: Dograh's own
-transcriber hears the caller and Dograh's own voice speaks, while this
-Inworld Realtime session (persistent, server-side context and caching) is the
-LLM. Each turn's new messages go in as text, Inworld replies with text only,
-and the greeting and transition lines go straight to the voice.
+The transcriber and the voice are chosen independently (``stt_source`` /
+``tts_source``: ``inworld`` or ``custom``), so the session can take the
+caller's audio or a custom transcriber's text, and reply with Inworld's voice
+or with text for a custom voice; the session itself (persistent, server-side
+context and caching) stays the LLM either way. With a custom transcriber each
+turn's new messages go in as text and the turns are decided before this
+service. With a custom voice the replies are text only, and the greeting and
+transition lines go straight to the voice, word for word.
 
 Replies are held while one is running, as upstream pipecat now does. A
 ``response.create`` sent while the bot is speaking makes Inworld cancel that
@@ -159,7 +162,8 @@ class DograhInworldRealtimeLLMService(InworldRealtimeLLMService):
         server_threshold: float | None = None,
         server_silence_ms: int | None = None,
         server_prefix_padding_ms: int | None = None,
-        stt_tts_source: str | None = None,
+        stt_source: str | None = None,
+        tts_source: str | None = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -184,13 +188,18 @@ class DograhInworldRealtimeLLMService(InworldRealtimeLLMService):
         self._server_vad = turn_detection == "server_vad"
         # Dograh decides turns: Inworld's detection is off (manual mode), so
         # the base service's manual-mode paths commit and create replies.
-        self._text_io = stt_tts_source == "dograh"
-        # Dograh's turn rules decide turns in text mode too.
-        self._local_turns = turn_detection == "dograh_local" and not self._text_io
-        if self._local_turns or self._text_io:
+        # Custom transcriber: the caller's words arrive as text, turns decided
+        # before this service. Custom voice: replies are text for that voice.
+        self._text_in = stt_source == "custom"
+        self._text_out = tts_source == "custom"
+        self._local_turns = turn_detection == "local" and not self._text_in
+        if self._local_turns or self._text_in:
             self._settings.session_properties.audio.input.turn_detection = None
-        if self._text_io:
+        if self._text_out:
             self._settings.session_properties.output_modalities = ["text"]
+        # Set when the greeting went to a custom voice before the session was
+        # ready: set the conversation up (and tell Inworld) once it is.
+        self._pending_setup_note: str | None = None
         # Index into the call's context up to which Inworld has the messages.
         self._text_sent_upto = 0
         self._audio_gate_open = False
@@ -284,7 +293,7 @@ class DograhInworldRealtimeLLMService(InworldRealtimeLLMService):
         if isinstance(audio_in, dict):
             if self._noise_reduction:
                 audio_in["noise_reduction"] = {"type": self._noise_reduction}
-            if self._local_turns or self._text_io:
+            if self._local_turns or self._text_in:
                 # Explicit null: dropping the field (as exclude_none does)
                 # would leave Inworld's own turn detection on.
                 audio_in["turn_detection"] = None
@@ -299,7 +308,7 @@ class DograhInworldRealtimeLLMService(InworldRealtimeLLMService):
             self._stt_overrides
             and not self._server_vad
             and not self._local_turns
-            and not self._text_io
+            and not self._text_in
         ):
             stt = dict(provider_data.get("stt") or {})
             stt.update(self._stt_overrides)
@@ -381,7 +390,7 @@ class DograhInworldRealtimeLLMService(InworldRealtimeLLMService):
         kind = evt.get("type", "")
         if kind in _TEXT_DELTA_EVENTS:
             delta = evt.get("delta") or ""
-            if delta and self._text_io:
+            if delta and self._text_out:
                 await self.stop_ttfb_metrics()
                 await self.push_frame(LLMTextFrame(delta))
             return
@@ -426,7 +435,7 @@ class DograhInworldRealtimeLLMService(InworldRealtimeLLMService):
 
     async def _handle_user_stopped_speaking(self, frame):
         """Dograh ended the caller's turn: commit their speech and ask for a reply."""
-        if self._text_io:
+        if self._text_in:
             # The turn's text arrives as a context frame; no audio to commit.
             return
         if not self._local_turns:
@@ -452,7 +461,7 @@ class DograhInworldRealtimeLLMService(InworldRealtimeLLMService):
         already holds the start of the caller's words (sent from the pre-roll),
         which clearing would cut off.
         """
-        if not (self._local_turns or self._text_io):
+        if not (self._local_turns or self._text_in):
             await super()._handle_interruption()
             return
         self._held_response_create = None
@@ -565,14 +574,18 @@ class DograhInworldRealtimeLLMService(InworldRealtimeLLMService):
             self._user_is_muted = False
             await self.push_frame(frame, direction)
             return
-        if isinstance(frame, TTSSpeakFrame) and self._text_io:
-            # Dograh's voice speaks fixed lines itself, word for word. The
-            # greeting reaches the context (append_to_context) and so Inworld at
-            # set-up; a transition line doesn't, so Inworld is told of it.
+        if isinstance(frame, TTSSpeakFrame) and self._text_out:
+            # The custom voice speaks fixed lines itself, word for word.
+            text = (frame.text or "").strip()
             if not self._handled_initial_context:
                 self._handled_initial_context = True
+                if not self._text_in:
+                    # Inworld hears the caller: it must be set up now (the base
+                    # drops caller audio until then) and told of the greeting,
+                    # which reaches the context only once it has been spoken.
+                    await self._set_up_for_caller_audio(text)
             elif not frame.append_to_context:
-                await self._note_spoken_text((frame.text or "").strip())
+                await self._note_spoken_text(text)
             await self.push_frame(frame, direction)
             return
         if isinstance(frame, TTSSpeakFrame):
@@ -621,7 +634,7 @@ class DograhInworldRealtimeLLMService(InworldRealtimeLLMService):
             await self._send_manual_response_create()
 
     async def _handle_context(self, context: LLMContext):
-        if self._text_io:
+        if self._text_in:
             await self._handle_text_turn(context)
             return
         if not self._handled_initial_context:
@@ -679,9 +692,22 @@ class DograhInworldRealtimeLLMService(InworldRealtimeLLMService):
             await self.send_client_event(evt)
         await self._send_session_update()
         self._llm_needs_conversation_setup = False
+        # Everything in the context so far is now in Inworld's conversation.
+        self._text_sent_upto = len(self._context.get_messages()) if self._context else 0
+
+    async def _set_up_for_caller_audio(self, spoken_greeting: str):
+        """Set the conversation up for caller audio once the greeting went to the voice."""
+        if not self._api_session_ready or self._context is None:
+            self._pending_setup_note = spoken_greeting
+            return
+        self._pending_setup_note = None
+        await self._ensure_conversation_setup()
+        await self._note_spoken_text(spoken_greeting)
 
     async def _handle_evt_session_updated(self, evt):
         self._api_session_ready = True
+        if self._pending_setup_note is not None:
+            await self._set_up_for_caller_audio(self._pending_setup_note)
         if self._pending_initial_greeting_text is not None:
             greeting_text = self._pending_initial_greeting_text
             self._run_llm_when_api_session_ready = False
@@ -691,8 +717,8 @@ class DograhInworldRealtimeLLMService(InworldRealtimeLLMService):
             await self._create_response()
 
     async def _send_user_audio(self, frame):
-        if self._text_io:
-            # Dograh's own transcriber hears the caller.
+        if self._text_in:
+            # The custom transcriber hears the caller.
             return
         if self._user_is_muted:
             return
