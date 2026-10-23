@@ -1099,6 +1099,15 @@ class InworldRealtimeLLMConfiguration(BaseLLMConfiguration):
         ),
         json_schema_extra={"label": "Expected words", "section": "Transcriber"},
     )
+    noise_reduction: Literal["off", "near_field", "far_field"] = Field(
+        default="off",
+        description=(
+            "Inworld cleans the caller's audio before deciding they are "
+            "speaking. far_field suits phone lines and speakerphones, "
+            "near_field headsets."
+        ),
+        json_schema_extra={"label": "Noise reduction", "section": "Transcriber"},
+    )
     # ── LLM ──
     model: str = Field(
         default="openai/gpt-4.1-mini",
@@ -1115,6 +1124,50 @@ class InworldRealtimeLLMConfiguration(BaseLLMConfiguration):
         le=2.0,
         description="Lower is steadier and more literal. Empty uses the model's default.",
         json_schema_extra={"section": "LLM"},
+    )
+    max_reply_tokens: int | None = Field(
+        default=None,
+        ge=1,
+        le=4096,
+        description="Longest reply the LLM may write, in tokens. Empty leaves it to the model.",
+        json_schema_extra={"label": "Max reply tokens", "section": "LLM"},
+    )
+    reasoning_effort: Literal["none", "minimal", "low", "medium", "high"] = Field(
+        default="none",
+        description=(
+            "Thinking before replying, for models that can. none is fastest; "
+            "higher adds delay."
+        ),
+        json_schema_extra={"advanced": True, "label": "Reasoning effort", "section": "LLM"},
+    )
+    top_p: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Nucleus sampling, 0-1. Empty uses the model's default.",
+        json_schema_extra={"advanced": True, "label": "Top P", "section": "LLM"},
+    )
+    frequency_penalty: float | None = Field(
+        default=None,
+        ge=-2.0,
+        le=2.0,
+        description="Positive values discourage repeating the same words.",
+        json_schema_extra={"advanced": True, "label": "Frequency penalty", "section": "LLM"},
+    )
+    presence_penalty: float | None = Field(
+        default=None,
+        ge=-2.0,
+        le=2.0,
+        description="Positive values nudge the model toward new topics.",
+        json_schema_extra={"advanced": True, "label": "Presence penalty", "section": "LLM"},
+    )
+    memory: bool = Field(
+        default=False,
+        description=(
+            "Inworld summarises the conversation every few turns so details "
+            "from early in a long call are not lost."
+        ),
+        json_schema_extra={"advanced": True, "label": "Conversation memory", "section": "LLM"},
     )
     # ── Voice ──
     tts_model: str = Field(
@@ -1151,7 +1204,27 @@ class InworldRealtimeLLMConfiguration(BaseLLMConfiguration):
         ),
         json_schema_extra={"advanced": True, "label": "Delivery", "section": "Voice"},
     )
+    audio_start: Literal["fast_start", "auto", "balanced", "sentence", "full_turn"] = Field(
+        default="fast_start",
+        description=(
+            "How the voice splits text before speaking. fast_start starts "
+            "soonest; sentence and full_turn sound more natural but start later."
+        ),
+        json_schema_extra={"advanced": True, "label": "Audio start", "section": "Voice"},
+    )
     # ── Turn-taking & noise ──
+    turn_detection: Literal["semantic_vad", "server_vad", "dograh_local"] = Field(
+        default="semantic_vad",
+        description=(
+            "Who decides when the caller has finished. semantic_vad and "
+            "server_vad: Inworld does (any sound it takes for speech can cancel "
+            "the bot's reply). dograh_local: Dograh does, from the caller's "
+            "noise-filtered audio; a turn always ends on silence, and the "
+            "caller interrupts the bot only with real words. Works with any "
+            "speech-to-text model."
+        ),
+        json_schema_extra={"label": "Turn detection", "section": "Turn-taking & noise"},
+    )
     eagerness: Literal["low", "medium", "high"] = Field(
         default="low",
         description=(
@@ -1159,7 +1232,11 @@ class InworldRealtimeLLMConfiguration(BaseLLMConfiguration):
             "presets wait at most 2 s (low), 1 s (medium) or 0.8 s (high) of "
             "silence."
         ),
-        json_schema_extra={"label": "Eagerness", "section": "Turn-taking & noise"},
+        json_schema_extra={
+            "label": "Eagerness",
+            "section": "Turn-taking & noise",
+            "visible_when": {"turn_detection": "semantic_vad"},
+        },
     )
     speech_threshold: float | None = Field(
         default=None,
@@ -1170,7 +1247,11 @@ class InworldRealtimeLLMConfiguration(BaseLLMConfiguration):
             "Raise it (0.5-0.7) if background noise or echo interrupts the bot "
             "or keeps it waiting. Empty uses the eagerness preset (0.25-0.35)."
         ),
-        json_schema_extra={"label": "Speech threshold", "section": "Turn-taking & noise"},
+        json_schema_extra={
+            "label": "Speech threshold",
+            "section": "Turn-taking & noise",
+            "visible_when": {"turn_detection": "semantic_vad"},
+        },
     )
     min_silence_ms: int | None = Field(
         default=None,
@@ -1184,6 +1265,7 @@ class InworldRealtimeLLMConfiguration(BaseLLMConfiguration):
             "advanced": True,
             "label": "Silence before reply (ms)",
             "section": "Turn-taking & noise",
+            "visible_when": {"turn_detection": "semantic_vad"},
         },
     )
     max_silence_ms: int | None = Field(
@@ -1198,6 +1280,7 @@ class InworldRealtimeLLMConfiguration(BaseLLMConfiguration):
             "advanced": True,
             "label": "Longest wait (ms)",
             "section": "Turn-taking & noise",
+            "visible_when": {"turn_detection": "semantic_vad"},
         },
     )
     turn_confidence: float | None = Field(
@@ -1212,6 +1295,87 @@ class InworldRealtimeLLMConfiguration(BaseLLMConfiguration):
             "advanced": True,
             "label": "End-of-turn confidence",
             "section": "Turn-taking & noise",
+            "visible_when": {"turn_detection": "semantic_vad"},
+        },
+    )
+    server_threshold: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "0-1; how loud sound must be to count as speech with server_vad. "
+            "Higher ignores more background noise. Empty uses 0.5."
+        ),
+        json_schema_extra={
+            "label": "Speech threshold",
+            "section": "Turn-taking & noise",
+            "visible_when": {"turn_detection": "server_vad"},
+        },
+    )
+    server_silence_ms: int | None = Field(
+        default=None,
+        ge=100,
+        le=5000,
+        description="Silence (ms) before the caller's turn ends with server_vad. Empty uses 1000.",
+        json_schema_extra={
+            "label": "Silence before reply (ms)",
+            "section": "Turn-taking & noise",
+            "visible_when": {"turn_detection": "server_vad"},
+        },
+    )
+    server_prefix_padding_ms: int | None = Field(
+        default=None,
+        ge=0,
+        le=2000,
+        description="Audio (ms) kept from before speech starts, so first syllables are not lost. Empty uses 200.",
+        json_schema_extra={
+            "advanced": True,
+            "label": "Speech padding (ms)",
+            "section": "Turn-taking & noise",
+            "visible_when": {"turn_detection": "server_vad"},
+        },
+    )
+    local_min_words: int = Field(
+        default=2,
+        ge=1,
+        le=6,
+        description=(
+            "While the bot is speaking, words the caller must say before it "
+            "stops. Noise and breaths have no words, so they can't cut it off."
+        ),
+        json_schema_extra={
+            "label": "Words to interrupt",
+            "section": "Turn-taking & noise",
+            "visible_when": {"turn_detection": "dograh_local"},
+        },
+    )
+    local_silence_secs: float = Field(
+        default=0.6,
+        ge=0.2,
+        le=3.0,
+        description=(
+            "Silence (seconds) after the caller stops before the bot replies. "
+            "Higher lets callers pause mid-sentence."
+        ),
+        json_schema_extra={
+            "label": "Silence before reply (s)",
+            "section": "Turn-taking & noise",
+            "visible_when": {"turn_detection": "dograh_local"},
+        },
+    )
+    local_barge_in_secs: float = Field(
+        default=1.2,
+        ge=0.3,
+        le=5.0,
+        description=(
+            "While the bot is speaking, unbroken speech (seconds) that also "
+            "interrupts it, for when no transcript arrives in time."
+        ),
+        json_schema_extra={
+            "advanced": True,
+            "label": "Speech to interrupt (s)",
+            "section": "Turn-taking & noise",
+            "visible_when": {"turn_detection": "dograh_local"},
         },
     )
 

@@ -73,6 +73,7 @@ from api.services.pipecat.empty_turn_recovery import (
     EmptyTurnRecovery,
 )
 from api.services.pipecat.latency_breakdown import build_latency_breakdown_event
+from api.services.pipecat.realtime.local_turns import dograh_local_turn_config
 from api.services.pipecat.silero_vad import DograhSileroVADAnalyzer
 from api.services.pipecat.turn_stop_strategies import (
     DograhSpeechTimeoutUserTurnStopStrategy,
@@ -214,7 +215,7 @@ def build_user_mute_strategies(
     return strategies
 
 
-def _create_realtime_user_turn_config(provider: str):
+def _create_realtime_user_turn_config(provider: str, realtime_config=None):
     """Return user turn strategies and optional local VAD for realtime providers."""
 
     def external_provider_turn_config():
@@ -259,6 +260,14 @@ def _create_realtime_user_turn_config(provider: str):
         # interruption signals, so local VAD should stay out of the way.
         return external_provider_turn_config()
     if provider == ServiceProviders.INWORLD_REALTIME.value:
+        if getattr(realtime_config, "turn_detection", None) == "dograh_local":
+            # Inworld's own turn detection is off (manual mode): Dograh decides
+            # turns, so noise can't cancel replies or hold turns open.
+            return dograh_local_turn_config(
+                min_words=getattr(realtime_config, "local_min_words", None),
+                min_barge_in_secs=getattr(realtime_config, "local_barge_in_secs", None),
+                silence_secs=getattr(realtime_config, "local_silence_secs", None),
+            )
         # Inworld's semantic VAD emits speech-start/stop and interruptions.
         return external_provider_turn_config()
     if provider == ServiceProviders.ULTRAVOX_REALTIME.value:
@@ -954,7 +963,7 @@ async def _run_pipeline_impl(
         # Realtime services still need user-turn tracking even when the model
         # itself owns speech generation and interruption behavior.
         user_turn_strategies, user_vad_analyzer = _create_realtime_user_turn_config(
-            user_config.realtime.provider
+            user_config.realtime.provider, user_config.realtime
         )
     else:
         # Some STT services emit their own turn boundaries, so the aggregator

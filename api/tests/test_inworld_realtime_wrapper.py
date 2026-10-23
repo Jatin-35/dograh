@@ -713,3 +713,135 @@ def test_settings_form_is_split_into_ordered_sections():
 def test_out_of_range_controls_are_rejected(field, value):
     with pytest.raises(ValueError):
         InworldRealtimeLLMConfiguration(api_key="k", **{field: value})
+
+
+# ── Second batch of controls ──────────────────────────────────────────
+
+
+async def _sent_session(**kwargs):
+    service = _make_service(**kwargs)
+    sock = _with_socket(service)
+    await service._send_session_update()
+    return sock.sent[0]["session"]
+
+
+@pytest.mark.asyncio
+async def test_untouched_controls_send_exactly_what_is_live_today():
+    session = await _sent_session()
+    pd = session["providerData"]
+    assert pd["text_generation_config"] == {"reasoning": {"effort": "NONE"}}
+    assert pd["tts"]["segmenter_strategy"] == "fast_start"
+    assert "memory" not in pd
+    assert "noise_reduction" not in session["audio"]["input"]
+    assert "max_output_tokens" not in session
+    turn = session["audio"]["input"]["turn_detection"]
+    assert turn == {
+        "type": "semantic_vad",
+        "eagerness": "low",
+        "create_response": True,
+        "interrupt_response": True,
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("value", ["near_field", "far_field"])
+async def test_noise_reduction_is_sent(value):
+    session = await _sent_session(noise_reduction=value)
+    assert session["audio"]["input"]["noise_reduction"] == {"type": value}
+
+
+@pytest.mark.asyncio
+async def test_noise_reduction_off_sends_nothing():
+    session = await _sent_session(noise_reduction="off")
+    assert "noise_reduction" not in session["audio"]["input"]
+
+
+@pytest.mark.asyncio
+async def test_llm_controls_are_sent():
+    session = await _sent_session(
+        max_reply_tokens=300, reasoning_effort="low", top_p=0.9,
+        frequency_penalty=0.5, presence_penalty=-0.2, memory=True,
+    )
+    pd = session["providerData"]
+    # Inworld enforces maxNewTokens, not the session's max_output_tokens.
+    assert "max_output_tokens" not in session
+    assert pd["text_generation_config"] == {
+        "reasoning": {"effort": "LOW"},
+        "maxNewTokens": 300,
+        "topP": 0.9,
+        "frequencyPenalty": 0.5,
+        "presencePenalty": -0.2,
+    }
+    assert pd["memory"] == {"enabled": True}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("value", ["auto", "balanced", "sentence", "full_turn"])
+async def test_audio_start_is_sent(value):
+    session = await _sent_session(audio_start=value, language="hi")
+    assert session["providerData"]["tts"] == {"segmenter_strategy": value, "language": "hi"}
+
+
+@pytest.mark.asyncio
+async def test_server_vad_replaces_the_semantic_settings():
+    session = await _sent_session(
+        turn_detection="server_vad", eagerness="high",
+        server_threshold=0.7, server_silence_ms=600, server_prefix_padding_ms=300,
+        speech_threshold=0.6, max_silence_ms=900,
+    )
+    turn = session["audio"]["input"]["turn_detection"]
+    assert turn["type"] == "server_vad"
+    assert "eagerness" not in turn
+    assert turn["threshold"] == 0.7
+    assert turn["silence_duration_ms"] == 600
+    assert turn["prefix_padding_ms"] == 300
+    assert turn["create_response"] is True and turn["interrupt_response"] is True
+    # Semantic-only tuning saved on the agent is not sent with server_vad.
+    assert "stt" not in session["providerData"]
+
+
+@pytest.mark.asyncio
+async def test_semantic_vad_keeps_its_tuning():
+    session = await _sent_session(turn_detection="semantic_vad", eagerness="medium", speech_threshold=0.6)
+    turn = session["audio"]["input"]["turn_detection"]
+    assert turn["type"] == "semantic_vad" and turn["eagerness"] == "medium"
+    assert session["providerData"]["stt"] == {"vad_threshold": 0.6}
+
+
+def test_factory_passes_the_second_batch():
+    effective_config = EffectiveAIModelConfiguration(
+        is_realtime=True,
+        realtime=InworldRealtimeLLMConfiguration(
+            api_key="k", noise_reduction="far_field", max_reply_tokens=250,
+            reasoning_effort="minimal", memory=True, audio_start="sentence",
+            turn_detection="server_vad", server_threshold=0.65,
+        ),
+    )
+
+    service = create_realtime_llm_service(effective_config, audio_config=SimpleNamespace())
+
+    assert service._noise_reduction == "far_field"
+    assert service._generation_config == {"reasoning": {"effort": "MINIMAL"}, "maxNewTokens": 250}
+    assert service._memory is True
+    assert service._audio_start == "sentence"
+    assert service._server_vad is True
+    assert service._server_vad_settings == {"threshold": 0.65}
+
+
+def test_server_fields_show_only_with_server_vad_and_semantic_ones_only_without():
+    props = InworldRealtimeLLMConfiguration.model_json_schema()["properties"]
+    for field in ("server_threshold", "server_silence_ms", "server_prefix_padding_ms"):
+        assert props[field]["visible_when"] == {"turn_detection": "server_vad"}
+    for field in ("eagerness", "speech_threshold", "min_silence_ms", "max_silence_ms", "turn_confidence"):
+        assert props[field]["visible_when"] == {"turn_detection": "semantic_vad"}
+
+
+@pytest.mark.parametrize("field,value", [
+    ("noise_reduction", "loud"), ("max_reply_tokens", 0), ("max_reply_tokens", 5000),
+    ("reasoning_effort", "xhigh"), ("top_p", 1.5), ("frequency_penalty", 3),
+    ("audio_start", "instant"), ("turn_detection", "manual"), ("server_threshold", 2),
+    ("server_silence_ms", 50), ("server_prefix_padding_ms", 3000),
+])
+def test_second_batch_rejects_bad_values(field, value):
+    with pytest.raises(ValueError):
+        InworldRealtimeLLMConfiguration(api_key="k", **{field: value})

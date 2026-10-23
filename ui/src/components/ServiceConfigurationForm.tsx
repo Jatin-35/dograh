@@ -679,7 +679,7 @@ export function ServiceConfigurationForm({
                             {more.length > 0 && (
                                 <Collapsible>
                                     <CollapsibleTrigger className="group flex items-center gap-1 text-xs font-medium text-muted-foreground">
-                                        More {name.toLowerCase()} options
+                                        More {name} options
                                         <ChevronDown className="h-3 w-3 transition-transform group-data-[state=open]:rotate-180" />
                                     </CollapsibleTrigger>
                                     <CollapsibleContent className="pt-3">

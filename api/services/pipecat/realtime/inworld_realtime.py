@@ -28,11 +28,13 @@ The caller's language goes to ``audio.input.transcription.language`` and the
 agent's expected words to ``audio.input.transcription.prompts`` (Inworld STT's
 vocabulary hints), which the pinned events model has no fields for.
 
-Every session also asks for the low-latency options Inworld's docs give:
-``text_generation_config.reasoning.effort: NONE`` (models that can reason
-otherwise add thinking time), ``tts.segmenter_strategy: fast_start`` (sooner
+Every session also asks for the low-latency options Inworld's docs give,
+unless the agent chose otherwise: reasoning effort NONE (models that can
+reason otherwise add thinking time), the ``fast_start`` TTS segmenter (sooner
 first audio) and prompt caching (the large agent prompt and tools are resent
-every turn).
+every turn). The agent's other controls map to Inworld's documented session
+fields: noise reduction, max output tokens, sampling and penalties, memory,
+and semantic or server VAD turn detection with their tuning.
 
 Replies are held while one is running, as upstream pipecat now does. A
 ``response.create`` sent while the bot is speaking makes Inworld cancel that
@@ -47,21 +49,28 @@ call can be traced.
 import json
 import urllib.parse
 import uuid
+from collections import deque
 from typing import Any
 
 from loguru import logger
 
+from api.services.pipecat.realtime.local_turns import SPEECH_GAP_SECS, audio_secs
 from api.services.pipecat.realtime.static_greeting import format_static_greeting_prompt
 from pipecat.frames.frames import (
     BotStartedSpeakingFrame,
     BotStoppedSpeakingFrame,
     Frame,
+    LLMFullResponseEndFrame,
     LLMFullResponseStartFrame,
     LLMMessagesAppendFrame,
     TranscriptionFrame,
     TTSSpeakFrame,
+    TTSStoppedFrame,
     UserMuteStartedFrame,
     UserMuteStoppedFrame,
+    UserStartedSpeakingFrame,
+    VADUserStartedSpeakingFrame,
+    VADUserStoppedSpeakingFrame,
 )
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.frame_processor import FrameDirection
@@ -70,6 +79,15 @@ from pipecat.services.inworld.realtime import llm as inworld_llm
 from pipecat.services.inworld.realtime.llm import InworldRealtimeLLMService
 from pipecat.services.llm_service import FunctionCallFromLLM
 from pipecat.utils.time import time_now_iso8601
+
+# In Dograh-driven (manual) turns a commit can still find the buffer empty. The
+# pinned service treats unknown error codes as fatal and stops reading the
+# session, which would leave the call silent; this one must stay non-fatal.
+inworld_llm._NON_FATAL_ERROR_CODES.add("input_audio_buffer_commit_empty")
+
+# Lead-in kept from before the caller's voice is detected, so the first
+# syllables reach Inworld in Dograh-driven turns.
+_PREROLL_SECS = 0.5
 
 # Server events worth a log line; audio and text deltas are not.
 _LOGGED_SERVER_EVENTS = {
@@ -119,9 +137,64 @@ class DograhInworldRealtimeLLMService(InworldRealtimeLLMService):
         min_silence_ms: int | None = None,
         max_silence_ms: int | None = None,
         turn_confidence: float | None = None,
+        noise_reduction: str | None = None,
+        max_reply_tokens: int | None = None,
+        reasoning_effort: str | None = None,
+        top_p: float | None = None,
+        frequency_penalty: float | None = None,
+        presence_penalty: float | None = None,
+        memory: bool = False,
+        audio_start: str | None = None,
+        turn_detection: str | None = None,
+        server_threshold: float | None = None,
+        server_silence_ms: int | None = None,
+        server_prefix_padding_ms: int | None = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
+        self._noise_reduction = noise_reduction if noise_reduction not in (None, "off") else None
+        self._memory = bool(memory)
+        self._audio_start = audio_start or "fast_start"
+        self._generation_config: dict[str, Any] = {
+            "reasoning": {"effort": (reasoning_effort or "none").upper()},
+            **{
+                key: value
+                for key, value in {
+                    # Inworld enforces maxNewTokens; the session-level
+                    # max_output_tokens is echoed but ignored (measured live).
+                    "maxNewTokens": max_reply_tokens,
+                    "topP": top_p,
+                    "frequencyPenalty": frequency_penalty,
+                    "presencePenalty": presence_penalty,
+                }.items()
+                if value is not None
+            },
+        }
+        self._server_vad = turn_detection == "server_vad"
+        # Dograh decides turns: Inworld's detection is off (manual mode), so
+        # the base service's manual-mode paths commit and create replies.
+        self._local_turns = turn_detection == "dograh_local"
+        if self._local_turns:
+            self._settings.session_properties.audio.input.turn_detection = None
+        self._audio_gate_open = False
+        self._caller_turn_active = False
+        # Silence (s) since voice stopped without a turn starting; the audio is
+        # thrown away once it reaches SPEECH_GAP_SECS (a pause between words
+        # must not discard the caller's first words).
+        self._unturned_gap_secs: float | None = None
+        self._preroll: deque = deque()
+        self._preroll_bytes = 0
+        self._audio_pending = False
+        self._response_requested = False
+        self._server_vad_settings = {
+            key: value
+            for key, value in {
+                "threshold": server_threshold,
+                "silence_duration_ms": server_silence_ms,
+                "prefix_padding_ms": server_prefix_padding_ms,
+            }.items()
+            if value is not None
+        }
         if temperature is not None:
             self._settings.temperature = temperature
             self._settings.session_properties.temperature = temperature
@@ -169,10 +242,12 @@ class DograhInworldRealtimeLLMService(InworldRealtimeLLMService):
         provider_data["metadata"] = metadata
         provider_data["auto_tool_response"] = False
         provider_data.setdefault("caching", {"enabled": True})
-        provider_data.setdefault("text_generation_config", {"reasoning": {"effort": "NONE"}})
+        provider_data.setdefault("text_generation_config", dict(self._generation_config))
         tts = dict(provider_data.get("tts") or {})
-        tts.setdefault("segmenter_strategy", "fast_start")
+        tts.setdefault("segmenter_strategy", self._audio_start)
         provider_data["tts"] = tts
+        if self._memory:
+            provider_data.setdefault("memory", {"enabled": True})
         if self._dograh_language:
             tts = dict(provider_data.get("tts") or {})
             tts.setdefault("language", self._dograh_language)
@@ -188,7 +263,22 @@ class DograhInworldRealtimeLLMService(InworldRealtimeLLMService):
                 transcription["prompts"] = list(self._expected_words)
         if self._delivery_mode:
             provider_data["tts"]["delivery_mode"] = self._delivery_mode
-        if self._stt_overrides:
+        audio_in = session.get("audio", {}).get("input")
+        if isinstance(audio_in, dict):
+            if self._noise_reduction:
+                audio_in["noise_reduction"] = {"type": self._noise_reduction}
+            if self._local_turns:
+                # Explicit null: dropping the field (as exclude_none does)
+                # would leave Inworld's own turn detection on.
+                audio_in["turn_detection"] = None
+            turn = audio_in.get("turn_detection")
+            if self._server_vad and isinstance(turn, dict):
+                # Silero VAD + Smart Turn: eagerness and Inworld-STT tuning
+                # don't apply; it takes its own threshold and silence.
+                turn["type"] = "server_vad"
+                turn.pop("eagerness", None)
+                turn.update(self._server_vad_settings)
+        if self._stt_overrides and not self._server_vad and not self._local_turns:
             stt = dict(provider_data.get("stt") or {})
             stt.update(self._stt_overrides)
             provider_data["stt"] = stt
@@ -205,10 +295,17 @@ class DograhInworldRealtimeLLMService(InworldRealtimeLLMService):
                 self._held_response_create = event
                 return
             self._last_response_create = event
+            self._response_requested = True
         data = event.model_dump(exclude_none=True)
         if isinstance(event, events.SessionUpdateEvent):
             data = self._session_payload(data)
         await self._ws_send(data)
+        if isinstance(event, events.InputAudioBufferAppendEvent):
+            self._audio_pending = True
+        elif isinstance(
+            event, (events.InputAudioBufferCommitEvent, events.InputAudioBufferClearEvent)
+        ):
+            self._audio_pending = False
 
     async def _send_tool_result(self, tool_call_id: str, result: Any):
         if result is None:
@@ -247,6 +344,13 @@ class DograhInworldRealtimeLLMService(InworldRealtimeLLMService):
         self._response_active = False
         self._held_response_create = None
         self._last_response_create = None
+        self._response_requested = False
+        self._audio_pending = False
+        self._audio_gate_open = False
+        self._caller_turn_active = False
+        self._unturned_gap_secs = None
+        self._preroll.clear()
+        self._preroll_bytes = 0
 
     # ── Reply holding and turn logging ────────────────────────────────
 
@@ -255,6 +359,7 @@ class DograhInworldRealtimeLLMService(InworldRealtimeLLMService):
         kind = evt.get("type", "")
         if kind == "response.created":
             self._response_active = True
+            self._response_requested = False
             logger.info(f"{self}: Inworld reply started")
         elif kind in _LOGGED_SERVER_EVENTS:
             logger.info(f"{self}: Inworld {kind.removeprefix('input_audio_buffer.')}")
@@ -272,6 +377,7 @@ class DograhInworldRealtimeLLMService(InworldRealtimeLLMService):
     async def _handle_evt_response_done(self, evt):
         await super()._handle_evt_response_done(evt)
         self._response_active = False
+        self._response_requested = False
         response = getattr(evt, "response", None)
         outputs = [getattr(o, "type", "?") for o in getattr(response, "output", None) or []]
         logger.info(
@@ -287,6 +393,85 @@ class DograhInworldRealtimeLLMService(InworldRealtimeLLMService):
         # The caller's new turn gets a reply of its own.
         self._held_response_create = None
         await super()._handle_evt_speech_started(evt)
+
+    # ── Dograh-driven turns (manual mode) ─────────────────────────────
+
+    async def _handle_user_stopped_speaking(self, frame):
+        """Dograh ended the caller's turn: commit their speech and ask for a reply."""
+        if not self._local_turns:
+            await super()._handle_user_stopped_speaking(frame)
+            return
+        self._caller_turn_active = False
+        self._close_audio_gate()
+        if not self._audio_pending:
+            # Nothing reached Inworld this turn (e.g. the caller was muted):
+            # an empty commit would only draw an error.
+            logger.info(f"{self}: caller turn ended with no audio sent; no reply asked")
+            return
+        logger.info(f"{self}: caller turn ended; committing and asking for a reply")
+        await self.start_ttfb_metrics()
+        await self.start_processing_metrics()
+        await self.send_client_event(events.InputAudioBufferCommitEvent())
+        await self.send_client_event(events.ResponseCreateEvent())
+
+    async def _handle_interruption(self):
+        """The caller really interrupted: stop the reply, keep their speech.
+
+        Unlike the base manual mode, the input buffer is not cleared here: it
+        already holds the start of the caller's words (sent from the pre-roll),
+        which clearing would cut off.
+        """
+        if not self._local_turns:
+            await super()._handle_interruption()
+            return
+        self._held_response_create = None
+        if self._response_active or self._response_requested:
+            await self.send_client_event(events.ResponseCancelEvent())
+        await self._truncate_current_audio_response()
+        await self.stop_all_metrics()
+        if self._current_assistant_response:
+            await self.push_frame(LLMFullResponseEndFrame())
+            await self.push_frame(TTSStoppedFrame())
+
+    async def _open_audio_gate(self):
+        if self._audio_gate_open:
+            return
+        self._audio_gate_open = True
+        preroll = list(self._preroll)
+        self._preroll.clear()
+        self._preroll_bytes = 0
+        for frame in preroll:
+            await self._send_user_audio(frame)
+
+    def _close_audio_gate(self):
+        self._audio_gate_open = False
+
+    async def _discard_unturned_audio(self):
+        """Voice that never became a turn (noise, echo) must not join the next one."""
+        self._unturned_gap_secs = None
+        self._close_audio_gate()
+        self._audio_buffer = b""
+        if self._audio_pending:
+            await self.send_client_event(events.InputAudioBufferClearEvent())
+
+    def _remember_preroll(self, frame):
+        self._preroll.append(frame)
+        self._preroll_bytes += len(frame.audio)
+        limit = int(frame.sample_rate * 2 * frame.num_channels * _PREROLL_SECS)
+        while self._preroll and self._preroll_bytes > limit:
+            self._preroll_bytes -= len(self._preroll.popleft().audio)
+
+    async def _track_local_turn_frame(self, frame: Frame):
+        if isinstance(frame, VADUserStartedSpeakingFrame):
+            self._unturned_gap_secs = None
+            await self._open_audio_gate()
+        elif isinstance(frame, UserStartedSpeakingFrame):
+            self._caller_turn_active = True
+            self._unturned_gap_secs = None
+            await self._open_audio_gate()
+        elif isinstance(frame, VADUserStoppedSpeakingFrame):
+            if not self._caller_turn_active:
+                self._unturned_gap_secs = 0.0
 
     # ── Dograh engine integration (as in the Grok wrapper) ────────────
 
@@ -315,6 +500,8 @@ class DograhInworldRealtimeLLMService(InworldRealtimeLLMService):
         if isinstance(frame, LLMMessagesAppendFrame):
             await self._handle_messages_append(frame)
             return
+        if self._local_turns:
+            await self._track_local_turn_frame(frame)
         if isinstance(frame, BotStartedSpeakingFrame):
             self._bot_is_speaking = True
         elif isinstance(frame, BotStoppedSpeakingFrame):
@@ -412,7 +599,16 @@ class DograhInworldRealtimeLLMService(InworldRealtimeLLMService):
     async def _send_user_audio(self, frame):
         if self._user_is_muted:
             return
+        if self._local_turns and not self._audio_gate_open:
+            # Only the caller's speech goes to Inworld in Dograh-driven turns;
+            # keep a short lead-in for when their voice is detected.
+            self._remember_preroll(frame)
+            return
         await super()._send_user_audio(frame)
+        if self._local_turns and self._unturned_gap_secs is not None:
+            self._unturned_gap_secs += audio_secs(frame)
+            if self._unturned_gap_secs >= SPEECH_GAP_SECS:
+                await self._discard_unturned_audio()
 
     def _message_to_conversation_item(
         self, message: dict[str, Any]
