@@ -24,8 +24,18 @@ It also carries three fixes upstream pipecat made after our pinned version:
 - The session key was a millisecond timestamp, so two calls starting in the
   same millisecond collided; it is now a UUID.
 
-The caller's language goes to ``audio.input.transcription.language``, which
-the pinned events model has no field for.
+The caller's language goes to ``audio.input.transcription.language`` and the
+agent's expected words to ``audio.input.transcription.prompts`` (Inworld STT's
+vocabulary hints), which the pinned events model has no fields for.
+
+Replies are held while one is running, as upstream pipecat now does. A
+``response.create`` sent while the bot is speaking makes Inworld cancel that
+reply mid-sentence and start the new one (seen on calls when a tool result
+arrived while the bot was still talking); it can also be refused with
+``conversation_already_has_active_response``, which the pinned service only
+debug-logs. Either way the next reply now waits for ``response.done``.
+Inworld's turn events, replies and errors are logged at info so a silence on a
+call can be traced.
 """
 
 import json
@@ -55,13 +65,58 @@ from pipecat.services.inworld.realtime.llm import InworldRealtimeLLMService
 from pipecat.services.llm_service import FunctionCallFromLLM
 from pipecat.utils.time import time_now_iso8601
 
+# Server events worth a log line; audio and text deltas are not.
+_LOGGED_SERVER_EVENTS = {
+    "input_audio_buffer.speech_started",
+    "input_audio_buffer.speech_stopped",
+    "input_audio_buffer.turn_suggestion",
+    "input_audio_buffer.turn_suggestion_revoked",
+    "input_audio_buffer.timeout_triggered",
+}
+
+
+class _ServerEventTap:
+    """Wraps the Inworld socket to see each server event before the base loop."""
+
+    def __init__(self, websocket, on_event):
+        self._websocket = websocket
+        self._on_event = on_event
+
+    def __getattr__(self, name):
+        return getattr(self._websocket, name)
+
+    async def __aiter__(self):
+        async for message in self._websocket:
+            # Audio deltas are most of the traffic; skip decoding them twice.
+            head = message[:120] if isinstance(message, str) else ""
+            if "output_audio.delta" not in head and "transcript.delta" not in head:
+                try:
+                    await self._on_event(json.loads(message))
+                except Exception as e:
+                    logger.debug(f"Inworld event tap skipped a message: {e}")
+            yield message
+
 
 class DograhInworldRealtimeLLMService(InworldRealtimeLLMService):
     """Inworld Realtime with Dograh engine integration and upstream fixes."""
 
-    def __init__(self, *, language: str | None = None, **kwargs):
+    def __init__(
+        self,
+        *,
+        language: str | None = None,
+        eagerness: str | None = None,
+        expected_words: list[str] | None = None,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self._dograh_language = (language or "").strip() or None
+        self._expected_words = [w.strip() for w in expected_words or [] if w.strip()]
+        turn_detection = self._settings.session_properties.audio.input.turn_detection
+        if eagerness and turn_detection is not None:
+            turn_detection.eagerness = eagerness
+        self._response_active: bool = False
+        self._held_response_create: events.ResponseCreateEvent | None = None
+        self._last_response_create: events.ResponseCreateEvent | None = None
         self._user_is_muted: bool = False
         self._handled_initial_context: bool = False
         self._bot_is_speaking: bool = False
@@ -90,10 +145,20 @@ class DograhInworldRealtimeLLMService(InworldRealtimeLLMService):
             )
             if isinstance(transcription, dict):
                 transcription.setdefault("language", self._dograh_language)
+        if self._expected_words:
+            transcription = session.get("audio", {}).get("input", {}).get("transcription")
+            if isinstance(transcription, dict):
+                transcription["prompts"] = list(self._expected_words)
         session["providerData"] = provider_data
         return data
 
     async def send_client_event(self, event: events.ClientEvent):
+        if isinstance(event, events.ResponseCreateEvent):
+            if self._response_active:
+                logger.info(f"{self}: Inworld reply still running; holding the next one")
+                self._held_response_create = event
+                return
+            self._last_response_create = event
         data = event.model_dump(exclude_none=True)
         if isinstance(event, events.SessionUpdateEvent):
             data = self._session_payload(data)
@@ -121,14 +186,61 @@ class DograhInworldRealtimeLLMService(InworldRealtimeLLMService):
                 {"key": f"pipecat-realtime-{uuid.uuid4().hex}", "protocol": "realtime"}
             )
             separator = "&" if "?" in self.base_url else "?"
-            self._websocket = await inworld_llm.websocket_connect(
+            websocket = await inworld_llm.websocket_connect(
                 uri=f"{self.base_url}{separator}{params}",
                 additional_headers={"Authorization": f"{scheme} {self.api_key}"},
             )
+            self._websocket = _ServerEventTap(websocket, self._on_server_event)
             self._receive_task = self.create_task(self._receive_task_handler())
         except Exception as e:
             await self.push_error(error_msg=f"Error connecting to Inworld: {e}", exception=e)
             self._websocket = None
+
+    async def _disconnect(self):
+        await super()._disconnect()
+        self._response_active = False
+        self._held_response_create = None
+        self._last_response_create = None
+
+    # ── Reply holding and turn logging ────────────────────────────────
+
+    async def _on_server_event(self, evt: dict[str, Any]):
+        """See each server event (bar audio) before the base receive loop does."""
+        kind = evt.get("type", "")
+        if kind == "response.created":
+            self._response_active = True
+            logger.info(f"{self}: Inworld reply started")
+        elif kind in _LOGGED_SERVER_EVENTS:
+            logger.info(f"{self}: Inworld {kind.removeprefix('input_audio_buffer.')}")
+        elif kind == "error":
+            error = evt.get("error") or {}
+            code = error.get("code")
+            logger.warning(f"{self}: Inworld error {code}: {error.get('message')}")
+            if code == "conversation_already_has_active_response":
+                # Refused because a reply we had not yet heard of is running:
+                # send ours once that one is done.
+                self._response_active = True
+                if self._held_response_create is None:
+                    self._held_response_create = self._last_response_create
+
+    async def _handle_evt_response_done(self, evt):
+        await super()._handle_evt_response_done(evt)
+        self._response_active = False
+        response = getattr(evt, "response", None)
+        outputs = [getattr(o, "type", "?") for o in getattr(response, "output", None) or []]
+        logger.info(
+            f"{self}: Inworld reply done ({getattr(response, 'status', '?')}, {outputs})"
+        )
+        held = self._held_response_create
+        if held is not None:
+            self._held_response_create = None
+            logger.info(f"{self}: sending the held Inworld reply")
+            await self.send_client_event(held)
+
+    async def _handle_evt_speech_started(self, evt):
+        # The caller's new turn gets a reply of its own.
+        self._held_response_create = None
+        await super()._handle_evt_speech_started(evt)
 
     # ── Dograh engine integration (as in the Grok wrapper) ────────────
 

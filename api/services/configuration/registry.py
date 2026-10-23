@@ -1088,6 +1088,23 @@ class InworldRealtimeLLMConfiguration(BaseLLMConfiguration):
         description="Language the caller speaks (hi, en...). Sent to speech-to-text and the voice.",
         json_schema_extra={"examples": ["hi", "en"], "allow_custom_input": True},
     )
+    expected_words: str | None = Field(
+        default=None,
+        description=(
+            "Words callers are likely to say, comma-separated: brand, product "
+            "and place names (e.g. Vectus, Puff, Cool, Samba). Helps speech-to-"
+            "text hear them correctly."
+        ),
+        json_schema_extra={"label": "Expected words"},
+    )
+    eagerness: Literal["low", "medium", "high"] = Field(
+        default="low",
+        description=(
+            "How soon the bot decides the caller has finished. low waits "
+            "longest and cuts callers off least; high replies soonest."
+        ),
+        json_schema_extra={"advanced": True, "label": "Eagerness"},
+    )
 
 
 @register_service(ServiceType.REALTIME)

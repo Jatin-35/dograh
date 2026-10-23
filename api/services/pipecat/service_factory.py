@@ -1357,6 +1357,10 @@ def create_realtime_llm_service(user_config, audio_config: "AudioConfig"):
             tts_model=getattr(realtime_config, "tts_model", None),
             stt_model=getattr(realtime_config, "stt_model", None),
             language=language,
+            eagerness=getattr(realtime_config, "eagerness", None),
+            expected_words=re.split(
+                r"[,\n]", getattr(realtime_config, "expected_words", None) or ""
+            ),
         )
     elif provider == ServiceProviders.ULTRAVOX_REALTIME.value:
         from api.services.pipecat.realtime.ultravox_realtime import (

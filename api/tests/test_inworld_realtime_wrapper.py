@@ -427,3 +427,191 @@ def test_unreachable_inworld_is_reported():
     with patch("websockets.sync.client.connect", side_effect=TimeoutError()):
         (err,) = _validate_key()
     assert "Could not connect to Inworld Realtime" in err["message"]
+
+
+# ── Expected words and eagerness ──────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_expected_words_and_eagerness_reach_inworld():
+    service = _make_service(
+        language="hi", eagerness="medium", expected_words=[" Vectus", "Puff ", "", "Samba"]
+    )
+    sock = _with_socket(service)
+
+    await service._send_session_update()
+
+    audio_in = sock.sent[0]["session"]["audio"]["input"]
+    assert audio_in["transcription"]["prompts"] == ["Vectus", "Puff", "Samba"]
+    assert audio_in["transcription"]["language"] == "hi"
+    assert audio_in["turn_detection"]["eagerness"] == "medium"
+
+
+@pytest.mark.asyncio
+async def test_no_expected_words_sends_no_prompts_and_keeps_low_eagerness():
+    service = _make_service()
+    sock = _with_socket(service)
+
+    await service._send_session_update()
+
+    audio_in = sock.sent[0]["session"]["audio"]["input"]
+    assert "prompts" not in audio_in["transcription"]
+    assert audio_in["turn_detection"]["eagerness"] == "low"
+
+
+def test_factory_passes_expected_words_and_eagerness():
+    effective_config = EffectiveAIModelConfiguration(
+        is_realtime=True,
+        realtime=InworldRealtimeLLMConfiguration(
+            api_key="k",
+            expected_words="Vectus, Puff,Cool\nSamba,",
+            eagerness="high",
+        ),
+    )
+
+    service = create_realtime_llm_service(effective_config, audio_config=SimpleNamespace())
+
+    assert service._expected_words == ["Vectus", "Puff", "Cool", "Samba"]
+    turn = service._settings.session_properties.audio.input.turn_detection
+    assert turn.eagerness == "high"
+
+
+def test_new_settings_default_to_todays_behaviour():
+    cfg = InworldRealtimeLLMConfiguration(api_key="k")
+    assert cfg.expected_words is None
+    assert cfg.eagerness == "low"
+    with pytest.raises(ValueError):
+        InworldRealtimeLLMConfiguration(api_key="k", eagerness="bogus")
+
+
+# ── A reply asked for while one is running is held, not lost ──────────
+
+
+def _server_event(data: dict):
+    return events.parse_server_event(json.dumps(data))
+
+
+def _response_done(status="completed"):
+    return _server_event({
+        "type": "response.done",
+        "event_id": "evt-1",
+        "response": {"id": "resp-1", "object": "realtime.response", "status": status, "output": []},
+    })
+
+
+def _sent_types(sock):
+    return [m["type"] for m in sock.sent]
+
+
+@pytest.mark.asyncio
+async def test_reply_is_held_while_one_runs_and_sent_when_it_is_done():
+    service = _make_service()
+    sock = _with_socket(service)
+    service.push_frame = AsyncMock()
+    service.stop_processing_metrics = AsyncMock()
+
+    await service._on_server_event({"type": "response.created"})
+    # The tool finished while the bot was still speaking its first reply.
+    await service._send_tool_result("call-1", {"status": "success"})
+    await service.send_client_event(events.ResponseCreateEvent())
+    assert _sent_types(sock) == ["conversation.item.create"]
+
+    await service._handle_evt_response_done(_response_done())
+
+    assert _sent_types(sock) == ["conversation.item.create", "response.create"]
+    assert service._held_response_create is None
+
+
+@pytest.mark.asyncio
+async def test_reply_refused_by_inworld_is_sent_again_after_the_running_one():
+    service = _make_service()
+    sock = _with_socket(service)
+    service.push_frame = AsyncMock()
+    service.stop_processing_metrics = AsyncMock()
+
+    # Sent before we heard of the server's own reply, then refused.
+    await service.send_client_event(events.ResponseCreateEvent())
+    await service._on_server_event({
+        "type": "error",
+        "error": {"type": "invalid_request_error",
+                  "code": "conversation_already_has_active_response",
+                  "message": "Conversation already has an active response"},
+    })
+    await service._handle_evt_response_done(_response_done())
+
+    assert _sent_types(sock) == ["response.create", "response.create"]
+
+
+@pytest.mark.asyncio
+async def test_caller_speaking_drops_the_held_reply():
+    service = _make_service()
+    sock = _with_socket(service)
+    service.push_frame = AsyncMock()
+    service.stop_processing_metrics = AsyncMock()
+    service.broadcast_frame = AsyncMock()
+    service.broadcast_interruption = AsyncMock()
+
+    await service._on_server_event({"type": "response.created"})
+    await service.send_client_event(events.ResponseCreateEvent())
+    await service._handle_evt_speech_started(SimpleNamespace(item_id="i"))
+    await service._handle_evt_response_done(_response_done("cancelled"))
+
+    assert sock.sent == []
+
+
+@pytest.mark.asyncio
+async def test_replies_flow_normally_when_none_is_running():
+    service = _make_service()
+    sock = _with_socket(service)
+
+    await service.send_client_event(events.ResponseCreateEvent())
+    await service.send_client_event(events.ResponseCreateEvent())
+
+    assert _sent_types(sock) == ["response.create", "response.create"]
+
+
+@pytest.mark.asyncio
+async def test_disconnect_forgets_a_running_reply():
+    service = _make_service()
+    _with_socket(service)
+    service._websocket.close = AsyncMock()
+    await service._on_server_event({"type": "response.created"})
+
+    await service._disconnect()
+
+    assert service._response_active is False
+    assert service._held_response_create is None
+
+
+@pytest.mark.asyncio
+async def test_event_tap_sees_events_but_skips_audio_and_passes_everything_on():
+    seen = []
+
+    async def on_event(evt):
+        seen.append(evt["type"])
+
+    class _Source:
+        def __init__(self, messages):
+            self._messages = messages
+
+        def __aiter__(self):
+            return self._gen()
+
+        async def _gen(self):
+            for m in self._messages:
+                yield m
+
+    from api.services.pipecat.realtime.inworld_realtime import _ServerEventTap
+
+    messages = [
+        json.dumps({"type": "response.created"}),
+        json.dumps({"type": "response.output_audio.delta", "delta": "AAAA"}),
+        "not json",
+        json.dumps({"type": "input_audio_buffer.speech_stopped"}),
+    ]
+    tap = _ServerEventTap(_Source(messages), on_event)
+
+    passed = [m async for m in tap]
+
+    assert passed == messages
+    assert seen == ["response.created", "input_audio_buffer.speech_stopped"]
