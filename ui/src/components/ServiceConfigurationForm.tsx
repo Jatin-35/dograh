@@ -50,6 +50,8 @@ interface SchemaProperty {
     visible_when?: Record<string, FieldValue>;
     /** Display label; defaults to the field name. */
     label?: string;
+    /** Groups the field under a titled box (e.g. "Transcriber", "Voice"). */
+    section?: string;
 }
 
 /** The field's type, looking through `anyOf` for optional fields. */
@@ -598,6 +600,20 @@ export function ServiceConfigurationForm({
             : [];
         const mainFields = shownFields.filter(field => !resolveFieldSchema(providerSchema!, field)?.advanced);
         const advancedFields = shownFields.filter(field => resolveFieldSchema(providerSchema!, field)?.advanced);
+        // A provider whose fields name sections (e.g. Inworld's Transcriber /
+        // LLM / Voice) is laid out as one titled box per section, in the order
+        // the sections first appear; its first field joins its section rather
+        // than sitting beside the provider.
+        const sectionOf = (field: string) =>
+            providerSchema ? resolveFieldSchema(providerSchema, field)?.section : undefined;
+        const sectioned = configFields.some(field => sectionOf(field));
+        const sectionFields = providerSchema && sectioned
+            ? configFields.filter(field => isFieldVisible(service, resolveFieldSchema(providerSchema, field)))
+            : [];
+        const declaredOrder = Array.isArray(providerSchema?.sections) ? (providerSchema.sections as string[]) : [];
+        const sectionNames = [...new Set(sectionFields.map(field => sectionOf(field) ?? "General"))].sort(
+            (a, b) => (declaredOrder.indexOf(a) + 1 || Infinity) - (declaredOrder.indexOf(b) + 1 || Infinity),
+        );
 
         return (
             <div className="space-y-6">
@@ -638,7 +654,7 @@ export function ServiceConfigurationForm({
                         )}
                     </div>
 
-                    {currentProvider && providerSchema && configFields[0] && (
+                    {currentProvider && providerSchema && configFields[0] && !sectioned && (
                         <div className="space-y-2">
                             <Label className="capitalize">
                                 {fieldLabel(configFields[0], resolveFieldSchema(providerSchema, configFields[0]))}
@@ -648,13 +664,42 @@ export function ServiceConfigurationForm({
                     )}
                 </div>
 
-                {currentProvider && providerSchema && mainFields.length > 0 && (
+                {currentProvider && providerSchema && sectioned && sectionNames.map((name) => {
+                    const fields = sectionFields.filter(field => (sectionOf(field) ?? "General") === name);
+                    const main = fields.filter(field => !resolveFieldSchema(providerSchema, field)?.advanced);
+                    const more = fields.filter(field => resolveFieldSchema(providerSchema, field)?.advanced);
+                    return (
+                        <section key={name} aria-label={name} className="space-y-4 rounded-md border p-4">
+                            <h4 className="text-sm font-semibold">{name}</h4>
+                            {main.length > 0 && (
+                                <div className="grid grid-cols-2 gap-4">
+                                    {main.map((field) => renderFieldBlock(service, field, providerSchema))}
+                                </div>
+                            )}
+                            {more.length > 0 && (
+                                <Collapsible>
+                                    <CollapsibleTrigger className="group flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                                        More {name.toLowerCase()} options
+                                        <ChevronDown className="h-3 w-3 transition-transform group-data-[state=open]:rotate-180" />
+                                    </CollapsibleTrigger>
+                                    <CollapsibleContent className="pt-3">
+                                        <div className="grid grid-cols-2 gap-4">
+                                            {more.map((field) => renderFieldBlock(service, field, providerSchema))}
+                                        </div>
+                                    </CollapsibleContent>
+                                </Collapsible>
+                            )}
+                        </section>
+                    );
+                })}
+
+                {currentProvider && providerSchema && !sectioned && mainFields.length > 0 && (
                     <div className="grid grid-cols-2 gap-4">
                         {mainFields.map((field) => renderFieldBlock(service, field, providerSchema))}
                     </div>
                 )}
 
-                {currentProvider && providerSchema && advancedFields.length > 0 && (
+                {currentProvider && providerSchema && !sectioned && advancedFields.length > 0 && (
                     <Collapsible className="rounded-md border">
                         <CollapsibleTrigger className="group flex w-full items-center justify-between px-3 py-2 text-sm font-medium">
                             Advanced

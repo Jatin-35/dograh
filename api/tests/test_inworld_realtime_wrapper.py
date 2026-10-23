@@ -634,3 +634,82 @@ def test_soniox_and_flash_are_offered():
     props = InworldRealtimeLLMConfiguration.model_json_schema()["properties"]
     assert "soniox/stt-rt-v5" in props["stt_model"]["examples"]
     assert "inworld-tts-2-flash" in props["tts_model"]["examples"]
+
+
+# ── Sectioned settings and the new controls ───────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_new_controls_reach_inworld():
+    service = _make_service(
+        language="hi",
+        temperature=0.4,
+        speed=1.1,
+        delivery_mode="stable",
+        speech_threshold=0.6,
+        min_silence_ms=300,
+        max_silence_ms=900,
+        turn_confidence=0.7,
+    )
+    sock = _with_socket(service)
+
+    await service._send_session_update()
+
+    session = sock.sent[0]["session"]
+    assert session["temperature"] == 0.4
+    assert session["audio"]["output"]["speed"] == 1.1
+    assert session["providerData"]["tts"]["delivery_mode"] == "STABLE"
+    assert session["providerData"]["stt"] == {
+        "vad_threshold": 0.6,
+        "min_end_of_turn_silence": 300,
+        "max_turn_silence": 900,
+        "end_of_turn_confidence_threshold": 0.7,
+    }
+
+
+@pytest.mark.asyncio
+async def test_untouched_controls_send_nothing_new():
+    service = _make_service()
+    sock = _with_socket(service)
+
+    await service._send_session_update()
+
+    session = sock.sent[0]["session"]
+    assert "temperature" not in session
+    assert "speed" not in session["audio"]["output"]
+    assert "stt" not in session["providerData"]
+    assert "delivery_mode" not in session["providerData"]["tts"]
+
+
+def test_factory_passes_the_new_controls():
+    effective_config = EffectiveAIModelConfiguration(
+        is_realtime=True,
+        realtime=InworldRealtimeLLMConfiguration(
+            api_key="k", speech_threshold=0.55, max_silence_ms=1200, delivery_mode="balanced"
+        ),
+    )
+
+    service = create_realtime_llm_service(effective_config, audio_config=SimpleNamespace())
+
+    assert service._stt_overrides == {"vad_threshold": 0.55, "max_turn_silence": 1200}
+    assert service._delivery_mode == "BALANCED"
+    assert service._voice_speed is None
+
+
+def test_settings_form_is_split_into_ordered_sections():
+    schema = InworldRealtimeLLMConfiguration.model_json_schema()
+    assert schema["sections"] == ["Transcriber", "LLM", "Voice", "Turn-taking & noise"]
+    sections = {name: p.get("section") for name, p in schema["properties"].items()}
+    assert sections["stt_model"] == sections["expected_words"] == "Transcriber"
+    assert sections["model"] == sections["temperature"] == "LLM"
+    assert sections["voice"] == sections["tts_model"] == "Voice"
+    assert sections["speech_threshold"] == sections["eagerness"] == "Turn-taking & noise"
+
+
+@pytest.mark.parametrize("field,value", [
+    ("speech_threshold", 1.5), ("min_silence_ms", 10), ("max_silence_ms", 9000),
+    ("speed", 3.0), ("temperature", -1), ("delivery_mode", "loud"),
+])
+def test_out_of_range_controls_are_rejected(field, value):
+    with pytest.raises(ValueError):
+        InworldRealtimeLLMConfiguration(api_key="k", **{field: value})

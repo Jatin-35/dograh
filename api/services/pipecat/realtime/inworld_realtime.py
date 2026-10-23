@@ -112,9 +112,35 @@ class DograhInworldRealtimeLLMService(InworldRealtimeLLMService):
         language: str | None = None,
         eagerness: str | None = None,
         expected_words: list[str] | None = None,
+        temperature: float | None = None,
+        speed: float | None = None,
+        delivery_mode: str | None = None,
+        speech_threshold: float | None = None,
+        min_silence_ms: int | None = None,
+        max_silence_ms: int | None = None,
+        turn_confidence: float | None = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
+        if temperature is not None:
+            self._settings.temperature = temperature
+            self._settings.session_properties.temperature = temperature
+        self._voice_speed = speed
+        self._delivery_mode = (
+            delivery_mode.upper() if delivery_mode and delivery_mode != "default" else None
+        )
+        # Explicit providerData.stt values override the eagerness preset field
+        # by field; unset ones keep it.
+        self._stt_overrides = {
+            key: value
+            for key, value in {
+                "vad_threshold": speech_threshold,
+                "min_end_of_turn_silence": min_silence_ms,
+                "max_turn_silence": max_silence_ms,
+                "end_of_turn_confidence_threshold": turn_confidence,
+            }.items()
+            if value is not None
+        }
         self._dograh_language = (language or "").strip() or None
         self._expected_words = [w.strip() for w in expected_words or [] if w.strip()]
         turn_detection = self._settings.session_properties.audio.input.turn_detection
@@ -160,6 +186,15 @@ class DograhInworldRealtimeLLMService(InworldRealtimeLLMService):
             transcription = session.get("audio", {}).get("input", {}).get("transcription")
             if isinstance(transcription, dict):
                 transcription["prompts"] = list(self._expected_words)
+        if self._delivery_mode:
+            provider_data["tts"]["delivery_mode"] = self._delivery_mode
+        if self._stt_overrides:
+            stt = dict(provider_data.get("stt") or {})
+            stt.update(self._stt_overrides)
+            provider_data["stt"] = stt
+        output = session.get("audio", {}).get("output")
+        if self._voice_speed is not None and isinstance(output, dict):
+            output["speed"] = self._voice_speed
         session["providerData"] = provider_data
         return data
 

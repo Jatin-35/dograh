@@ -1361,6 +1361,13 @@ def create_realtime_llm_service(user_config, audio_config: "AudioConfig"):
             expected_words=re.split(
                 r"[,\n]", getattr(realtime_config, "expected_words", None) or ""
             ),
+            temperature=getattr(realtime_config, "temperature", None),
+            speed=getattr(realtime_config, "speed", None),
+            delivery_mode=getattr(realtime_config, "delivery_mode", None),
+            speech_threshold=getattr(realtime_config, "speech_threshold", None),
+            min_silence_ms=getattr(realtime_config, "min_silence_ms", None),
+            max_silence_ms=getattr(realtime_config, "max_silence_ms", None),
+            turn_confidence=getattr(realtime_config, "turn_confidence", None),
         )
     elif provider == ServiceProviders.ULTRAVOX_REALTIME.value:
         from api.services.pipecat.realtime.ultravox_realtime import (

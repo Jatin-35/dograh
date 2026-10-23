@@ -261,12 +261,16 @@ def provider_model_config(
     *,
     description: str | None = None,
     provider_docs_url: str | None = None,
+    sections: list[str] | None = None,
 ) -> ConfigDict:
-    json_schema_extra: dict[str, str] = {}
+    json_schema_extra: dict[str, str | list[str]] = {}
     if description is not None:
         json_schema_extra["description"] = description
     if provider_docs_url is not None:
         json_schema_extra["provider_docs_url"] = provider_docs_url
+    if sections is not None:
+        # The order the form shows the fields' sections in.
+        json_schema_extra["sections"] = sections
     if json_schema_extra:
         return ConfigDict(title=title, json_schema_extra=json_schema_extra)
     return ConfigDict(title=title)
@@ -316,6 +320,7 @@ INWORLD_REALTIME_PROVIDER_MODEL_CONFIG = provider_model_config(
         "LLM with the model field."
     ),
     provider_docs_url="https://docs.inworld.ai/api-reference/realtimeAPI/realtime/realtime-websocket",
+    sections=["Transcriber", "LLM", "Voice", "Turn-taking & noise"],
 )
 DEEPGRAM_PROVIDER_MODEL_CONFIG = provider_model_config("Deepgram")
 ELEVENLABS_PROVIDER_MODEL_CONFIG = provider_model_config("ElevenLabs")
@@ -1052,47 +1057,38 @@ INWORLD_REALTIME_VOICES = [
 
 @register_service(ServiceType.REALTIME)
 class InworldRealtimeLLMConfiguration(BaseLLMConfiguration):
+    """One Inworld session: its speech-to-text, a routed LLM and Inworld TTS.
+
+    Every tuning field left empty keeps Inworld's own default, so agents saved
+    before a field existed run exactly as before.
+    """
+
     model_config = INWORLD_REALTIME_PROVIDER_MODEL_CONFIG
     provider: Literal[ServiceProviders.INWORLD_REALTIME] = (
         ServiceProviders.INWORLD_REALTIME
     )
-    model: str = Field(
-        default="openai/gpt-4.1-mini",
-        description="LLM, as <provider>/<model> through Inworld's router.",
-        json_schema_extra={
-            "examples": INWORLD_REALTIME_LLM_MODELS,
-            "allow_custom_input": True,
-        },
-    )
-    voice: str = Field(
-        default="Riya",
-        description="Inworld voice.",
-        json_schema_extra={
-            "examples": INWORLD_REALTIME_VOICES,
-            "allow_custom_input": True,
-        },
-    )
+    # ── Transcriber ──
     stt_model: str = Field(
         default="inworld/inworld-stt-1",
-        description="Speech-to-text model Inworld transcribes the caller with.",
+        description=(
+            "Speech-to-text model. Soniox heard Hindi brand names best in tests "
+            "but ends turns more slowly."
+        ),
         json_schema_extra={
             "examples": INWORLD_REALTIME_STT_MODELS,
             "allow_custom_input": True,
-        },
-    )
-    tts_model: str = Field(
-        default="inworld-tts-2",
-        description="Inworld voice model.",
-        json_schema_extra={
-            "examples": INWORLD_REALTIME_TTS_MODELS,
-            "allow_custom_input": True,
-            "advanced": True,
+            "label": "Model",
+            "section": "Transcriber",
         },
     )
     language: str | None = Field(
         default="hi",
         description="Language the caller speaks (hi, en...). Sent to speech-to-text and the voice.",
-        json_schema_extra={"examples": ["hi", "en"], "allow_custom_input": True},
+        json_schema_extra={
+            "examples": ["hi", "en"],
+            "allow_custom_input": True,
+            "section": "Transcriber",
+        },
     )
     expected_words: str | None = Field(
         default=None,
@@ -1101,15 +1097,122 @@ class InworldRealtimeLLMConfiguration(BaseLLMConfiguration):
             "and place names (e.g. Vectus, Puff, Cool, Samba). Helps speech-to-"
             "text hear them correctly."
         ),
-        json_schema_extra={"label": "Expected words"},
+        json_schema_extra={"label": "Expected words", "section": "Transcriber"},
     )
+    # ── LLM ──
+    model: str = Field(
+        default="openai/gpt-4.1-mini",
+        description="LLM, as <provider>/<model> through Inworld's router.",
+        json_schema_extra={
+            "examples": INWORLD_REALTIME_LLM_MODELS,
+            "allow_custom_input": True,
+            "section": "LLM",
+        },
+    )
+    temperature: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=2.0,
+        description="Lower is steadier and more literal. Empty uses the model's default.",
+        json_schema_extra={"section": "LLM"},
+    )
+    # ── Voice ──
+    tts_model: str = Field(
+        default="inworld-tts-2",
+        description="Voice model. Flash is faster and cheaper.",
+        json_schema_extra={
+            "examples": INWORLD_REALTIME_TTS_MODELS,
+            "allow_custom_input": True,
+            "label": "Model",
+            "section": "Voice",
+        },
+    )
+    voice: str = Field(
+        default="Riya",
+        description="Inworld voice.",
+        json_schema_extra={
+            "examples": INWORLD_REALTIME_VOICES,
+            "allow_custom_input": True,
+            "section": "Voice",
+        },
+    )
+    speed: float | None = Field(
+        default=None,
+        ge=0.25,
+        le=1.5,
+        description="Speaking speed, 0.25-1.5. Empty uses 1.0.",
+        json_schema_extra={"advanced": True, "section": "Voice"},
+    )
+    delivery_mode: Literal["default", "stable", "balanced", "creative"] = Field(
+        default="default",
+        description=(
+            "stable is the most consistent; creative the most expressive "
+            "(TTS-2 only)."
+        ),
+        json_schema_extra={"advanced": True, "label": "Delivery", "section": "Voice"},
+    )
+    # ── Turn-taking & noise ──
     eagerness: Literal["low", "medium", "high"] = Field(
         default="low",
         description=(
-            "How soon the bot decides the caller has finished. low waits "
-            "longest and cuts callers off least; high replies soonest."
+            "How soon the bot decides the caller has finished. Inworld's "
+            "presets wait at most 2 s (low), 1 s (medium) or 0.8 s (high) of "
+            "silence."
         ),
-        json_schema_extra={"advanced": True, "label": "Eagerness"},
+        json_schema_extra={"label": "Eagerness", "section": "Turn-taking & noise"},
+    )
+    speech_threshold: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "0-1; how clearly sound must be speech to count as the caller. "
+            "Raise it (0.5-0.7) if background noise or echo interrupts the bot "
+            "or keeps it waiting. Empty uses the eagerness preset (0.25-0.35)."
+        ),
+        json_schema_extra={"label": "Speech threshold", "section": "Turn-taking & noise"},
+    )
+    min_silence_ms: int | None = Field(
+        default=None,
+        ge=20,
+        le=5000,
+        description=(
+            "Shortest silence (ms) before the caller's turn can end. Empty "
+            "uses the eagerness preset (750 / 400 / 160)."
+        ),
+        json_schema_extra={
+            "advanced": True,
+            "label": "Silence before reply (ms)",
+            "section": "Turn-taking & noise",
+        },
+    )
+    max_silence_ms: int | None = Field(
+        default=None,
+        ge=20,
+        le=5000,
+        description=(
+            "Silence (ms) after which the turn ends even if unsure. Empty uses "
+            "the eagerness preset (2000 / 1000 / 800)."
+        ),
+        json_schema_extra={
+            "advanced": True,
+            "label": "Longest wait (ms)",
+            "section": "Turn-taking & noise",
+        },
+    )
+    turn_confidence: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "0-1; how sure Inworld must be that the caller finished before "
+            "replying. Empty uses the eagerness preset (0.90 / 0.75 / 0.65)."
+        ),
+        json_schema_extra={
+            "advanced": True,
+            "label": "End-of-turn confidence",
+            "section": "Turn-taking & noise",
+        },
     )
 
 
