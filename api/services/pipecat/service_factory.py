@@ -463,6 +463,7 @@ def create_stt_service(
             ),
             sample_rate=audio_config.transport_in_sample_rate,
             keyterms=keyterms,
+            mode=getattr(user_config.stt, "mode", None),
         )
     elif user_config.stt.provider == ServiceProviders.SPEACHES.value:
         language = getattr(user_config.stt, "language", None)

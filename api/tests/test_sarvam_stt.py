@@ -19,13 +19,27 @@ from api.services.pipecat.service_factory import create_stt_service
 from pipecat.services.sarvam.stt import SarvamSTTService, SarvamSTTSettings
 
 
-def _service(model="saaras:v4", keyterms=None, language=None):
+def _service(model="saaras:v4", keyterms=None, language=None, mode=None):
     return DograhSarvamSTTService(
         api_key="test-key",
         settings=SarvamSTTSettings(model=model, language=language),
         sample_rate=8000,
         keyterms=keyterms,
+        mode=mode,
     )
+
+
+def _connect_with_mock(service):
+    context = MagicMock()
+    context.__aenter__ = AsyncMock(return_value=MagicMock())
+    connect = MagicMock(return_value=context)
+    service._sarvam_client = SimpleNamespace(
+        speech_to_text_streaming=SimpleNamespace(connect=connect)
+    )
+    service.create_task = MagicMock()
+    service._create_keepalive_task = MagicMock()
+    service._receive_task_handler = MagicMock()
+    return connect
 
 
 class TestModels:
@@ -65,13 +79,14 @@ class TestModels:
 
 
 class TestFactory:
-    def _create(self, model, keyterms=None):
+    def _create(self, model, keyterms=None, **stt):
         user_config = SimpleNamespace(
             stt=SimpleNamespace(
                 provider=ServiceProviders.SARVAM.value,
                 model=model,
                 api_key="test-key",
                 language="hi-IN",
+                **stt,
             )
         )
         audio = AudioConfig(transport_in_sample_rate=8000, transport_out_sample_rate=8000)
@@ -85,6 +100,51 @@ class TestFactory:
     def test_dictionary_words_become_keyterms_on_v4(self):
         service = self._create("saaras:v4", keyterms=["Vectus", "OH-Tank", "टंकी"])
         assert service._keyterms == ["Vectus", "OH-Tank", "टंकी"]
+
+    def test_the_transcript_style_reaches_the_service(self):
+        assert self._create("saaras:v4", mode="codemix")._mode == "codemix"
+
+    def test_an_agent_saved_before_the_style_existed_transcribes(self):
+        assert self._create("saaras:v4")._mode == "transcribe"
+
+
+class TestTranscriptStyle:
+    def test_new_agents_transcribe(self):
+        assert SarvamSTTConfiguration(api_key="k").mode == "transcribe"
+
+    def test_the_dropdown_offers_the_four_styles(self):
+        schema = SarvamSTTConfiguration.model_json_schema()["properties"]["mode"]
+        assert schema["enum"] == ["transcribe", "codemix", "translit", "verbatim"]
+        assert schema["label"] == "Transcript style"
+
+    def test_translate_is_not_offered(self):
+        """translate turns the caller's Hindi into English; not a transcript style."""
+        with pytest.raises(ValueError):
+            SarvamSTTConfiguration(api_key="k", mode="translate")
+
+    def test_a_saved_config_without_a_style_still_loads(self):
+        config = SarvamSTTConfiguration.model_validate(
+            {"provider": "sarvam", "api_key": "k", "model": "saaras:v4", "language": "hi-IN"}
+        )
+        assert config.mode == "transcribe"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("model", ["saaras:v4", "saaras:v3"])
+    @pytest.mark.parametrize("mode", ["transcribe", "codemix", "translit", "verbatim"])
+    async def test_the_style_is_sent_when_connecting(self, model, mode):
+        service = _service(model=model, language="hi-IN", mode=mode)
+        connect = _connect_with_mock(service)
+        await service._connect()
+        assert connect.call_args.kwargs["mode"] == mode
+
+    @pytest.mark.asyncio
+    async def test_it_travels_alongside_the_keyterms(self):
+        service = _service(model="saaras:v4", keyterms=["Vectus"], mode="codemix")
+        connect = _connect_with_mock(service)
+        await service._connect()
+        kwargs = connect.call_args.kwargs
+        assert kwargs["mode"] == "codemix"
+        assert json.loads(kwargs["request_options"]["additional_query_parameters"]["keyterms"]) == ["Vectus"]
 
 
 class TestKeyterms:

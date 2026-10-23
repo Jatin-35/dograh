@@ -2351,6 +2351,17 @@ class SarvamSTTConfiguration(BaseSTTConfiguration):
             },
         },
     )
+    mode: Literal["transcribe", "codemix", "translit", "verbatim"] = Field(
+        default="transcribe",
+        description=(
+            "How the transcript is written. transcribe: in the spoken language's "
+            "script, English words included (\"मुझे बाथवेयर चाहिए\"). codemix: "
+            "English words stay in English letters (\"मुझे bathware चाहिए\"). "
+            "translit: everything in English letters (\"mujhe bathware chahiye\"). "
+            "verbatim: word for word, keeping fillers and repeats."
+        ),
+        json_schema_extra={"label": "Transcript style"},
+    )
 
 
 @register_stt

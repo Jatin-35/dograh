@@ -219,6 +219,7 @@ class DograhSarvamSTTService(SarvamSTTService):
             self._create_keepalive_task()
             logger.info(
                 f"Connected to Sarvam successfully ({self._settings.model}"
+                f"{f', {self._mode}' if self._mode else ''}"
                 f"{f', {len(self._keyterms)} keyterms' if self._keyterms else ''})"
             )
         except ApiError as e:
