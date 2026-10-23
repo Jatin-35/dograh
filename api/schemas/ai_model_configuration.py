@@ -75,11 +75,17 @@ class BYOKRealtimeAIModelConfiguration(BaseModel):
     realtime: RealtimeConfig
     llm: LLMConfig
     embeddings: EmbeddingsConfig | None = None
+    # Used only by a realtime provider set to take Dograh's own transcriber and
+    # voice (Inworld Realtime with stt_tts_source "dograh"); others ignore them.
+    stt: STTConfig | None = None
+    tts: TTSConfig | None = None
 
     @model_validator(mode="after")
     def reject_dograh_providers(self):
         _reject_dograh_provider("llm", self.llm)
         _reject_dograh_provider("embeddings", self.embeddings)
+        _reject_dograh_provider("stt", self.stt)
+        _reject_dograh_provider("tts", self.tts)
         return self
 
 
@@ -147,6 +153,8 @@ def compile_ai_model_configuration_v2(
         llm=realtime.llm,
         realtime=realtime.realtime,
         embeddings=realtime.embeddings,
+        stt=realtime.stt,
+        tts=realtime.tts,
         is_realtime=True,
     )
 

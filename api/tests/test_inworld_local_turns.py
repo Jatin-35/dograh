@@ -238,7 +238,7 @@ def test_dograh_local_settings_show_only_in_that_mode():
     props = InworldRealtimeLLMConfiguration.model_json_schema()["properties"]
     assert "dograh_local" in props["turn_detection"]["enum"]
     for field in ("local_min_words", "local_silence_secs", "local_barge_in_secs"):
-        assert props[field]["visible_when"] == {"turn_detection": "dograh_local"}
+        assert props[field]["visible_when"] == {"stt_tts_source": "inworld", "turn_detection": "dograh_local"}
 
 
 @pytest.mark.parametrize("field,value", [

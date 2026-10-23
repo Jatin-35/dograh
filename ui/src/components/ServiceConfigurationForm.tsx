@@ -511,7 +511,9 @@ export function ServiceConfigurationForm({
             if (mode === 'override') {
                 // Build model_overrides for enabled services only
                 const modelOverrides: Record<string, unknown> = {};
-                const services = isRealtime ? ["realtime", "llm"] : ["llm", "tts", "stt"];
+                const services = isRealtime
+                    ? ["realtime", "llm", ...(realtimeUsesOwnSttTts ? ["tts", "stt"] : [])]
+                    : ["llm", "tts", "stt"];
                 for (const svc of services) {
                     if (enabledOverrides[svc]) {
                         modelOverrides[svc] = buildServiceConfig(svc as ServiceSegment, data);
@@ -1071,11 +1073,25 @@ export function ServiceConfigurationForm({
         );
     };
 
+    // A realtime provider set to use Dograh's own transcriber and voice
+    // (Inworld Realtime, stt_tts_source "dograh") also needs their tabs.
+    const realtimeUsesOwnSttTts =
+        isRealtime
+        && serviceProviders.realtime === "inworld_realtime"
+        && watch("realtime_stt_tts_source") === "dograh";
+
     const getVisibleTabs = () => {
-        if (mode === 'override') {
-            return isRealtime ? OVERRIDE_REALTIME_TABS : OVERRIDE_STANDARD_TABS;
-        }
-        return isRealtime ? REALTIME_TABS : STANDARD_TABS;
+        const tabs = mode === 'override'
+            ? (isRealtime ? OVERRIDE_REALTIME_TABS : OVERRIDE_STANDARD_TABS)
+            : (isRealtime ? REALTIME_TABS : STANDARD_TABS);
+        if (!realtimeUsesOwnSttTts) return tabs;
+        const [first, ...rest] = tabs;
+        return [
+            first,
+            { key: "stt" as ServiceSegment, label: "Transcriber" },
+            { key: "tts" as ServiceSegment, label: "Voice" },
+            ...rest,
+        ];
     };
 
     const visibleTabs = getVisibleTabs();

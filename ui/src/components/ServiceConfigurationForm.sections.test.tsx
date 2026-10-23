@@ -64,6 +64,18 @@ const INWORLD_SCHEMA = {
             "title": "Model",
             "type": "string"
         },
+        "stt_tts_source": {
+            "default": "inworld",
+            "description": "inworld: Inworld transcribes the caller and speaks the reply (the settings below). dograh: your own Transcriber and Voice (any provider, set in their tabs) with the Inworld Realtime session as the LLM; Dograh's turn-taking applies.",
+            "enum": [
+                "inworld",
+                "dograh"
+            ],
+            "label": "Transcriber & voice",
+            "section": "Transcriber",
+            "title": "Stt Tts Source",
+            "type": "string"
+        },
         "stt_model": {
             "allow_custom_input": true,
             "default": "inworld/inworld-stt-1",
@@ -79,7 +91,10 @@ const INWORLD_SCHEMA = {
             "label": "Model",
             "section": "Transcriber",
             "title": "Stt Model",
-            "type": "string"
+            "type": "string",
+            "visible_when": {
+                "stt_tts_source": "inworld"
+            }
         },
         "language": {
             "allow_custom_input": true,
@@ -98,7 +113,10 @@ const INWORLD_SCHEMA = {
                 "en"
             ],
             "section": "Transcriber",
-            "title": "Language"
+            "title": "Language",
+            "visible_when": {
+                "stt_tts_source": "inworld"
+            }
         },
         "expected_words": {
             "anyOf": [
@@ -113,7 +131,10 @@ const INWORLD_SCHEMA = {
             "description": "Words callers are likely to say, comma-separated: brand, product and place names (e.g. Vectus, Puff, Cool, Samba). Helps speech-to-text hear them correctly.",
             "label": "Expected words",
             "section": "Transcriber",
-            "title": "Expected Words"
+            "title": "Expected Words",
+            "visible_when": {
+                "stt_tts_source": "inworld"
+            }
         },
         "noise_reduction": {
             "default": "off",
@@ -126,7 +147,10 @@ const INWORLD_SCHEMA = {
             "label": "Noise reduction",
             "section": "Transcriber",
             "title": "Noise Reduction",
-            "type": "string"
+            "type": "string",
+            "visible_when": {
+                "stt_tts_source": "inworld"
+            }
         },
         "temperature": {
             "anyOf": [
@@ -251,7 +275,10 @@ const INWORLD_SCHEMA = {
             "label": "Model",
             "section": "Voice",
             "title": "Tts Model",
-            "type": "string"
+            "type": "string",
+            "visible_when": {
+                "stt_tts_source": "inworld"
+            }
         },
         "voice": {
             "allow_custom_input": true,
@@ -270,7 +297,10 @@ const INWORLD_SCHEMA = {
             ],
             "section": "Voice",
             "title": "Voice",
-            "type": "string"
+            "type": "string",
+            "visible_when": {
+                "stt_tts_source": "inworld"
+            }
         },
         "speed": {
             "advanced": true,
@@ -287,7 +317,10 @@ const INWORLD_SCHEMA = {
             "default": null,
             "description": "Speaking speed, 0.25-1.5. Empty uses 1.0.",
             "section": "Voice",
-            "title": "Speed"
+            "title": "Speed",
+            "visible_when": {
+                "stt_tts_source": "inworld"
+            }
         },
         "delivery_mode": {
             "advanced": true,
@@ -302,7 +335,10 @@ const INWORLD_SCHEMA = {
             "label": "Delivery",
             "section": "Voice",
             "title": "Delivery Mode",
-            "type": "string"
+            "type": "string",
+            "visible_when": {
+                "stt_tts_source": "inworld"
+            }
         },
         "audio_start": {
             "advanced": true,
@@ -318,7 +354,10 @@ const INWORLD_SCHEMA = {
             "label": "Audio start",
             "section": "Voice",
             "title": "Audio Start",
-            "type": "string"
+            "type": "string",
+            "visible_when": {
+                "stt_tts_source": "inworld"
+            }
         },
         "turn_detection": {
             "default": "semantic_vad",
@@ -331,7 +370,10 @@ const INWORLD_SCHEMA = {
             "label": "Turn detection",
             "section": "Turn-taking & noise",
             "title": "Turn Detection",
-            "type": "string"
+            "type": "string",
+            "visible_when": {
+                "stt_tts_source": "inworld"
+            }
         },
         "eagerness": {
             "default": "low",
@@ -346,6 +388,7 @@ const INWORLD_SCHEMA = {
             "title": "Eagerness",
             "type": "string",
             "visible_when": {
+                "stt_tts_source": "inworld",
                 "turn_detection": "semantic_vad"
             }
         },
@@ -366,6 +409,7 @@ const INWORLD_SCHEMA = {
             "section": "Turn-taking & noise",
             "title": "Speech Threshold",
             "visible_when": {
+                "stt_tts_source": "inworld",
                 "turn_detection": "semantic_vad"
             }
         },
@@ -387,6 +431,7 @@ const INWORLD_SCHEMA = {
             "section": "Turn-taking & noise",
             "title": "Min Silence Ms",
             "visible_when": {
+                "stt_tts_source": "inworld",
                 "turn_detection": "semantic_vad"
             }
         },
@@ -408,6 +453,7 @@ const INWORLD_SCHEMA = {
             "section": "Turn-taking & noise",
             "title": "Max Silence Ms",
             "visible_when": {
+                "stt_tts_source": "inworld",
                 "turn_detection": "semantic_vad"
             }
         },
@@ -429,6 +475,7 @@ const INWORLD_SCHEMA = {
             "section": "Turn-taking & noise",
             "title": "Turn Confidence",
             "visible_when": {
+                "stt_tts_source": "inworld",
                 "turn_detection": "semantic_vad"
             }
         },
@@ -449,6 +496,7 @@ const INWORLD_SCHEMA = {
             "section": "Turn-taking & noise",
             "title": "Server Threshold",
             "visible_when": {
+                "stt_tts_source": "inworld",
                 "turn_detection": "server_vad"
             }
         },
@@ -469,6 +517,7 @@ const INWORLD_SCHEMA = {
             "section": "Turn-taking & noise",
             "title": "Server Silence Ms",
             "visible_when": {
+                "stt_tts_source": "inworld",
                 "turn_detection": "server_vad"
             }
         },
@@ -490,6 +539,7 @@ const INWORLD_SCHEMA = {
             "section": "Turn-taking & noise",
             "title": "Server Prefix Padding Ms",
             "visible_when": {
+                "stt_tts_source": "inworld",
                 "turn_detection": "server_vad"
             }
         },
@@ -503,6 +553,7 @@ const INWORLD_SCHEMA = {
             "title": "Local Min Words",
             "type": "integer",
             "visible_when": {
+                "stt_tts_source": "inworld",
                 "turn_detection": "dograh_local"
             }
         },
@@ -516,6 +567,7 @@ const INWORLD_SCHEMA = {
             "title": "Local Silence Secs",
             "type": "number",
             "visible_when": {
+                "stt_tts_source": "inworld",
                 "turn_detection": "dograh_local"
             }
         },
@@ -530,6 +582,7 @@ const INWORLD_SCHEMA = {
             "title": "Local Barge In Secs",
             "type": "number",
             "visible_when": {
+                "stt_tts_source": "inworld",
                 "turn_detection": "dograh_local"
             }
         }
@@ -708,5 +761,71 @@ describe('choosing Dograh-driven turns', () => {
         expect(within(turnTaking).queryByText('Eagerness')).toBeNull();
         expect(document.getElementById('realtime_speech_threshold')).toBeNull();
         expect(document.getElementById('realtime_server_threshold')).toBeNull();
+    });
+});
+
+describe('Inworld with our own transcriber and voice', () => {
+    const STT_SCHEMA = {
+        title: 'Deepgram',
+        properties: { provider: { type: 'string', default: 'deepgram' }, api_key: { type: 'string' }, model: { type: 'string', default: 'nova-3-general' } },
+    } as unknown as ProviderSchema;
+    const TTS_SCHEMA = {
+        title: 'ElevenLabs',
+        properties: { provider: { type: 'string', default: 'elevenlabs' }, api_key: { type: 'string' }, model: { type: 'string', default: 'eleven_flash_v2_5' } },
+    } as unknown as ProviderSchema;
+    const WITH_STT_TTS = {
+        ...DEFAULTS,
+        stt: { deepgram: STT_SCHEMA },
+        tts: { elevenlabs: TTS_SCHEMA },
+        default_providers: { ...DEFAULTS.default_providers, stt: 'deepgram', tts: 'elevenlabs' },
+    } as ServiceConfigurationDefaults;
+
+    function renderWith(realtime: Record<string, unknown>, onSave = vi.fn().mockResolvedValue(undefined)) {
+        render(
+            <ServiceConfigurationForm
+                mode="global"
+                onSave={onSave}
+                configurationDefaults={WITH_STT_TTS}
+                initialConfig={{
+                    is_realtime: true,
+                    realtime: { provider: 'inworld_realtime', api_key: 'k', ...realtime },
+                    llm: { provider: 'openai', api_key: 'llm-key', model: 'gpt-4.1' },
+                    stt: { provider: 'deepgram', api_key: 'dg-key', model: 'nova-3-general' },
+                    tts: { provider: 'elevenlabs', api_key: 'el-key', model: 'eleven_flash_v2_5' },
+                }}
+                forceRealtime={true}
+            />,
+        );
+        return onSave;
+    }
+
+    it('shows no Transcriber or Voice tab while Inworld hears and speaks', () => {
+        renderWith({});
+        const tabs = screen.getAllByRole('tab').map(t => t.textContent);
+        expect(tabs).toEqual(['Realtime Model', 'LLM', 'Embedding']);
+    });
+
+    it('adds Transcriber and Voice tabs when our own are chosen', () => {
+        renderWith({ stt_tts_source: 'dograh' });
+        const tabs = screen.getAllByRole('tab').map(t => t.textContent);
+        expect(tabs).toEqual(['Realtime Model', 'Transcriber', 'Voice', 'LLM', 'Embedding']);
+    });
+
+    it('hides Inworld’s own voice and turn settings when ours are used', () => {
+        renderWith({ stt_tts_source: 'dograh' });
+        expect(screen.queryByRole('region', { name: 'Voice' })).toBeNull();
+        expect(screen.queryByRole('region', { name: 'Turn-taking & noise' })).toBeNull();
+        expect(screen.getByRole('region', { name: 'LLM' })).toBeTruthy();
+    });
+
+    it('saves the transcriber and voice with the realtime settings', async () => {
+        const onSave = renderWith({ stt_tts_source: 'dograh' });
+        fireEvent.click(screen.getByRole('button', { name: 'Save Configuration' }));
+        await waitFor(() => expect(onSave).toHaveBeenCalled());
+        const saved = onSave.mock.calls[0][0];
+        expect(saved.is_realtime).toBe(true);
+        expect(saved.realtime.stt_tts_source).toBe('dograh');
+        expect(saved.stt.provider).toBe('deepgram');
+        expect(saved.tts.provider).toBe('elevenlabs');
     });
 });

@@ -1067,6 +1067,17 @@ class InworldRealtimeLLMConfiguration(BaseLLMConfiguration):
     provider: Literal[ServiceProviders.INWORLD_REALTIME] = (
         ServiceProviders.INWORLD_REALTIME
     )
+    # ── Where speech-to-text and the voice come from ──
+    stt_tts_source: Literal["inworld", "dograh"] = Field(
+        default="inworld",
+        description=(
+            "inworld: Inworld transcribes the caller and speaks the reply (the "
+            "settings below). dograh: your own Transcriber and Voice (any "
+            "provider, set in their tabs) with the Inworld Realtime session as "
+            "the LLM; Dograh's turn-taking applies."
+        ),
+        json_schema_extra={"label": "Transcriber & voice", "section": "Transcriber"},
+    )
     # ── Transcriber ──
     stt_model: str = Field(
         default="inworld/inworld-stt-1",
@@ -1074,7 +1085,7 @@ class InworldRealtimeLLMConfiguration(BaseLLMConfiguration):
             "Speech-to-text model. Soniox heard Hindi brand names best in tests "
             "but ends turns more slowly."
         ),
-        json_schema_extra={
+        json_schema_extra={"visible_when": {"stt_tts_source": "inworld"},
             "examples": INWORLD_REALTIME_STT_MODELS,
             "allow_custom_input": True,
             "label": "Model",
@@ -1084,7 +1095,7 @@ class InworldRealtimeLLMConfiguration(BaseLLMConfiguration):
     language: str | None = Field(
         default="hi",
         description="Language the caller speaks (hi, en...). Sent to speech-to-text and the voice.",
-        json_schema_extra={
+        json_schema_extra={"visible_when": {"stt_tts_source": "inworld"},
             "examples": ["hi", "en"],
             "allow_custom_input": True,
             "section": "Transcriber",
@@ -1097,7 +1108,7 @@ class InworldRealtimeLLMConfiguration(BaseLLMConfiguration):
             "and place names (e.g. Vectus, Puff, Cool, Samba). Helps speech-to-"
             "text hear them correctly."
         ),
-        json_schema_extra={"label": "Expected words", "section": "Transcriber"},
+        json_schema_extra={"visible_when": {"stt_tts_source": "inworld"}, "label": "Expected words", "section": "Transcriber"},
     )
     noise_reduction: Literal["off", "near_field", "far_field"] = Field(
         default="off",
@@ -1106,7 +1117,7 @@ class InworldRealtimeLLMConfiguration(BaseLLMConfiguration):
             "speaking. far_field suits phone lines and speakerphones, "
             "near_field headsets."
         ),
-        json_schema_extra={"label": "Noise reduction", "section": "Transcriber"},
+        json_schema_extra={"visible_when": {"stt_tts_source": "inworld"}, "label": "Noise reduction", "section": "Transcriber"},
     )
     # ── LLM ──
     model: str = Field(
@@ -1173,7 +1184,7 @@ class InworldRealtimeLLMConfiguration(BaseLLMConfiguration):
     tts_model: str = Field(
         default="inworld-tts-2",
         description="Voice model. Flash is faster and cheaper.",
-        json_schema_extra={
+        json_schema_extra={"visible_when": {"stt_tts_source": "inworld"},
             "examples": INWORLD_REALTIME_TTS_MODELS,
             "allow_custom_input": True,
             "label": "Model",
@@ -1183,7 +1194,7 @@ class InworldRealtimeLLMConfiguration(BaseLLMConfiguration):
     voice: str = Field(
         default="Riya",
         description="Inworld voice.",
-        json_schema_extra={
+        json_schema_extra={"visible_when": {"stt_tts_source": "inworld"},
             "examples": INWORLD_REALTIME_VOICES,
             "allow_custom_input": True,
             "section": "Voice",
@@ -1194,7 +1205,7 @@ class InworldRealtimeLLMConfiguration(BaseLLMConfiguration):
         ge=0.25,
         le=1.5,
         description="Speaking speed, 0.25-1.5. Empty uses 1.0.",
-        json_schema_extra={"advanced": True, "section": "Voice"},
+        json_schema_extra={"visible_when": {"stt_tts_source": "inworld"}, "advanced": True, "section": "Voice"},
     )
     delivery_mode: Literal["default", "stable", "balanced", "creative"] = Field(
         default="default",
@@ -1202,7 +1213,7 @@ class InworldRealtimeLLMConfiguration(BaseLLMConfiguration):
             "stable is the most consistent; creative the most expressive "
             "(TTS-2 only)."
         ),
-        json_schema_extra={"advanced": True, "label": "Delivery", "section": "Voice"},
+        json_schema_extra={"visible_when": {"stt_tts_source": "inworld"}, "advanced": True, "label": "Delivery", "section": "Voice"},
     )
     audio_start: Literal["fast_start", "auto", "balanced", "sentence", "full_turn"] = Field(
         default="fast_start",
@@ -1210,7 +1221,7 @@ class InworldRealtimeLLMConfiguration(BaseLLMConfiguration):
             "How the voice splits text before speaking. fast_start starts "
             "soonest; sentence and full_turn sound more natural but start later."
         ),
-        json_schema_extra={"advanced": True, "label": "Audio start", "section": "Voice"},
+        json_schema_extra={"visible_when": {"stt_tts_source": "inworld"}, "advanced": True, "label": "Audio start", "section": "Voice"},
     )
     # ── Turn-taking & noise ──
     turn_detection: Literal["semantic_vad", "server_vad", "dograh_local"] = Field(
@@ -1223,7 +1234,7 @@ class InworldRealtimeLLMConfiguration(BaseLLMConfiguration):
             "caller interrupts the bot only with real words. Works with any "
             "speech-to-text model."
         ),
-        json_schema_extra={"label": "Turn detection", "section": "Turn-taking & noise"},
+        json_schema_extra={"visible_when": {"stt_tts_source": "inworld"}, "label": "Turn detection", "section": "Turn-taking & noise"},
     )
     eagerness: Literal["low", "medium", "high"] = Field(
         default="low",
@@ -1235,7 +1246,7 @@ class InworldRealtimeLLMConfiguration(BaseLLMConfiguration):
         json_schema_extra={
             "label": "Eagerness",
             "section": "Turn-taking & noise",
-            "visible_when": {"turn_detection": "semantic_vad"},
+            "visible_when": {"stt_tts_source": "inworld", "turn_detection": "semantic_vad"},
         },
     )
     speech_threshold: float | None = Field(
@@ -1250,7 +1261,7 @@ class InworldRealtimeLLMConfiguration(BaseLLMConfiguration):
         json_schema_extra={
             "label": "Speech threshold",
             "section": "Turn-taking & noise",
-            "visible_when": {"turn_detection": "semantic_vad"},
+            "visible_when": {"stt_tts_source": "inworld", "turn_detection": "semantic_vad"},
         },
     )
     min_silence_ms: int | None = Field(
@@ -1265,7 +1276,7 @@ class InworldRealtimeLLMConfiguration(BaseLLMConfiguration):
             "advanced": True,
             "label": "Silence before reply (ms)",
             "section": "Turn-taking & noise",
-            "visible_when": {"turn_detection": "semantic_vad"},
+            "visible_when": {"stt_tts_source": "inworld", "turn_detection": "semantic_vad"},
         },
     )
     max_silence_ms: int | None = Field(
@@ -1280,7 +1291,7 @@ class InworldRealtimeLLMConfiguration(BaseLLMConfiguration):
             "advanced": True,
             "label": "Longest wait (ms)",
             "section": "Turn-taking & noise",
-            "visible_when": {"turn_detection": "semantic_vad"},
+            "visible_when": {"stt_tts_source": "inworld", "turn_detection": "semantic_vad"},
         },
     )
     turn_confidence: float | None = Field(
@@ -1295,7 +1306,7 @@ class InworldRealtimeLLMConfiguration(BaseLLMConfiguration):
             "advanced": True,
             "label": "End-of-turn confidence",
             "section": "Turn-taking & noise",
-            "visible_when": {"turn_detection": "semantic_vad"},
+            "visible_when": {"stt_tts_source": "inworld", "turn_detection": "semantic_vad"},
         },
     )
     server_threshold: float | None = Field(
@@ -1309,7 +1320,7 @@ class InworldRealtimeLLMConfiguration(BaseLLMConfiguration):
         json_schema_extra={
             "label": "Speech threshold",
             "section": "Turn-taking & noise",
-            "visible_when": {"turn_detection": "server_vad"},
+            "visible_when": {"stt_tts_source": "inworld", "turn_detection": "server_vad"},
         },
     )
     server_silence_ms: int | None = Field(
@@ -1320,7 +1331,7 @@ class InworldRealtimeLLMConfiguration(BaseLLMConfiguration):
         json_schema_extra={
             "label": "Silence before reply (ms)",
             "section": "Turn-taking & noise",
-            "visible_when": {"turn_detection": "server_vad"},
+            "visible_when": {"stt_tts_source": "inworld", "turn_detection": "server_vad"},
         },
     )
     server_prefix_padding_ms: int | None = Field(
@@ -1332,7 +1343,7 @@ class InworldRealtimeLLMConfiguration(BaseLLMConfiguration):
             "advanced": True,
             "label": "Speech padding (ms)",
             "section": "Turn-taking & noise",
-            "visible_when": {"turn_detection": "server_vad"},
+            "visible_when": {"stt_tts_source": "inworld", "turn_detection": "server_vad"},
         },
     )
     local_min_words: int = Field(
@@ -1346,7 +1357,7 @@ class InworldRealtimeLLMConfiguration(BaseLLMConfiguration):
         json_schema_extra={
             "label": "Words to interrupt",
             "section": "Turn-taking & noise",
-            "visible_when": {"turn_detection": "dograh_local"},
+            "visible_when": {"stt_tts_source": "inworld", "turn_detection": "dograh_local"},
         },
     )
     local_silence_secs: float = Field(
@@ -1360,7 +1371,7 @@ class InworldRealtimeLLMConfiguration(BaseLLMConfiguration):
         json_schema_extra={
             "label": "Silence before reply (s)",
             "section": "Turn-taking & noise",
-            "visible_when": {"turn_detection": "dograh_local"},
+            "visible_when": {"stt_tts_source": "inworld", "turn_detection": "dograh_local"},
         },
     )
     local_barge_in_secs: float = Field(
@@ -1375,7 +1386,7 @@ class InworldRealtimeLLMConfiguration(BaseLLMConfiguration):
             "advanced": True,
             "label": "Speech to interrupt (s)",
             "section": "Turn-taking & noise",
-            "visible_when": {"turn_detection": "dograh_local"},
+            "visible_when": {"stt_tts_source": "inworld", "turn_detection": "dograh_local"},
         },
     )
 

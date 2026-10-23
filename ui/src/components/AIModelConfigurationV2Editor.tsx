@@ -112,7 +112,7 @@ function byokDefaults(defaults: ModelConfigurationDefaultsV2): ServiceConfigurat
     };
 }
 
-function byokConfigToLegacyShape(config: Record<string, unknown> | null): Record<string, unknown> | null {
+export function byokConfigToLegacyShape(config: Record<string, unknown> | null): Record<string, unknown> | null {
     if (!config || config.mode !== "byok") return null;
     const byok = asRecord(config.byok);
     if (!byok) return null;
@@ -124,6 +124,8 @@ function byokConfigToLegacyShape(config: Record<string, unknown> | null): Record
             realtime: realtime?.realtime,
             llm: realtime?.llm,
             embeddings: realtime?.embeddings,
+            stt: realtime?.stt,
+            tts: realtime?.tts,
         };
     }
 
@@ -269,6 +271,50 @@ function optionalByokService(config: Record<string, unknown>, service: ServiceSe
     const serviceConfiguration = asRecord(config[service]);
     if (!serviceConfiguration?.provider || serviceConfiguration.provider === "dograh") return undefined;
     return serviceConfiguration;
+}
+
+/** The saved BYOK configuration for what the form holds (throws if a required service is missing). */
+export function buildByokConfigurationBody(
+    config: Record<string, unknown>,
+    defaults: ServiceConfigurationDefaults,
+): OrganizationAiModelConfigurationV2 {
+    const isRealtime = Boolean(config.is_realtime);
+    const llm = requireByokService(config, "llm", defaults);
+    const embeddings = optionalByokService(config, "embeddings");
+    // Inworld Realtime set to use our own transcriber and voice saves them
+    // with the realtime configuration; other realtime providers don't.
+    const realtimeService = isRealtime ? asRecord(config.realtime) : null;
+    const ownSttTts = realtimeService?.provider === "inworld_realtime"
+        && realtimeService?.stt_tts_source === "dograh";
+    const body: OrganizationAiModelConfigurationV2 = {
+        version: 2,
+        mode: "byok",
+        byok: isRealtime
+            ? {
+                mode: "realtime",
+                realtime: {
+                    realtime: requireByokService(config, "realtime", defaults) as never,
+                    llm: llm as never,
+                    ...(embeddings ? { embeddings: embeddings as never } : {}),
+                    ...(ownSttTts
+                        ? {
+                            stt: requireByokService(config, "stt", defaults) as never,
+                            tts: requireByokService(config, "tts", defaults) as never,
+                        }
+                        : {}),
+                },
+            }
+            : {
+                mode: "pipeline",
+                pipeline: {
+                    llm: llm as never,
+                    tts: requireByokService(config, "tts", defaults) as never,
+                    stt: requireByokService(config, "stt", defaults) as never,
+                    ...(embeddings ? { embeddings: embeddings as never } : {}),
+                },
+            },
+    };
+    return body;
 }
 
 function ThirdPartyProviderNotice() {
@@ -420,33 +466,7 @@ export function AIModelConfigurationV2Editor({
 
     const saveByokConfiguration = async (config: Record<string, unknown>) => {
         setError(null);
-        const isRealtime = Boolean(config.is_realtime);
-        const llm = requireByokService(config, "llm", defaultsForByok);
-        const embeddings = optionalByokService(config, "embeddings");
-        const body: OrganizationAiModelConfigurationV2 = {
-            version: 2,
-            mode: "byok",
-            byok: isRealtime
-                ? {
-                    mode: "realtime",
-                    realtime: {
-                        realtime: requireByokService(config, "realtime", defaultsForByok) as never,
-                        llm: llm as never,
-                        ...(embeddings ? { embeddings: embeddings as never } : {}),
-                    },
-                }
-                : {
-                    mode: "pipeline",
-                    pipeline: {
-                        llm: llm as never,
-                        tts: requireByokService(config, "tts", defaultsForByok) as never,
-                        stt: requireByokService(config, "stt", defaultsForByok) as never,
-                        ...(embeddings ? { embeddings: embeddings as never } : {}),
-                    },
-                },
-        };
-
-        await onSave(body);
+        await onSave(buildByokConfigurationBody(config, defaultsForByok));
     };
 
     return (
