@@ -1024,12 +1024,18 @@ INWORLD_REALTIME_LLM_MODELS = [
     "inworld/models/gemma-4-31b-it",
     "inworld/models/gemma-4-26b-a4b-it",
 ]
+# All accepted by Inworld Realtime. Soniox heard Hindi brand names (Puff, Safe,
+# Cool) that inworld-stt-1 missed, but ended turns more slowly in tests.
 INWORLD_REALTIME_STT_MODELS = [
     "inworld/inworld-stt-1",
+    "soniox/stt-rt-v5",
+    "soniox/stt-rt-v4",
+    "inworld/inworld-stt-1-preview",
     "assemblyai/universal-streaming-multilingual",
     "assemblyai/u3-rt-pro",
 ]
-INWORLD_REALTIME_TTS_MODELS = ["inworld-tts-2"]
+# Flash is Inworld's fastest and cheapest voice ($15 vs $25 per 1M characters).
+INWORLD_REALTIME_TTS_MODELS = ["inworld-tts-2", "inworld-tts-2-flash"]
 # Hindi voices first (Inworld TTS-2 lists Hindi as generally available).
 INWORLD_REALTIME_VOICES = [
     "Riya",

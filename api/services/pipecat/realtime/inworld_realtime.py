@@ -28,6 +28,12 @@ The caller's language goes to ``audio.input.transcription.language`` and the
 agent's expected words to ``audio.input.transcription.prompts`` (Inworld STT's
 vocabulary hints), which the pinned events model has no fields for.
 
+Every session also asks for the low-latency options Inworld's docs give:
+``text_generation_config.reasoning.effort: NONE`` (models that can reason
+otherwise add thinking time), ``tts.segmenter_strategy: fast_start`` (sooner
+first audio) and prompt caching (the large agent prompt and tools are resent
+every turn).
+
 Replies are held while one is running, as upstream pipecat now does. A
 ``response.create`` sent while the bot is speaking makes Inworld cancel that
 reply mid-sentence and start the new one (seen on calls when a tool result
@@ -136,6 +142,11 @@ class DograhInworldRealtimeLLMService(InworldRealtimeLLMService):
         metadata["sdk"] = "pipecat-realtime"
         provider_data["metadata"] = metadata
         provider_data["auto_tool_response"] = False
+        provider_data.setdefault("caching", {"enabled": True})
+        provider_data.setdefault("text_generation_config", {"reasoning": {"effort": "NONE"}})
+        tts = dict(provider_data.get("tts") or {})
+        tts.setdefault("segmenter_strategy", "fast_start")
+        provider_data["tts"] = tts
         if self._dograh_language:
             tts = dict(provider_data.get("tts") or {})
             tts.setdefault("language", self._dograh_language)

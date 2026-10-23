@@ -70,7 +70,7 @@ async def test_session_update_sends_provider_data_under_inworlds_name():
     assert "provider_data" not in session
     assert session["providerData"]["metadata"] == {"sdk": "pipecat-realtime"}
     assert session["providerData"]["auto_tool_response"] is False
-    assert session["providerData"]["tts"] == {"language": "hi"}
+    assert session["providerData"]["tts"] == {"segmenter_strategy": "fast_start", "language": "hi"}
     assert session["audio"]["input"]["transcription"] == {
         "model": "inworld/inworld-stt-1",
         "language": "hi",
@@ -102,7 +102,7 @@ async def test_session_update_carries_the_agents_models_and_voice():
     assert session["audio"]["input"]["turn_detection"]["type"] == "semantic_vad"
     # No language set: none is sent, Inworld auto-detects.
     assert "language" not in session["audio"]["input"]["transcription"]
-    assert "tts" not in session["providerData"]
+    assert session["providerData"]["tts"] == {"segmenter_strategy": "fast_start"}
 
 
 @pytest.mark.asyncio
@@ -615,3 +615,22 @@ async def test_event_tap_sees_events_but_skips_audio_and_passes_everything_on():
 
     assert passed == messages
     assert seen == ["response.created", "input_audio_buffer.speech_stopped"]
+
+
+@pytest.mark.asyncio
+async def test_every_session_asks_for_low_latency_and_caching():
+    service = _make_service()
+    sock = _with_socket(service)
+
+    await service._send_session_update()
+
+    pd = sock.sent[0]["session"]["providerData"]
+    assert pd["caching"] == {"enabled": True}
+    assert pd["text_generation_config"] == {"reasoning": {"effort": "NONE"}}
+    assert pd["tts"]["segmenter_strategy"] == "fast_start"
+
+
+def test_soniox_and_flash_are_offered():
+    props = InworldRealtimeLLMConfiguration.model_json_schema()["properties"]
+    assert "soniox/stt-rt-v5" in props["stt_model"]["examples"]
+    assert "inworld-tts-2-flash" in props["tts_model"]["examples"]
