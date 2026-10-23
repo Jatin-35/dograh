@@ -358,10 +358,12 @@ def _merge_byok_secret_fields(incoming_byok: dict | None, existing_byok: dict | 
     existing_mode = existing_byok.get("mode")
     if incoming_mode != existing_mode:
         return
+    # A realtime configuration can also carry a custom transcriber and voice
+    # (Inworld Realtime); their keys come back masked like the others.
     section_names = (
         ("llm", "tts", "stt", "embeddings")
         if incoming_mode == "pipeline"
-        else ("realtime", "llm", "embeddings")
+        else ("realtime", "llm", "embeddings", "stt", "tts")
     )
     incoming_container = incoming_byok.get(incoming_mode)
     existing_container = existing_byok.get(existing_mode)

@@ -44,7 +44,7 @@ TTS = {"provider": "elevenlabs", "api_key": "el-k", "model": "eleven_flash_v2_5"
 
 def _v2(realtime_extra=None, stt=True, tts=True):
     realtime = {
-        "realtime": {"provider": "inworld_realtime", "api_key": "k", **(realtime_extra or {})},
+        "realtime": {"provider": "inworld_realtime", "api_key": "inworld-real-secret", **(realtime_extra or {})},
         "llm": {"provider": "openai", "api_key": "llm-k", "model": "gpt-4.1"},
     }
     if stt:
@@ -431,3 +431,33 @@ async def test_a_second_reply_waits_for_the_first():
     await service._on_server_event({"type": "response.created"})
     await service.send_client_event(events.ResponseCreateEvent())
     assert sock.sent == [] and service._held_response_create is not None
+
+
+# ── Saving with masked keys ───────────────────────────────────────────
+
+
+def test_saving_again_with_masked_keys_keeps_the_real_custom_keys():
+    """The settings page sends keys back masked; a changed voice must still save."""
+    from api.services.configuration.ai_model_configuration import (
+        check_for_masked_keys_in_ai_model_configuration_v2,
+        mask_ai_model_configuration_v2,
+        merge_ai_model_configuration_v2_secrets,
+    )
+
+    existing = _v2({"stt_source": "custom", "tts_source": "custom"})
+    shown = mask_ai_model_configuration_v2(existing)  # what the page receives
+    realtime = shown["byok"]["realtime"]
+    assert realtime["stt"]["api_key"] != STT["api_key"]
+    assert realtime["tts"]["api_key"] != TTS["api_key"]
+
+    realtime["tts"]["voice"] = "Adam"  # the change the caller made
+    incoming = OrganizationAIModelConfigurationV2.model_validate(shown)
+
+    merged = merge_ai_model_configuration_v2_secrets(incoming, existing)
+
+    check_for_masked_keys_in_ai_model_configuration_v2(merged)  # no "appears to be masked"
+    saved = merged.byok.realtime
+    assert saved.stt.api_key == STT["api_key"]
+    assert saved.tts.api_key == TTS["api_key"]
+    assert saved.tts.voice == "Adam"
+    assert saved.realtime.api_key == "inworld-real-secret"
