@@ -119,6 +119,7 @@ class ServiceProviders(str, Enum):
     ANTHROPIC = "anthropic"
     INCEPTION = "inception"
     SONIOX = "soniox"
+    VARTALAAP = "vartalaap"
 
 
 class BaseServiceConfiguration(BaseModel):
@@ -159,6 +160,7 @@ class BaseServiceConfiguration(BaseModel):
         ServiceProviders.XAI,
         ServiceProviders.MURF,
         ServiceProviders.SONIOX,
+        ServiceProviders.VARTALAAP,
     ]
     api_key: str | list[str]
 
@@ -327,6 +329,11 @@ ELEVENLABS_PROVIDER_MODEL_CONFIG = provider_model_config("ElevenLabs")
 CARTESIA_PROVIDER_MODEL_CONFIG = provider_model_config("Cartesia")
 XAI_PROVIDER_MODEL_CONFIG = provider_model_config("xAI")
 MURF_PROVIDER_MODEL_CONFIG = provider_model_config("Murf")
+VARTALAAP_PROVIDER_MODEL_CONFIG = provider_model_config(
+    "Vartalaap",
+    description="Streaming Hinglish and English voices, with Hinglish number reading.",
+    provider_docs_url="https://docs.vartalaap.si/api/websocket/",
+)
 INWORLD_PROVIDER_MODEL_CONFIG = provider_model_config(
     "Inworld",
     description=(
@@ -1567,6 +1574,66 @@ class MurfTTSConfiguration(BaseTTSConfiguration):
     )
 
 
+# Hinglish (hi-IN + en-IN) voices, then US English ones, as GET /v1/voices lists them.
+VARTALAAP_TTS_VOICES = [
+    "saanvi", "meera", "mahi", "mitali", "manasi", "madhavi", "mohini", "malvika", "mansi",
+    "mukta", "sahil", "manav", "mohan", "mihir", "madhav", "mayank", "manish", "mukul", "mohit",
+    "milan", "mahesh",
+    "kiara", "kenna", "kate", "kyra", "kelsey", "kristen", "kaia", "kimberly", "kira",
+    "kevin", "kyle", "kieran", "kenneth", "kurt", "kai", "keith", "kelvin", "kristof",
+]
+
+
+@register_tts
+class VartalaapTTSConfiguration(BaseServiceConfiguration):
+    model_config = VARTALAAP_PROVIDER_MODEL_CONFIG
+    provider: Literal[ServiceProviders.VARTALAAP] = ServiceProviders.VARTALAAP
+    voice: str = Field(
+        default="saanvi",
+        description=(
+            "Voice id. The voice sets the language: names starting with m, plus "
+            "saanvi and sahil, speak Hinglish; names starting with k speak US "
+            "English. Details at"
+        ),
+        json_schema_extra={
+            "examples": VARTALAAP_TTS_VOICES,
+            "allow_custom_input": True,
+            "docs_url": "https://docs.vartalaap.si/api/tts/",
+            "docs_label": "Vartalaap voices",
+        },
+    )
+    speed: float = Field(
+        default=1.0,
+        ge=0.5,
+        le=2.0,
+        description="Speaking speed, 0.5 to 2.0. Sounds best between 0.75 and 1.5.",
+    )
+    profile: Literal["default", "telephony"] = Field(
+        default="default",
+        description="Output tuning. telephony is shaped for phone lines.",
+    )
+    digits: Literal["hi", "mixed", "en"] = Field(
+        default="hi",
+        description=(
+            "How Hinglish voices read numbers: hi in Hindi, en in English, mixed "
+            "for a mix. English voices ignore it."
+        ),
+        json_schema_extra={"label": "Number reading"},
+    )
+    temperature: float = Field(
+        default=0.3,
+        ge=0.0,
+        le=2.0,
+        description="Lower is steadier, higher is more expressive (0 to 2).",
+    )
+
+    @computed_field
+    @property
+    def model(self) -> str:
+        # Vartalaap has no model selector; the voice picks everything.
+        return "vartalaap"
+
+
 ELEVENLABS_TTS_MODELS = ["eleven_flash_v2_5"]
 
 
@@ -2188,6 +2255,7 @@ TTSConfig = Annotated[
         AzureSpeechTTSConfiguration,
         SmallestAITTSConfiguration,
         XAITTSConfiguration,
+        VartalaapTTSConfiguration,
     ],
     Field(discriminator="provider"),
 ]

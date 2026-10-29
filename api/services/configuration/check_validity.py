@@ -105,6 +105,7 @@ class UserConfigurationValidator:
             ServiceProviders.SMALLEST.value: self._check_smallest_api_key,
             ServiceProviders.XAI.value: self._check_xai_api_key,
             ServiceProviders.MURF.value: self._check_murf_api_key,
+            ServiceProviders.VARTALAAP.value: self._check_vartalaap_api_key,
         }
 
     async def validate(
@@ -583,6 +584,28 @@ class UserConfigurationValidator:
                 "Invalid Murf API key. The key was rejected by the Murf API. "
                 "Please check that your API key is correct and active. "
                 "You can find your key at https://murf.ai/api/docs."
+            )
+        return True
+
+    def _check_vartalaap_api_key(self, model: str, api_key: str) -> bool:
+        # Listing voices is free. Only a clear auth failure rejects the save;
+        # other statuses stay inconclusive.
+        try:
+            response = httpx.get(
+                "https://api.vartalaap.si/v1/voices",
+                headers={"x-api-key": api_key},
+                timeout=10.0,
+            )
+        except httpx.RequestError:
+            raise ValueError(
+                "Could not connect to the Vartalaap API. Please check your network "
+                "connection and try again."
+            )
+        if response.status_code in (401, 403):
+            raise ValueError(
+                "Invalid Vartalaap API key. The key was rejected by the Vartalaap API. "
+                "Please check that your API key is correct and active. "
+                "You can find your key at https://tts.vartalaap.si."
             )
         return True
 

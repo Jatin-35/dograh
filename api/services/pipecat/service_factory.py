@@ -36,6 +36,7 @@ from api.services.pipecat.minimax_tts import MiniMaxOwnedSessionTTSService
 from api.services.pipecat.anthropic_llm import DograhAnthropicLLMService
 from api.services.pipecat.deepgram_stt import DograhDeepgramSTTService
 from api.services.pipecat.murf_tts import MurfTTSService
+from api.services.pipecat.vartalaap_tts import VartalaapTTSService
 from api.services.pipecat.soniox_stt import (
     DograhSonioxSTTService,
     build_soniox_context,
@@ -1000,6 +1001,20 @@ def create_tts_service(
                 min_buffer_size=2,
                 max_buffer_delay_in_ms=0,
             ),
+            text_filters=[xml_function_tag_filter],
+            skip_aggregator_types=["recording_router", "recording"],
+            silence_time_s=1.0,
+        )
+    elif user_config.tts.provider == ServiceProviders.VARTALAAP.value:
+        # Vartalaap always returns 24 kHz; the output transport resamples it
+        # to the call's rate.
+        return VartalaapTTSService(
+            api_key=user_config.tts.api_key,
+            voice=getattr(user_config.tts, "voice", None) or "saanvi",
+            speed=getattr(user_config.tts, "speed", None) or 1.0,
+            profile=getattr(user_config.tts, "profile", None) or "default",
+            digits=getattr(user_config.tts, "digits", None) or "hi",
+            temperature=getattr(user_config.tts, "temperature", None),
             text_filters=[xml_function_tag_filter],
             skip_aggregator_types=["recording_router", "recording"],
             silence_time_s=1.0,
