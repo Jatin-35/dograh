@@ -255,10 +255,32 @@ async def deploy_version(
             errors=report.errors,
         )
 
-    existing = {
-        tool.name: tool
-        for tool in await db_client.get_tools_for_organization(organization_id)
-    }
+    # Names can repeat: an archived hand-made tool often shares its name with
+    # the Code Editor function that replaced it. Code Editor only ever touches
+    # its own tools, preferring an active one when it has several.
+    existing: dict[str, Any] = {}
+    handmade_active: set[str] = set()
+    for tool in await db_client.get_tools_for_organization(organization_id):
+        if (tool.definition or {}).get("managed_by") != MANAGED_MARKER:
+            if tool.status != ToolStatus.ARCHIVED.value:
+                handmade_active.add(tool.name)
+            continue
+        current = existing.get(tool.name)
+        if current is None or current.status == ToolStatus.ARCHIVED.value:
+            existing[tool.name] = tool
+
+    for name in definitions:
+        if name in handmade_active and name not in existing:
+            # An active hand-made tool already owns this name. Overwriting it
+            # would silently repoint an existing agent's tool at user code. An
+            # archived one can't be called, so it doesn't stand in the way.
+            report.errors.append(
+                f"{name}: a tool with this name already exists and was not "
+                "created by Code Editor. Rename one of them."
+            )
+
+    if report.errors:
+        raise DeployError("Deploy stopped before writing.", errors=report.errors)
 
     # Only mint a credential once there is something to attach it to, so a
     # deploy that fails validation doesn't leave a stray API key behind.
@@ -292,15 +314,6 @@ async def deploy_version(
             report.created.append(name)
             continue
 
-        if (tool.definition or {}).get("managed_by") != MANAGED_MARKER:
-            # A hand-made tool already owns this name. Overwriting it would
-            # silently repoint an existing agent's tool at user code.
-            report.errors.append(
-                f"{name}: a tool with this name already exists and was not "
-                "created by Code Editor. Rename one of them."
-            )
-            continue
-
         unchanged = tool.definition == definition and tool.description == description
         if unchanged:
             report.unchanged.append(name)
@@ -314,16 +327,11 @@ async def deploy_version(
         )
         report.updated.append(name)
 
-    if report.errors:
-        raise DeployError("Deploy stopped before writing.", errors=report.errors)
-
     # A function deleted from the workspace must stop being callable. Archive
     # rather than delete: an agent may still reference the uuid, and archiving
     # removes it from the model's choices without breaking that reference.
     for name, tool in existing.items():
         if name in definitions:
-            continue
-        if (tool.definition or {}).get("managed_by") != MANAGED_MARKER:
             continue
         if tool.status == ToolStatus.ARCHIVED.value:
             continue

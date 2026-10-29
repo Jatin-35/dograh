@@ -230,6 +230,87 @@ async def test_a_hand_made_tool_with_the_same_name_is_refused():
 
 
 @pytest.mark.asyncio
+async def test_an_archived_hand_made_tool_does_not_block_the_name():
+    """It can't be called, so archiving it is enough to free the name."""
+    archived = _tool("lookup_user_by_phone", {"schema_version": 1, "config": {}}, status="archived")
+    db = _db(
+        _version({"function_definitions/lookup_user_by_phone.json": json.dumps(_schema(name="lookup_user_by_phone"))}),
+        [archived],
+    )
+    report = await _deploy(db)
+
+    assert report.created == ["lookup_user_by_phone"]
+    db.update_tool.assert_not_awaited()  # the archived hand-made tool is left as it was
+    db.mark_code_editor_version_deployed.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("handmade_first", [True, False])
+async def test_a_duplicate_name_resolves_to_the_code_editor_tool(handmade_first):
+    """Think Gas has an archived hand-made closed_ticket next to the Code
+    Editor one; which row the database returns last must not matter."""
+    archived = _tool("closed_ticket", {"schema_version": 1, "config": {}}, status="archived", uuid="handmade")
+    managed = _tool(
+        "closed_ticket",
+        build_tool_definition("closed_ticket", _schema(name="closed_ticket"), api_url=API_URL, version_number=1),
+        uuid="managed",
+    )
+    tools = [archived, managed] if handmade_first else [managed, archived]
+    db = _db(
+        _version(
+            {"function_definitions/closed_ticket.json": json.dumps(_schema(name="closed_ticket", description="changed"))},
+            number=2,
+        ),
+        tools,
+    )
+    report = await _deploy(db, number=2)
+
+    assert report.updated == ["closed_ticket"]
+    assert db.update_tool.await_args.kwargs["tool_uuid"] == "managed"
+
+
+@pytest.mark.asyncio
+async def test_a_refused_deploy_leaves_the_other_tools_alone():
+    """A name clash on one function used to be found mid-loop, after the
+    functions before it (and after it) had already been created or updated,
+    leaving agents on code from a version that was never deployed."""
+    managed = _tool(
+        "closed_ticket",
+        build_tool_definition(
+            "closed_ticket", _schema(name="closed_ticket"), api_url=API_URL, version_number=1
+        ),
+    )
+    handmade = _tool("lookup_user_by_phone", {"schema_version": 1, "config": {}})
+    db = _db(
+        _version(
+            {
+                "function_definitions/a_new_function.json": json.dumps(_schema(name="a_new_function")),
+                "function_definitions/closed_ticket.json": json.dumps(
+                    _schema(name="closed_ticket", description="changed")
+                ),
+                "function_definitions/lookup_user_by_phone.json": json.dumps(
+                    _schema(name="lookup_user_by_phone")
+                ),
+                "function_definitions/z_after.json": json.dumps(_schema(name="z_after")),
+            },
+            number=2,
+        ),
+        [managed, handmade],
+    )
+    with pytest.raises(DeployError) as exc:
+        await _deploy(db, number=2)
+
+    assert exc.value.errors == [
+        "lookup_user_by_phone: a tool with this name already exists and was not "
+        "created by Code Editor. Rename one of them."
+    ]
+    db.create_tool.assert_not_awaited()
+    db.update_tool.assert_not_awaited()
+    db.archive_tool.assert_not_awaited()
+    db.mark_code_editor_version_deployed.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_an_unmanaged_tool_is_never_archived():
     managed = build_tool_definition(
         "still_here", _schema(name="still_here"), api_url=API_URL, version_number=1
