@@ -37,6 +37,7 @@ from api.services.pipecat.anthropic_llm import DograhAnthropicLLMService
 from api.services.pipecat.deepgram_stt import DograhDeepgramSTTService
 from api.services.pipecat.murf_tts import MurfTTSService
 from api.services.pipecat.vartalaap_tts import VartalaapTTSService
+from api.services.pipecat.sixtydb_stt import SixtyDBSTTService
 from api.services.pipecat.soniox_stt import (
     DograhSonioxSTTService,
     build_soniox_context,
@@ -428,6 +429,17 @@ def create_stt_service(
             sample_rate=audio_config.transport_in_sample_rate,
             keyterms=keyterms,
             call_reference=call_reference,
+        )
+    elif user_config.stt.provider == ServiceProviders.SIXTYDB.value:
+        # The local VAD ends turns and asks 60db to finalize, as for Soniox.
+        return SixtyDBSTTService(
+            api_key=user_config.stt.api_key,
+            languages=getattr(user_config.stt, "languages", None) or [],
+            keywords=keyterms,
+            audio_enhancement=bool(getattr(user_config.stt, "audio_enhancement", True)),
+            keep_short_answers=bool(getattr(user_config.stt, "keep_short_answers", True)),
+            should_interrupt=False,  # Interruption follows the agent's turn strategies.
+            sample_rate=audio_config.transport_in_sample_rate,
         )
     elif user_config.stt.provider == ServiceProviders.SARVAM.value:
         language = getattr(user_config.stt, "language", None)

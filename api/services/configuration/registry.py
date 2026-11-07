@@ -55,6 +55,9 @@ from api.services.configuration.options import (
     SARVAM_V3_VOICES,
     SARVAM_V4_FLASH_DEFAULT_VOICE,
     SARVAM_V4_FLASH_VOICES,
+    SIXTYDB_DEFAULT_LANGUAGES,
+    SIXTYDB_STT_LANGUAGES,
+    SIXTYDB_STT_MODELS,
     SMALLEST_TTS_LANGUAGES,
     SMALLEST_TTS_MODELS,
     SMALLEST_TTS_PRO_VOICES,
@@ -120,6 +123,7 @@ class ServiceProviders(str, Enum):
     INCEPTION = "inception"
     SONIOX = "soniox"
     VARTALAAP = "vartalaap"
+    SIXTYDB = "sixtydb"
 
 
 class BaseServiceConfiguration(BaseModel):
@@ -161,6 +165,7 @@ class BaseServiceConfiguration(BaseModel):
         ServiceProviders.MURF,
         ServiceProviders.SONIOX,
         ServiceProviders.VARTALAAP,
+        ServiceProviders.SIXTYDB,
     ]
     api_key: str | list[str]
 
@@ -364,6 +369,14 @@ SONIOX_PROVIDER_MODEL_CONFIG = provider_model_config(
         "Indian languages, with Hindi-English switching mid-sentence."
     ),
     provider_docs_url="https://soniox.com/docs/stt/models",
+)
+SIXTYDB_PROVIDER_MODEL_CONFIG = provider_model_config(
+    "60db",
+    description=(
+        "Real-time transcription built for phone audio, with Hindi-English "
+        "switching mid-sentence and the agent's dictionary words as spelling hints."
+    ),
+    provider_docs_url="https://docs.60db.ai/websocket-api/stt",
 )
 ASSEMBLYAI_PROVIDER_MODEL_CONFIG = provider_model_config("AssemblyAI")
 GLADIA_PROVIDER_MODEL_CONFIG = provider_model_config("Gladia")
@@ -2548,6 +2561,64 @@ class SonioxSTTConfiguration(BaseSTTConfiguration):
 
 
 @register_stt
+class SixtyDBSTTConfiguration(BaseSTTConfiguration):
+    model_config = SIXTYDB_PROVIDER_MODEL_CONFIG
+    provider: Literal[ServiceProviders.SIXTYDB] = ServiceProviders.SIXTYDB
+    model: str = Field(
+        default="60db-stt-v01",
+        description="60db speech-to-text model.",
+        json_schema_extra={"examples": SIXTYDB_STT_MODELS},
+    )
+    languages: list[str] = Field(
+        default_factory=lambda: list(SIXTYDB_DEFAULT_LANGUAGES),
+        description=(
+            "Languages callers speak, at most five. Pick Hindi and English for "
+            "Hinglish. Leave empty to detect any language, which picks wrong more often."
+        ),
+        json_schema_extra={
+            "examples": SIXTYDB_STT_LANGUAGES,
+            "multi_select": True,
+            "label": "Languages",
+            # default_factory leaves the default out of the schema; the form needs it.
+            "default": list(SIXTYDB_DEFAULT_LANGUAGES),
+        },
+    )
+    audio_enhancement: bool = Field(
+        default=True,
+        description="Clean up noise and level before transcribing. 60db recommends it for phone audio.",
+        json_schema_extra={"label": "Phone audio clean-up"},
+    )
+    keep_short_answers: bool = Field(
+        default=True,
+        description=(
+            "60db drops a short answer it is unsure of, such as a quiet \"haan\". "
+            "On keeps what it heard instead, so the agent doesn't wait for an "
+            "answer the caller already gave."
+        ),
+        json_schema_extra={"advanced": True, "label": "Keep short unsure answers"},
+    )
+
+    @field_validator("languages", mode="before")
+    @classmethod
+    def _normalise_languages(cls, value):
+        if value is None:
+            return []
+        if isinstance(value, str):  # tolerate "hi, en" from API or SDK writers
+            value = value.split(",")
+        seen: list[str] = []
+        for item in value:
+            code = str(item).strip().lower()
+            if not code or code in seen:
+                continue
+            if code not in SIXTYDB_STT_LANGUAGES:
+                raise ValueError(f"60db does not support the language '{code}'")
+            seen.append(code)
+        if len(seen) > 5:
+            raise ValueError("60db takes at most five languages")
+        return seen
+
+
+@register_stt
 class SpeechmaticsSTTConfiguration(BaseSTTConfiguration):
     model_config = SPEECHMATICS_PROVIDER_MODEL_CONFIG
     provider: Literal[ServiceProviders.SPEECHMATICS] = ServiceProviders.SPEECHMATICS
@@ -2792,6 +2863,7 @@ STTConfig = Annotated[
         SpeechmaticsSTTConfiguration,
         SarvamSTTConfiguration,
         SonioxSTTConfiguration,
+        SixtyDBSTTConfiguration,
         SpeachesSTTConfiguration,
         HuggingFaceSTTConfiguration,
         AssemblyAISTTConfiguration,

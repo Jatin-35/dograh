@@ -106,6 +106,7 @@ class UserConfigurationValidator:
             ServiceProviders.XAI.value: self._check_xai_api_key,
             ServiceProviders.MURF.value: self._check_murf_api_key,
             ServiceProviders.VARTALAAP.value: self._check_vartalaap_api_key,
+            ServiceProviders.SIXTYDB.value: self._check_sixtydb_api_key,
         }
 
     async def validate(
@@ -606,6 +607,28 @@ class UserConfigurationValidator:
                 "Invalid Vartalaap API key. The key was rejected by the Vartalaap API. "
                 "Please check that your API key is correct and active. "
                 "You can find your key at https://tts.vartalaap.si."
+            )
+        return True
+
+    def _check_sixtydb_api_key(self, model: str, api_key: str) -> bool:
+        # Listing STT models needs only a valid key and transcribes nothing.
+        # Only a clear auth failure rejects the save.
+        try:
+            response = httpx.get(
+                "https://api.60db.ai/stt/models",
+                headers={"Authorization": f"Bearer {api_key}"},
+                timeout=10.0,
+            )
+        except httpx.RequestError:
+            raise ValueError(
+                "Could not connect to the 60db API. Please check your network "
+                "connection and try again."
+            )
+        if response.status_code in (401, 403):
+            raise ValueError(
+                "Invalid 60db API key. The key was rejected by the 60db API. "
+                "Please check that your API key is correct and active. "
+                "You can manage keys in your 60db dashboard."
             )
         return True
 
