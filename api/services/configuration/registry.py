@@ -335,9 +335,12 @@ CARTESIA_PROVIDER_MODEL_CONFIG = provider_model_config("Cartesia")
 XAI_PROVIDER_MODEL_CONFIG = provider_model_config("xAI")
 MURF_PROVIDER_MODEL_CONFIG = provider_model_config("Murf")
 VARTALAAP_PROVIDER_MODEL_CONFIG = provider_model_config(
-    "Vartalaap",
-    description="Streaming Hinglish and English voices, with Hinglish number reading.",
-    provider_docs_url="https://docs.vartalaap.si/api/websocket/",
+    "Vartaloop",
+    description=(
+        "Streaming Hinglish, Indian English and US English voices, with Hinglish "
+        "number reading. Formerly Vartalaap."
+    ),
+    provider_docs_url="https://docs.vartaloop.ai/api/websocket/",
 )
 INWORLD_PROVIDER_MODEL_CONFIG = provider_model_config(
     "Inworld",
@@ -1587,11 +1590,13 @@ class MurfTTSConfiguration(BaseTTSConfiguration):
     )
 
 
-# Hinglish (hi-IN + en-IN) voices, then US English ones, as GET /v1/voices lists them.
+# Hinglish (hi-IN + en-IN), Indian English (en-IN), then US English voices, as
+# GET /v1/voices lists them.
 VARTALAAP_TTS_VOICES = [
     "saanvi", "meera", "mahi", "mitali", "manasi", "madhavi", "mohini", "malvika", "mansi",
     "mukta", "sahil", "manav", "mohan", "mihir", "madhav", "mayank", "manish", "mukul", "mohit",
     "milan", "mahesh",
+    "ananya", "aditi", "anika", "avni", "arjun", "aarav", "aditya", "ayaan",
     "kiara", "kenna", "kate", "kyra", "kelsey", "kristen", "kaia", "kimberly", "kira",
     "kevin", "kyle", "kieran", "kenneth", "kurt", "kai", "keith", "kelvin", "kristof",
 ]
@@ -1605,21 +1610,27 @@ class VartalaapTTSConfiguration(BaseServiceConfiguration):
         default="saanvi",
         description=(
             "Voice id. The voice sets the language: names starting with m, plus "
-            "saanvi and sahil, speak Hinglish; names starting with k speak US "
-            "English. Details at"
+            "saanvi and sahil, speak Hinglish; names starting with a speak Indian "
+            "English; names starting with k speak US English. Details at"
         ),
         json_schema_extra={
             "examples": VARTALAAP_TTS_VOICES,
             "allow_custom_input": True,
-            "docs_url": "https://docs.vartalaap.si/api/tts/",
-            "docs_label": "Vartalaap voices",
+            "docs_url": "https://docs.vartaloop.ai/voices/",
+            "docs_label": "Vartaloop voices",
         },
     )
+    # Kept so saved agents still load. Since 2026-10-31 Vartaloop accepts the
+    # field and ignores it: every voice speaks at its own fixed pace.
     speed: float = Field(
         default=1.0,
         ge=0.5,
         le=2.0,
-        description="Speaking speed, 0.5 to 2.0. Sounds best between 0.75 and 1.5.",
+        description=(
+            "No effect: Vartaloop now gives each voice a fixed pace (female voices "
+            "1x, male voices 1.15x except mohit and manish at 1x)."
+        ),
+        json_schema_extra={"advanced": True},
     )
     profile: Literal["default", "telephony"] = Field(
         default="default",

@@ -1,4 +1,5 @@
-"""Vartalaap streaming text-to-speech (https://docs.vartalaap.si/api/websocket/).
+"""Vartaloop (formerly Vartalaap) streaming text-to-speech
+(https://docs.vartaloop.ai/api/websocket/).
 
 Each sentence goes over one WebSocket as its own JSON message tagged with a
 ``request_id``; the server answers with JSON events carrying that id and binary
@@ -43,7 +44,7 @@ except ModuleNotFoundError as e:
     logger.error(f"Exception: {e}")
     raise Exception(f"Missing module: {e}") from e
 
-VARTALAAP_STREAM_URL = "wss://api.vartalaap.si/v1/tts/stream"
+VARTALAAP_STREAM_URL = "wss://api.vartaloop.ai/v1/tts/stream"
 VARTALAAP_SAMPLE_RATE = 24000  # the only rate Vartalaap produces
 
 # A 503 means every worker is busy; nothing is billed, so one retry after the

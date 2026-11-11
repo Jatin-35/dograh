@@ -593,20 +593,20 @@ class UserConfigurationValidator:
         # other statuses stay inconclusive.
         try:
             response = httpx.get(
-                "https://api.vartalaap.si/v1/voices",
+                "https://api.vartaloop.ai/v1/voices",
                 headers={"x-api-key": api_key},
                 timeout=10.0,
             )
         except httpx.RequestError:
             raise ValueError(
-                "Could not connect to the Vartalaap API. Please check your network "
+                "Could not connect to the Vartaloop API. Please check your network "
                 "connection and try again."
             )
         if response.status_code in (401, 403):
             raise ValueError(
-                "Invalid Vartalaap API key. The key was rejected by the Vartalaap API. "
+                "Invalid Vartaloop API key. The key was rejected by the Vartaloop API. "
                 "Please check that your API key is correct and active. "
-                "You can find your key at https://tts.vartalaap.si."
+                "You can find your key at https://tts.vartaloop.ai."
             )
         return True
 

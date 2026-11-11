@@ -65,6 +65,8 @@ def test_the_form_offers_the_choices():
     assert props["profile"]["enum"] == ["default", "telephony"]
     assert props["digits"]["enum"] == ["hi", "mixed", "en"]
     assert "saanvi" in props["voice"]["examples"]
+    assert {"ananya", "aditya"} <= set(props["voice"]["examples"])
+    assert props["speed"]["advanced"] is True
 
 
 def _user_config(**tts):
@@ -115,7 +117,7 @@ def test_key_check_accepts_a_good_key():
     with patch("api.services.configuration.check_validity.httpx.get") as get:
         get.return_value.status_code = 200
         assert UserConfigurationValidator()._check_vartalaap_api_key("vartalaap", "good") is True
-    assert get.call_args.args[0] == "https://api.vartalaap.si/v1/voices"
+    assert get.call_args.args[0] == "https://api.vartaloop.ai/v1/voices"
     assert get.call_args.kwargs["headers"] == {"x-api-key": "good"}
 
 
@@ -123,7 +125,7 @@ def test_key_check_accepts_a_good_key():
 def test_key_check_rejects_a_bad_key(status):
     with patch("api.services.configuration.check_validity.httpx.get") as get:
         get.return_value.status_code = status
-        with pytest.raises(ValueError, match="Invalid Vartalaap API key"):
+        with pytest.raises(ValueError, match="Invalid Vartaloop API key"):
             UserConfigurationValidator()._check_vartalaap_api_key("vartalaap", "bad")
 
 
