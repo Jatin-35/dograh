@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from api.services.call_concurrency.rate_limiter import RateLimiter
+from api.services.campaign.rate_limiter import RateLimiter
 from api.services.workflow.embed_chat_limiter import (
     EMBED_CHAT_INIT_RATE_LIMIT_PER_SECOND,
     EMBED_CHAT_MESSAGE_RATE_LIMIT_PER_SECOND,

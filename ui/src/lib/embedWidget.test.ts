@@ -18,7 +18,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const WIDGET = join(process.cwd(), "public/embed/botrixai-widget.js");
 const SHIM = join(process.cwd(), "public/embed/dograh-widget.js");
@@ -73,6 +73,9 @@ describe("the widget's public global", () => {
             "getState", "isInlineMode", "refresh", "initInline",
             "onReady", "onCallStart", "onCallConnected", "onCallDisconnected",
             "onCallEnd", "onError", "onStatusChange",
+            // Visitor context and chat widgets.
+            "setContext", "getContext", "isChatMode", "startChat", "sendMessage",
+            "getMessages", "endChat", "onMessage", "onChatStateChange",
         ]) {
             expect(
                 typeof window.BotrixAIWidget![method],
@@ -130,5 +133,72 @@ describe("no other company's identifiers ship in the widget", () => {
                 `unexpected Dograh reference: ${line.trim()}`,
             ).toBe(true);
         }
+    });
+});
+
+describe("a page embedded before the rename, on the chat-capable widget", () => {
+    // The oldest embed code a customer can have: the pre-rename script path,
+    // context attribute and inline container id. None of it may stop working
+    // because the widget learned to chat.
+    beforeEach(() => {
+        document.head.innerHTML = "";
+        document.body.innerHTML = '<div id="dograh-inline-container"></div>';
+        delete window.BotrixAIWidget;
+        delete window.DograhWidget;
+    });
+
+    afterEach(() => {
+        vi.unstubAllGlobals();
+    });
+
+    async function loadOldEmbed(widgetType: "chat" | "voice") {
+        const tag = document.createElement("script");
+        tag.src = "https://example.test/embed/dograh-widget.js?token=emb_OLD&environment=test";
+        tag.setAttribute("data-dograh-context", JSON.stringify({ customer_name: "Asha" }));
+        document.head.appendChild(tag);
+        // As on a real page, the running script is this tag (the shim test
+        // above leaves its own tag here otherwise).
+        Object.defineProperty(document, "currentScript", { value: tag, configurable: true });
+
+        const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+            expect(String(input)).toContain("/api/v1/public/embed/config/emb_OLD");
+            return {
+                ok: true,
+                status: 200,
+                json: async () => ({
+                    workflow_id: 7,
+                    settings: { widgetType, embedMode: "inline" },
+                    texts: {},
+                    auto_start: false,
+                }),
+            } as Response;
+        });
+        vi.stubGlobal("fetch", fetchMock);
+        // eslint-disable-next-line no-new-func
+        new Function(readFileSync(WIDGET, "utf8"))();
+        // init() is single-flight: this awaits the load the script started.
+        await (window.DograhWidget!.init as () => Promise<void>)();
+        return fetchMock;
+    }
+
+    it("reads the token from the old script path and the old context attribute", async () => {
+        const fetchMock = await loadOldEmbed("chat");
+        expect(fetchMock).toHaveBeenCalled();
+        const getContext = window.DograhWidget!.getContext as () => Record<string, unknown>;
+        expect(getContext()).toMatchObject({ customer_name: "Asha" });
+    });
+
+    it("renders a chat widget inside the old inline container", async () => {
+        await loadOldEmbed("chat");
+        const container = document.getElementById("dograh-inline-container")!;
+        expect((window.DograhWidget!.isChatMode as () => boolean)()).toBe(true);
+        expect(container.children.length).toBeGreaterThan(0);
+    });
+
+    it("renders a voice widget inside the old inline container", async () => {
+        await loadOldEmbed("voice");
+        const container = document.getElementById("dograh-inline-container")!;
+        expect((window.DograhWidget!.isChatMode as () => boolean)()).toBe(false);
+        expect(container.children.length).toBeGreaterThan(0);
     });
 });

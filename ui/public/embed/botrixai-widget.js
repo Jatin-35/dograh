@@ -1,7 +1,7 @@
 /**
- * BotrixAI Voice Widget
- * Embeddable voice call widget for BotrixAI agents
- * Version: 1.0.0
+ * BotrixAI Widget
+ * Embeddable voice & chat widget for BotrixAI agents
+ * Version: 1.1.0
  */
 
 (function() {
@@ -32,6 +32,23 @@
     turnCredentials: null, // TURN server credentials
     callStartedAt: null, // Timestamp when call connected (for duration tracking)
     gracefulDisconnect: false,
+    // Chat widget state (widgetType === 'chat'). The server transcript is the
+    // source of truth: every successful response full-replaces turns/revision.
+    chat: {
+      status: 'idle', // idle | starting | ready | waiting | recovering | ended | expired | error
+      isCompleted: false,
+      panelOpen: false,
+      revision: null,
+      turns: [],
+      pendingUserText: null, // optimistic bubble while a POST is in flight
+      pendingSubmission: null, // retain text/revision until acceptance is known
+      ending: false,
+      confirmingEnd: false,
+      draft: '',
+      banner: null,
+      seenAssistantMessageIds: new Set() // for onMessage diffing
+    },
+    chatEls: null, // { panel, messages, banner, input, sendBtn, endBtn, endConfirmation, confirmEndBtn } — null in headless
     callbacks: {
       onReady: null,
       onCallStart: null,
@@ -39,16 +56,42 @@
       onCallDisconnected: null,
       onCallEnd: null,
       onError: null,
-      onStatusChange: null
+      onStatusChange: null,
+      onMessage: null,
+      onChatStateChange: null
     }
   };
 
-  /**
-   * Initialize the widget
-   */
-  async function init() {
-    if (state.isInitialized) return;
+  // Initialization is single-flight so API calls made while configuration is
+  // loading can await the same request instead of guessing the widget type.
+  let initializationPromise = null;
 
+  /**
+   * Initialize the widget once and expose the in-flight work to public APIs.
+   */
+  function init() {
+    if (state.isInitialized) return Promise.resolve();
+    if (!initializationPromise) {
+      initializationPromise = initializeWidget().finally(() => {
+        if (!state.isInitialized) {
+          initializationPromise = null;
+        }
+      });
+    }
+    return initializationPromise;
+  }
+
+  // The container the host page creates. `botrixai-inline-container` is the
+  // documented name; `dograh-inline-container` is what pages embedded before
+  // the rename used, and must keep working -- those are live pages on customer
+  // sites that nobody is going to edit for us.
+  function resolveContainerId() {
+    return document.getElementById('botrixai-inline-container')
+      ? 'botrixai-inline-container'
+      : 'dograh-inline-container';
+  }
+
+  async function initializeWidget() {
     // Get token from script URL. `currentScript` is null once this runs from
     // an async callback, so the fallback looks the tag up by src -- and has to
     // match either filename: pages embedded before the rename request
@@ -96,13 +139,20 @@
       token: token,
       apiBaseUrl: apiBaseUrl,
       environment: environment || 'production',
-      // Allow data attributes to override fetched config. The customer writes
-      // this on their own script tag, so the pre-rename name has to keep
-      // working alongside the documented one.
-      contextVariables: parseContextVariables(
-        script.getAttribute('data-botrixai-context') ||
-        script.getAttribute('data-dograh-context')
-      )
+      // Visitor context the host page attached to the script tag. It lands in
+      // the run's initial_context, addressable from prompts as
+      // {{initial_context.<name>}}. setContext() can run before this config
+      // assignment (init awaits a fetch), so anything already set is merged
+      // back on top rather than overwritten.
+      contextVariables: {
+        // The customer writes this on their own script tag, so the pre-rename
+        // attribute name has to keep working alongside the documented one.
+        ...parseContextVariables(
+          script.getAttribute('data-botrixai-context') ||
+          script.getAttribute('data-dograh-context')
+        ),
+        ...(state.config.contextVariables || {})
+      }
     };
 
     try {
@@ -121,27 +171,29 @@
 
       const configData = await configResponse.json();
 
-      // The container the host page creates. `botrixai-inline-container` is
-      // the documented name; `dograh-inline-container` is what pages embedded
-      // before the rename used, and must keep working -- those are live pages
-      // on customer sites that nobody is going to edit for us.
-      function resolveContainerId() {
-        return document.getElementById('botrixai-inline-container')
-          ? 'botrixai-inline-container'
-          : 'dograh-inline-container';
-      }
+      const widgetType = configData.settings?.widgetType === 'chat' ? 'chat' : 'voice';
 
       // Merge fetched configuration with defaults
       state.config = {
         ...state.config,
+        // Visitor-facing copy, resolved server-side from the agent owner's
+        // settings. api/schemas/widget_texts.py owns the defaults; this file
+        // deliberately carries none so the two can never drift.
+        texts: configData.texts || {},
         workflowId: configData.workflow_id,
+        widgetType: widgetType,
         embedMode: configData.settings?.embedMode || 'floating',
         containerId: configData.settings?.containerId || resolveContainerId(),
         position: configData.position || DEFAULT_CONFIG.position,
         buttonColor: configData.settings?.buttonColor || '#10b981',
-        buttonText: configData.settings?.buttonText || 'Talk to Agent',
-        callToActionText: configData.settings?.callToActionText || 'Click to start voice conversation',
-        autoStart: configData.auto_start || false
+        buttonText: configData.settings?.buttonText || (widgetType === 'chat' ? 'Chat with Agent' : 'Talk to Agent'),
+        callToActionText: configData.settings?.callToActionText || (widgetType === 'chat' ? 'Click to start chatting' : 'Click to start voice conversation'),
+        autoStart: configData.auto_start || false,
+        // WebRTC transport hints from the server. Left undefined by older
+        // backends that don't send them, in which case we keep the previous
+        // behaviour: attempt the TURN fetch and don't force relay.
+        turnEnabled: configData.turn_enabled,
+        forceTurnRelay: Boolean(configData.force_turn_relay)
       };
     } catch (error) {
       console.error('BotrixAI Widget: Failed to fetch configuration', error);
@@ -150,8 +202,20 @@
 
     state.isInitialized = true;
 
-    // Create widget UI based on mode
-    if (state.config.embedMode === 'inline') {
+    // Create widget UI based on widget type and mode
+    if (isChatWidget()) {
+      if (state.config.embedMode === 'inline') {
+        injectStyles();
+        injectChatStyles();
+        createInlineChatWidget();
+      } else if (state.config.embedMode === 'headless') {
+        // No UI — the host page drives chat via the window.BotrixAIWidget API.
+      } else {
+        injectStyles();
+        injectChatStyles();
+        createFloatingChatWidget();
+      }
+    } else if (state.config.embedMode === 'inline') {
       injectStyles();
       createInlineWidget();
     } else if (state.config.embedMode === 'headless') {
@@ -168,8 +232,34 @@
 
     // Auto-start if configured
     if (state.config.autoStart) {
-      setTimeout(() => startCall(), 1000);
+      setTimeout(() => (isChatWidget() ? startChat() : startCall()), 1000);
     }
+  }
+
+  /**
+   * Generic public start alias. Widget type comes from async server config, so
+   * never dispatch to voice/chat until initialization has resolved.
+   */
+  async function startWidget(...args) {
+    await init();
+    if (!state.isInitialized) {
+      console.warn('BotrixAI Widget: Cannot start before initialization succeeds');
+      return;
+    }
+    return isChatWidget() ? startChat() : startCall(...args);
+  }
+
+  /**
+   * Generic public end alias. In chat mode this ends the server session; stop()
+   * remains the non-destructive way to hide a floating chat panel.
+   */
+  async function endWidget(...args) {
+    await init();
+    if (!state.isInitialized) {
+      console.warn('BotrixAI Widget: Cannot end before initialization succeeds');
+      return;
+    }
+    return isChatWidget() ? endChatSession() : stopCall(...args);
   }
 
   /**
@@ -183,6 +273,54 @@
       console.warn('BotrixAI Widget: Invalid context variables', e);
       return {};
     }
+  }
+
+  /**
+   * Look up a visitor-facing label. The server always sends the full set, so a
+   * miss means the API is older than this script — warn rather than render
+   * "undefined" into the panel.
+   */
+  function widgetText(key) {
+    const value = state.config.texts && state.config.texts[key];
+    if (typeof value !== 'string') {
+      console.warn(`BotrixAI Widget: no text supplied for "${key}"`);
+      return '';
+    }
+    return value;
+  }
+
+  /**
+   * True while a conversation is live and its context is already fixed
+   */
+  function isConversationActive() {
+    if (isChatWidget()) {
+      return ['starting', 'ready', 'waiting'].indexOf(state.chat.status) !== -1;
+    }
+    return ['connecting', 'connected'].indexOf(state.connectionStatus) !== -1;
+  }
+
+  /**
+   * Merge visitor context supplied by the host page after the script loaded.
+   *
+   * The context is read when a conversation starts, so this applies to the next
+   * one — a conversation already under way keeps what it was created with.
+   */
+  function setContextVariables(vars) {
+    if (!vars || typeof vars !== 'object' || Array.isArray(vars)) {
+      console.warn('BotrixAI Widget: setContext expects a plain object');
+      return { ...(state.config.contextVariables || {}) };
+    }
+
+    state.config.contextVariables = {
+      ...(state.config.contextVariables || {}),
+      ...vars
+    };
+
+    if (isConversationActive()) {
+      console.warn('BotrixAI Widget: context set during a conversation applies to the next one');
+    }
+
+    return { ...state.config.contextVariables };
   }
 
   /**
@@ -237,6 +375,7 @@
       }
 
       .botrixai-widget-cta:hover {
+        color: #ffffff !important;
         filter: brightness(1.08);
         box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
       }
@@ -265,9 +404,9 @@
 
   function ctaLabelForStatus(status) {
     switch (status) {
-      case 'connecting': return 'Connecting…';
-      case 'connected':  return 'End Call';
-      case 'failed':     return 'Retry';
+      case 'connecting': return widgetText('voiceConnectingText');
+      case 'connected':  return widgetText('voiceEndCallText');
+      case 'failed':     return widgetText('voiceRetryText');
       default:           return state.config.buttonText || 'Talk to Agent';
     }
   }
@@ -396,11 +535,13 @@
         margin: 0 auto 20px;
       }
 
+      /* Inherit the host page's text color: this panel sits directly in their
+         content, so a hardcoded near-black heading disappears on a dark site. */
       .botrixai-inline-status-text {
         font-size: 18px;
         font-weight: 500;
         margin: 0 0 8px;
-        color: #111827;
+        color: inherit;
       }
 
       .botrixai-inline-status-subtext {
@@ -428,7 +569,11 @@
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
       }
 
+      /* Host pages commonly style button:hover, which out-specifies the color
+         above and can repaint the label to match its own background — the same
+         reason .botrixai-widget-cta:hover pins its color. */
       .botrixai-inline-btn:hover {
+        color: #ffffff !important;
         transform: translateY(-2px);
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
       }
@@ -441,8 +586,11 @@
         background: #10b981;
       }
 
+      /* The start button carries the owner's configured color as an inline
+         style, so a fixed hover background would never apply — brighten
+         whatever color it has instead. */
       .botrixai-inline-btn-start:hover {
-        background: #059669;
+        filter: brightness(1.08);
       }
 
       .botrixai-inline-btn-end {
@@ -496,35 +644,27 @@
 
     // Determine display text
     const displayText = text || {
-      idle: 'Ready to Connect',
-      connecting: 'Connecting...',
-      connected: 'Call Active',
-      failed: 'Connection Failed'
+      idle: widgetText('voiceReadyTitle'),
+      connecting: widgetText('voiceConnectingText'),
+      connected: widgetText('voiceConnectedTitle'),
+      failed: widgetText('voiceConnectionFailedTitle')
     }[status];
 
     const displaySubtext = subtext || {
       idle: state.config.callToActionText,
-      connecting: 'Please wait while we establish connection',
-      connected: 'You can speak now',
-      failed: 'Please check your microphone and try again'
+      connecting: widgetText('voiceConnectingSubtext'),
+      connected: widgetText('voiceConnectedSubtext'),
+      failed: widgetText('voiceConnectionFailedSubtext')
     }[status];
 
-    // Simple button design: green to start, red to end
+    // Simple button design: green to start, red to end. Labels and colors are
+    // agent-owner configured, so they are assigned as text/style properties
+    // below rather than interpolated into this markup.
     let buttonHTML = '';
     if (status === 'idle' || status === 'failed') {
-      // Button to start with configured color
-      buttonHTML = `
-        <button class="botrixai-inline-btn botrixai-inline-btn-start" id="botrixai-inline-start-btn" style="background: ${state.config.buttonColor};">
-          ${status === 'failed' ? 'Retry' : state.config.buttonText}
-        </button>
-      `;
+      buttonHTML = '<button class="botrixai-inline-btn botrixai-inline-btn-start" id="botrixai-inline-start-btn"></button>';
     } else if (status === 'connecting' || status === 'connected') {
-      // Red button to end
-      buttonHTML = `
-        <button class="botrixai-inline-btn botrixai-inline-btn-end" id="botrixai-inline-end-btn">
-          End Call
-        </button>
-      `;
+      buttonHTML = '<button class="botrixai-inline-btn botrixai-inline-btn-end" id="botrixai-inline-end-btn"></button>';
     }
 
     // Update container content (preserve audio element)
@@ -534,13 +674,17 @@
         <div class="botrixai-inline-status-icon ${status === 'connecting' ? 'botrixai-inline-pulse' : ''}">
           ${getStatusIcon(status)}
         </div>
-        <p class="botrixai-inline-status-text">${displayText}</p>
-        <p class="botrixai-inline-status-subtext">${displaySubtext}</p>
+        <p class="botrixai-inline-status-text"></p>
+        <p class="botrixai-inline-status-subtext"></p>
         <div class="botrixai-inline-button-container">
           ${buttonHTML}
         </div>
       </div>
     `;
+
+    // XSS boundary: configured copy only ever flows through textContent
+    container.querySelector('.botrixai-inline-status-text').textContent = displayText;
+    container.querySelector('.botrixai-inline-status-subtext').textContent = displaySubtext;
 
     // Re-append audio element
     if (audioElement) {
@@ -549,10 +693,17 @@
 
     // Attach event handlers
     const startBtn = document.getElementById('botrixai-inline-start-btn');
-    if (startBtn) startBtn.onclick = startCall;
+    if (startBtn) {
+      startBtn.textContent = status === 'failed' ? widgetText('voiceRetryText') : state.config.buttonText;
+      startBtn.style.background = state.config.buttonColor;
+      startBtn.onclick = startCall;
+    }
 
     const endBtn = document.getElementById('botrixai-inline-end-btn');
-    if (endBtn) endBtn.onclick = stopCall;
+    if (endBtn) {
+      endBtn.textContent = widgetText('voiceEndCallText');
+      endBtn.onclick = stopCall;
+    }
 
     // Trigger status change callback
     if (state.callbacks.onStatusChange) {
@@ -635,7 +786,7 @@
    */
   async function startCall() {
     state.gracefulDisconnect = false;
-    updateStatus('connecting', 'Connecting...', 'Please wait while we establish the connection');
+    updateStatus('connecting', widgetText('voiceConnectingText'), widgetText('voiceConnectingSubtext'));
 
     if (state.callbacks.onCallStart) {
       state.callbacks.onCallStart();
@@ -662,7 +813,7 @@
         state.stream = stream;
       } catch (micError) {
         // Handle specific microphone permission errors
-        let errorMessage = 'Please check your microphone and try again';
+        let errorMessage = widgetText('voiceConnectionFailedSubtext');
 
         if (micError.name === 'NotAllowedError' || micError.name === 'PermissionDeniedError') {
           errorMessage = 'Microphone permission denied. Please allow microphone access to start the call.';
@@ -711,7 +862,11 @@
         }
       }
 
-      updateStatus('failed', 'Connection failed', error.message || 'Please check your microphone and try again');
+      updateStatus(
+        'failed',
+        widgetText('voiceConnectionFailedTitle'),
+        error.message || widgetText('voiceConnectionFailedSubtext')
+      );
 
       // Trigger error callback
       if (state.callbacks.onError) {
@@ -754,6 +909,14 @@
    * Fetch TURN credentials for WebRTC connection
    */
   async function fetchTurnCredentials() {
+    // Skip the request entirely when the server reports no TURN server is
+    // configured — it would only 503. Deployments without coturn (OSS/local)
+    // fall back to STUN.
+    if (state.config.turnEnabled === false) {
+      console.log('BotrixAI Widget: TURN server disabled in server config, using STUN only');
+      return;
+    }
+
     if (!state.sessionToken) {
       console.warn('BotrixAI Widget: No session token available for TURN credentials');
       return;
@@ -786,8 +949,12 @@
    * Create WebRTC peer connection
    */
   function createWebRTCConnection() {
-    // Build ICE servers list
-    const iceServers = [{ urls: ['stun:stun.l.google.com:19302'] }];
+    // A `stun:` entry can only yield srflx, never relay — and srflx has been
+    // seen leaking through iceTransportPolicy: 'relay', so skip it entirely.
+    // Same skip as the main app's useWebSocketRTC hook.
+    const iceServers = state.config.forceTurnRelay
+      ? []
+      : [{ urls: ['stun:stun.l.google.com:19302'] }];
 
     // Add TURN server if credentials are available
     if (state.turnCredentials && state.turnCredentials.uris && state.turnCredentials.uris.length > 0) {
@@ -799,9 +966,28 @@
       console.log(`TURN server configured with ${state.turnCredentials.uris.length} URIs`);
     }
 
+    // Reachable: turn_enabled and force_turn_relay are independent, so
+    // FORCE_TURN_RELAY=true with TURN_SECRET unset (or a failed credentials
+    // fetch) leaves no ICE servers at all — no candidates, and no clue why.
+    if (state.config.forceTurnRelay && iceServers.length === 0) {
+      console.error(
+        'BotrixAI Widget: FORCE_TURN_RELAY is on but no TURN credentials are ' +
+        'available — ICE has no candidates to gather and this call cannot connect.'
+      );
+    }
+
     const config = {
       iceServers: iceServers
     };
+
+    // Diagnostic: when the backend runs with FORCE_TURN_RELAY=true, restrict the
+    // browser to relay-only candidates so media must traverse TURN. A TURN
+    // misconfiguration then surfaces as an ICE failure instead of silently
+    // falling back to host/srflx.
+    if (state.config.forceTurnRelay) {
+      config.iceTransportPolicy = 'relay';
+      console.log('BotrixAI Widget: FORCE_TURN_RELAY is on — restricting ICE to relay candidates only');
+    }
 
     state.pc = new RTCPeerConnection(config);
 
@@ -833,7 +1019,7 @@
 
     if (pc.connectionState === 'connected' || pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
       const wasAlreadyConnected = state.callStartedAt !== null;
-      updateStatus('connected', 'Connected', 'Your voice call is now active');
+      updateStatus('connected', widgetText('voiceConnectedTitle'), widgetText('voiceConnectedSubtext'));
       if (!wasAlreadyConnected) {
         state.callStartedAt = Date.now();
         if (state.callbacks.onCallConnected) {
@@ -851,8 +1037,8 @@
       stopCall({
         graceful: false,
         status: 'failed',
-        text: 'Connection lost',
-        subtext: 'The call has been disconnected'
+        text: widgetText('voiceConnectionLostTitle'),
+        subtext: widgetText('voiceConnectionLostSubtext')
       });
       return;
     }
@@ -916,7 +1102,7 @@
         }
 
         if (state.connectionStatus === 'connected' && !state.gracefulDisconnect) {
-          updateStatus('failed', 'Connection lost', 'The call has been disconnected');
+          updateStatus('failed', widgetText('voiceConnectionLostTitle'), widgetText('voiceConnectionLostSubtext'));
         }
       };
 
@@ -991,8 +1177,7 @@
         type: 'offer',
         pc_id: state.pcId,
         workflow_id: parseInt(state.config.workflowId),
-        workflow_run_id: parseInt(state.workflowRunId),
-        call_context_vars: state.config.contextVariables || {}
+        workflow_run_id: parseInt(state.workflowRunId)
       }
     };
 
@@ -1007,8 +1192,8 @@
     const graceful = options.graceful !== false;
     const closeWebSocket = options.closeWebSocket !== false;
     const status = options.status || 'idle';
-    const text = options.text || 'Call ended';
-    const subtext = options.subtext || 'Click below to start a new call';
+    const text = options.text || widgetText('voiceCallEndedTitle');
+    const subtext = options.subtext || widgetText('voiceCallEndedSubtext');
 
     state.gracefulDisconnect = graceful;
 
@@ -1067,7 +1252,7 @@
    * Retry connection
    */
   function retryCall() {
-    updateStatus('idle', 'Ready to start', 'Click below to begin your voice call');
+    updateStatus('idle', widgetText('voiceReadyTitle'), state.config.callToActionText);
     setTimeout(() => startCall(), 500);
   }
 
@@ -1082,18 +1267,1194 @@
       .join('');
   }
 
+  // ===========================================================================
+  // Chat widget (widgetType === 'chat')
+  //
+  // Chat speaks plain REST to the public embed chat endpoints — no WebRTC, no
+  // WebSocket, no microphone. One blocking POST per turn (the server caps a
+  // turn at 60s, so no client timeout below that); the typing indicator covers
+  // the wait. XSS boundary: message text only ever flows through textContent.
+  // ===========================================================================
+
+  const CHAT_ICON_SVG = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+  </svg>`;
+
+  const SEND_ICON_SVG = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="22" y1="2" x2="11" y2="13"/>
+    <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+  </svg>`;
+
+  function isChatWidget() {
+    return state.config.widgetType === 'chat';
+  }
+
+  /**
+   * Inject chat widget styles
+   */
+  function injectChatStyles() {
+    if (document.getElementById('botrixai-chat-styles')) return;
+
+    const styles = `
+      .botrixai-chat-panel {
+        display: flex;
+        flex-direction: column;
+        width: 360px;
+        height: min(520px, calc(100vh - 120px));
+        background: #ffffff;
+        border-radius: 12px;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+        overflow: hidden;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      }
+
+      .botrixai-widget-container.bottom-right .botrixai-chat-panel { position: absolute; bottom: 60px; right: 0; }
+      .botrixai-widget-container.bottom-left  .botrixai-chat-panel { position: absolute; bottom: 60px; left: 0; }
+      .botrixai-widget-container.top-right    .botrixai-chat-panel { position: absolute; top: 60px; right: 0; }
+      .botrixai-widget-container.top-left     .botrixai-chat-panel { position: absolute; top: 60px; left: 0; }
+
+      @media (max-width: 480px) {
+        .botrixai-widget-container .botrixai-chat-panel {
+          position: fixed;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          top: auto;
+          width: 100%;
+          height: min(75vh, 560px);
+          border-radius: 12px 12px 0 0;
+        }
+      }
+
+      .botrixai-chat-panel--inline {
+        position: static;
+        width: 100%;
+        height: 100%;
+        min-height: 320px;
+        box-shadow: none;
+        border: 1px solid #e5e7eb;
+      }
+
+      .botrixai-chat-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 16px;
+        color: #ffffff;
+        font-size: 14px;
+        font-weight: 600;
+        flex: 0 0 auto;
+      }
+
+      .botrixai-chat-header-title {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .botrixai-chat-header-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-left: 12px;
+      }
+
+      .botrixai-chat-end {
+        display: none;
+        border: 1px solid rgba(255, 255, 255, 0.55);
+        border-radius: 6px;
+        background: rgba(0, 0, 0, 0.12);
+        color: #ffffff;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 1;
+        cursor: pointer;
+        padding: 6px 8px;
+        white-space: nowrap;
+      }
+      .botrixai-chat-end:hover { background: rgba(0, 0, 0, 0.22); }
+      .botrixai-chat-end:disabled { cursor: default; opacity: 0.55; }
+
+      .botrixai-chat-end-confirmation {
+        display: none;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 8px 12px;
+        color: #7f1d1d;
+        background: #fef2f2;
+        border-bottom: 1px solid #fecaca;
+        font-size: 12px;
+        font-weight: 500;
+        flex: 0 0 auto;
+      }
+      .botrixai-chat-end-confirm-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex: 0 0 auto;
+      }
+      .botrixai-chat-end-confirm-cancel,
+      .botrixai-chat-end-confirm-submit {
+        border-radius: 6px;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 1;
+        cursor: pointer;
+        padding: 6px 8px;
+        white-space: nowrap;
+      }
+      .botrixai-chat-end-confirm-cancel {
+        border: 1px solid #d1d5db;
+        background: #ffffff;
+        color: #374151;
+      }
+      .botrixai-chat-end-confirm-cancel:hover { background: #f9fafb; }
+      .botrixai-chat-end-confirm-submit {
+        border: 1px solid #dc2626;
+        background: #dc2626;
+        color: #ffffff;
+      }
+      .botrixai-chat-end-confirm-submit:hover {
+        border-color: #b91c1c;
+        background: #b91c1c;
+        color: #ffffff;
+      }
+
+      .botrixai-chat-close {
+        background: none;
+        border: none;
+        color: #ffffff;
+        font-size: 20px;
+        line-height: 1;
+        cursor: pointer;
+        padding: 0 2px;
+        opacity: 0.85;
+      }
+      .botrixai-chat-close:hover { opacity: 1; }
+
+      .botrixai-chat-messages {
+        flex: 1 1 auto;
+        overflow-y: auto;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        background: #f9fafb;
+      }
+
+      .botrixai-chat-bubble {
+        max-width: 80%;
+        padding: 8px 12px;
+        border-radius: 12px;
+        font-size: 14px;
+        line-height: 1.45;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .botrixai-chat-bubble--user {
+        align-self: flex-end;
+        color: #ffffff;
+        border-bottom-right-radius: 4px;
+      }
+      .botrixai-chat-bubble--assistant {
+        align-self: flex-start;
+        background: #e5e7eb;
+        color: #111827;
+        border-bottom-left-radius: 4px;
+      }
+      .botrixai-chat-bubble--failed { opacity: 0.55; }
+
+      .botrixai-chat-typing {
+        align-self: flex-start;
+        display: inline-flex;
+        gap: 4px;
+        padding: 10px 14px;
+        background: #e5e7eb;
+        border-radius: 12px;
+        border-bottom-left-radius: 4px;
+      }
+      .botrixai-chat-typing span {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #6b7280;
+        animation: botrixai-typing 1.2s infinite;
+      }
+      .botrixai-chat-typing span:nth-child(2) { animation-delay: 0.15s; }
+      .botrixai-chat-typing span:nth-child(3) { animation-delay: 0.3s; }
+
+      @keyframes botrixai-typing {
+        0%, 60%, 100% { opacity: 0.35; transform: translateY(0); }
+        30% { opacity: 1; transform: translateY(-3px); }
+      }
+
+      .botrixai-chat-banner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 8px 12px;
+        font-size: 12px;
+        color: #991b1b;
+        background: #fef2f2;
+        border-top: 1px solid #fecaca;
+        flex: 0 0 auto;
+      }
+      .botrixai-chat-banner--info {
+        color: #374151;
+        background: #f3f4f6;
+        border-top: 1px solid #e5e7eb;
+      }
+      .botrixai-chat-restart {
+        border: none;
+        background: none;
+        color: #1d4ed8;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        padding: 0;
+        white-space: nowrap;
+      }
+
+      .botrixai-chat-composer {
+        display: flex;
+        align-items: flex-end;
+        gap: 8px;
+        padding: 10px 12px;
+        border-top: 1px solid #e5e7eb;
+        background: #ffffff;
+        flex: 0 0 auto;
+      }
+      /* The input and the send button must be the same height at rest, so pin
+         every box metric the host page could otherwise decide for us:
+         box-sizing (a host content-box reset inflates the textarea) and
+         line-height (font: inherit picks up the host's, which is what makes
+         the two sides disagree). 20 + 8*2 padding + 1*2 border = 38, the
+         shared height below. */
+      .botrixai-chat-input {
+        flex: 1;
+        box-sizing: border-box;
+        resize: none;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        padding: 8px 10px;
+        font: inherit;
+        font-size: 14px;
+        line-height: 20px;
+        min-height: 38px;
+        max-height: 96px;
+        outline: none;
+        background: #ffffff;
+        color: #111827;
+      }
+      .botrixai-chat-input:focus { border-color: #9ca3af; }
+      .botrixai-chat-input:disabled { background: #f9fafb; color: #9ca3af; }
+      .botrixai-chat-send {
+        box-sizing: border-box;
+        width: 38px;
+        height: 38px;
+        padding: 0;
+        border: none;
+        border-radius: 8px;
+        color: #ffffff;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+      }
+      .botrixai-chat-send svg {
+        display: block;
+        width: 16px;
+        height: 16px;
+        flex: 0 0 auto;
+      }
+      .botrixai-chat-send:disabled { opacity: 0.5; cursor: default; }
+
+      .botrixai-chat-inline-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 420px;
+      }
+      .botrixai-chat-inline-cta {
+        text-align: center;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+      .botrixai-chat-inline-icon { color: #9ca3af; margin-bottom: 16px; }
+      .botrixai-chat-inline-icon svg { width: 56px; height: 56px; }
+      .botrixai-chat-inline-subtext {
+        font-size: 14px;
+        color: #6b7280;
+        margin: 0 0 20px;
+      }
+      .botrixai-chat-inline-start {
+        padding: 12px 32px;
+        border-radius: 8px;
+        border: none;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        color: #ffffff;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      }
+      .botrixai-chat-inline-start:hover { filter: brightness(1.08); }
+
+      /* A host page's own button:hover rule out-specifies the colors set above
+         and can repaint a label to match its background, hiding it. Pin every
+         button color we own against that. */
+      .botrixai-chat-end:hover,
+      .botrixai-chat-close:hover,
+      .botrixai-chat-send:hover,
+      .botrixai-chat-inline-start:hover { color: #ffffff !important; }
+      .botrixai-chat-end-confirm-cancel:hover { color: #374151 !important; }
+      .botrixai-chat-restart:hover { color: #1d4ed8 !important; }
+    `;
+
+    const styleSheet = document.createElement('style');
+    styleSheet.id = 'botrixai-chat-styles';
+    styleSheet.textContent = styles;
+    document.head.appendChild(styleSheet);
+  }
+
+  /**
+   * Build the chat panel skeleton once; renders update its parts in place so
+   * the composer keeps focus while typing.
+   */
+  function buildChatPanel(options) {
+    const withClose = Boolean(options && options.withClose);
+
+    const panel = document.createElement('div');
+    panel.className = 'botrixai-chat-panel';
+
+    const header = document.createElement('div');
+    header.className = 'botrixai-chat-header';
+    header.style.backgroundColor = state.config.buttonColor;
+    const title = document.createElement('span');
+    title.className = 'botrixai-chat-header-title';
+    title.textContent = state.config.buttonText || 'Chat with Agent';
+    header.appendChild(title);
+
+    const headerActions = document.createElement('div');
+    headerActions.className = 'botrixai-chat-header-actions';
+
+    const endBtn = document.createElement('button');
+    endBtn.className = 'botrixai-chat-end';
+    endBtn.type = 'button';
+    endBtn.textContent = widgetText('endChatText');
+    endBtn.setAttribute('aria-controls', 'botrixai-chat-end-confirmation');
+    endBtn.setAttribute('aria-expanded', 'false');
+    endBtn.onclick = () => {
+      state.chat.confirmingEnd = true;
+      renderChat();
+      if (state.chatEls) state.chatEls.confirmEndBtn.focus();
+    };
+    headerActions.appendChild(endBtn);
+
+    if (withClose) {
+      const closeBtn = document.createElement('button');
+      closeBtn.className = 'botrixai-chat-close';
+      closeBtn.type = 'button';
+      closeBtn.setAttribute('aria-label', widgetText('closeChatLabel'));
+      closeBtn.textContent = '×';
+      closeBtn.onclick = closeChatPanel;
+      headerActions.appendChild(closeBtn);
+    }
+    header.appendChild(headerActions);
+    panel.appendChild(header);
+
+    const endConfirmation = document.createElement('div');
+    endConfirmation.id = 'botrixai-chat-end-confirmation';
+    endConfirmation.className = 'botrixai-chat-end-confirmation';
+    endConfirmation.setAttribute('role', 'group');
+    endConfirmation.setAttribute('aria-label', 'Confirm ending chat');
+
+    const endConfirmationText = document.createElement('span');
+    endConfirmationText.textContent = widgetText('endChatConfirmText');
+    endConfirmation.appendChild(endConfirmationText);
+
+    const endConfirmActions = document.createElement('div');
+    endConfirmActions.className = 'botrixai-chat-end-confirm-actions';
+
+    const cancelEndBtn = document.createElement('button');
+    cancelEndBtn.className = 'botrixai-chat-end-confirm-cancel';
+    cancelEndBtn.type = 'button';
+    cancelEndBtn.textContent = widgetText('endChatCancelText');
+    cancelEndBtn.onclick = () => {
+      state.chat.confirmingEnd = false;
+      renderChat();
+      if (state.chatEls && state.chat.panelOpen && state.chat.status === 'ready') {
+        state.chatEls.input.focus();
+      }
+    };
+    endConfirmActions.appendChild(cancelEndBtn);
+
+    const confirmEndBtn = document.createElement('button');
+    confirmEndBtn.className = 'botrixai-chat-end-confirm-submit';
+    confirmEndBtn.type = 'button';
+    confirmEndBtn.textContent = widgetText('endChatText');
+    confirmEndBtn.onclick = () => {
+      state.chat.confirmingEnd = false;
+      endChatSession();
+    };
+    endConfirmActions.appendChild(confirmEndBtn);
+    endConfirmation.appendChild(endConfirmActions);
+    panel.appendChild(endConfirmation);
+
+    const messages = document.createElement('div');
+    messages.className = 'botrixai-chat-messages';
+    panel.appendChild(messages);
+
+    const banner = document.createElement('div');
+    banner.className = 'botrixai-chat-banner';
+    banner.style.display = 'none';
+    panel.appendChild(banner);
+
+    const composer = document.createElement('div');
+    composer.className = 'botrixai-chat-composer';
+    const input = document.createElement('textarea');
+    input.className = 'botrixai-chat-input';
+    input.rows = 1;
+    input.placeholder = widgetText('chatInputPlaceholder');
+    input.oninput = () => {
+      state.chat.draft = input.value;
+      autoGrowChatInput(input);
+    };
+    input.onkeydown = (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        submitChatComposer();
+      }
+    };
+    const sendBtn = document.createElement('button');
+    sendBtn.className = 'botrixai-chat-send';
+    sendBtn.type = 'button';
+    sendBtn.style.backgroundColor = state.config.buttonColor;
+    sendBtn.setAttribute('aria-label', widgetText('sendMessageLabel'));
+    sendBtn.innerHTML = SEND_ICON_SVG; // static markup, never user data
+    sendBtn.onclick = submitChatComposer;
+    composer.appendChild(input);
+    composer.appendChild(sendBtn);
+    panel.appendChild(composer);
+
+    state.chatEls = {
+      panel,
+      messages,
+      banner,
+      input,
+      sendBtn,
+      endBtn,
+      endConfirmation,
+      confirmEndBtn
+    };
+    return panel;
+  }
+
+  function autoGrowChatInput(input) {
+    // scrollHeight covers content + padding but not borders, and the input is
+    // border-box — without adding them back the first keystroke shrinks the
+    // box by 2px and clips the text.
+    const BORDER_Y = 2; // 1px top + 1px bottom, matches .botrixai-chat-input
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight + BORDER_Y, 96) + 'px';
+  }
+
+  /**
+   * Create floating chat widget — CTA pill toggling an anchored chat panel.
+   */
+  function createFloatingChatWidget() {
+    const container = document.createElement('div');
+    container.className = `botrixai-widget-container ${state.config.position}`;
+    container.id = 'botrixai-widget-root';
+    document.body.appendChild(container);
+
+    const panel = buildChatPanel({ withClose: true });
+    panel.style.display = 'none';
+    container.appendChild(panel);
+
+    const button = document.createElement('button');
+    button.id = 'botrixai-widget-cta';
+    button.type = 'button';
+    button.className = 'botrixai-widget-cta';
+    button.style.backgroundColor = state.config.buttonColor;
+    button.innerHTML = `${CHAT_ICON_SVG}<span></span>`;
+    button.querySelector('span').textContent = state.config.buttonText || 'Chat with Agent';
+    button.onclick = toggleChatPanel;
+    container.appendChild(button);
+  }
+
+  /**
+   * Create inline chat widget — pre-chat CTA screen in the host container; the
+   * CTA, autoStart, and public API all open the same panel/session lifecycle.
+   */
+  function createInlineChatWidget() {
+    const container = document.getElementById(state.config.containerId);
+    if (!container) {
+      console.error(`BotrixAI Widget: Container element with id "${state.config.containerId}" not found`);
+      if (state.callbacks.onError) {
+        state.callbacks.onError(new Error('Container element not found'));
+      }
+      return;
+    }
+
+    container.innerHTML = '';
+    container.className = 'botrixai-chat-inline-container';
+
+    const cta = document.createElement('div');
+    cta.className = 'botrixai-chat-inline-cta';
+
+    const icon = document.createElement('div');
+    icon.className = 'botrixai-chat-inline-icon';
+    icon.innerHTML = CHAT_ICON_SVG; // static markup
+    cta.appendChild(icon);
+
+    const subtext = document.createElement('p');
+    subtext.className = 'botrixai-chat-inline-subtext';
+    subtext.textContent = state.config.callToActionText || 'Click to start chatting';
+    cta.appendChild(subtext);
+
+    const startBtn = document.createElement('button');
+    startBtn.className = 'botrixai-chat-inline-start';
+    startBtn.type = 'button';
+    startBtn.style.backgroundColor = state.config.buttonColor;
+    startBtn.textContent = state.config.buttonText || 'Chat with Agent';
+    startBtn.onclick = () => startChat();
+    cta.appendChild(startBtn);
+
+    container.appendChild(cta);
+    state.isOpen = true;
+  }
+
+  /**
+   * Replace the inline CTA with the chat panel. Keeping this in the shared
+   * startChat path ensures autoStart and the public API never create a hidden
+   * session behind the CTA.
+   */
+  function openInlineChatPanel() {
+    const container = document.getElementById(state.config.containerId);
+    if (!container) {
+      console.error(`BotrixAI Widget: Container element with id "${state.config.containerId}" not found`);
+      return false;
+    }
+
+    const cta = container.querySelector('.botrixai-chat-inline-cta');
+    if (cta) {
+      cta.remove();
+    }
+
+    if (!state.chatEls || !state.chatEls.panel || !container.contains(state.chatEls.panel)) {
+      const panel = buildChatPanel({ withClose: false });
+      panel.classList.add('botrixai-chat-panel--inline');
+      container.appendChild(panel);
+    }
+
+    return true;
+  }
+
+  function toggleChatPanel() {
+    if (state.chat.panelOpen) {
+      closeChatPanel();
+    } else {
+      startChat();
+    }
+  }
+
+  function closeChatPanel() {
+    state.chat.panelOpen = false;
+    state.chat.confirmingEnd = false;
+    if (state.chatEls && state.chatEls.panel) {
+      state.chatEls.panel.style.display = 'none';
+    }
+  }
+
+  /**
+   * Open the chat (public API). Shows the panel (if any) and starts the
+   * session on first open, including an open requested by autoStart.
+   */
+  async function startChat() {
+    if (!isChatWidget()) {
+      console.warn('BotrixAI Widget: startChat() called on a voice widget');
+      return;
+    }
+    if (state.config.embedMode === 'inline' && !openInlineChatPanel()) {
+      return;
+    }
+    state.chat.panelOpen = true;
+    if (state.chatEls && state.chatEls.panel) {
+      state.chatEls.panel.style.display = 'flex';
+    }
+    if (state.chat.status === 'idle' || state.chat.status === 'error') {
+      await startChatSession();
+    } else if (state.chat.status === 'recovering') {
+      await recoverChatSession();
+    } else {
+      renderChat();
+    }
+  }
+
+  function resetChatSession() {
+    state.sessionToken = null;
+    state.workflowRunId = null;
+    state.chat.revision = null;
+    state.chat.isCompleted = false;
+    state.chat.turns = [];
+    state.chat.pendingUserText = null;
+    state.chat.ending = false;
+    state.chat.pendingSubmission = null;
+    state.chat.confirmingEnd = false;
+    state.chat.seenAssistantMessageIds = new Set();
+  }
+
+  async function startNewChatSession() {
+    resetChatSession();
+    await startChatSession();
+
+    if (state.chatEls && state.chat.panelOpen && state.chat.status === 'ready') {
+      state.chatEls.input.focus();
+    }
+  }
+
+  /**
+   * Initialize the embed session for chat. The server derives the run type
+   * from the token settings and streams the opening messages as they arrive.
+   */
+  async function startChatSession() {
+    if (state.chat.status === 'starting') return;
+    updateChatStatus('starting');
+
+    try {
+      const response = await fetch(`${state.config.apiBaseUrl}/api/v1/public/embed/init/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Origin': window.location.origin
+        },
+        body: JSON.stringify({
+          token: state.config.token,
+          context_variables: state.config.contextVariables
+        })
+      });
+
+      if (!response.ok) {
+        if (response.status === 402) {
+          updateChatStatus('ended', 'The agent is unavailable right now.');
+          return;
+        }
+        throw new Error(`Failed to start chat: ${response.status}`);
+      }
+
+      await readChatStream(response);
+      finishChatResponse();
+    } catch (error) {
+      console.error('BotrixAI Widget: Failed to start chat', error);
+      if (state.sessionToken) {
+        await recoverChatSession();
+      } else {
+        updateChatStatus('error', 'Could not start the chat.');
+      }
+      if (state.callbacks.onError) {
+        state.callbacks.onError(error);
+      }
+    }
+  }
+
+  /**
+   * Replace local transcript state from a server chat_session payload.
+   * Returns true when the conversation is completed server-side.
+   */
+  function applyChatSession(chatSession) {
+    if (!chatSession) return false;
+    state.chat.revision = chatSession.revision;
+    state.chat.isCompleted = Boolean(chatSession.is_completed);
+    // Pending snapshots have no saved speech yet. Preserve messages delivered
+    // before a disconnect until the final, authoritative transcript is saved.
+    state.chat.turns = (chatSession.turns || []).map((turn) => {
+      const previous = state.chat.turns.find((candidate) => candidate.id === turn.id);
+      if (turn.status === 'pending' && previous && previous.assistant_messages) {
+        return { ...turn, assistant_messages: previous.assistant_messages };
+      }
+      return turn;
+    });
+    state.chat.pendingUserText = null;
+    notifyNewAssistantMessages();
+    return state.chat.isCompleted;
+  }
+
+  function assistantMessages(turn) {
+    if (Array.isArray(turn.assistant_messages)) return turn.assistant_messages;
+    return turn.assistant_message ? [turn.assistant_message] : [];
+  }
+
+  function notifyNewAssistantMessages() {
+    state.chat.turns.forEach((turn) => {
+      assistantMessages(turn).forEach((message, index) => {
+        if (!message || !message.text) return;
+        const id = `${turn.id}:${index}`;
+        if (state.chat.seenAssistantMessageIds.has(id)) return;
+        state.chat.seenAssistantMessageIds.add(id);
+        if (state.callbacks.onMessage) {
+          state.callbacks.onMessage(message.text, turn);
+        }
+      });
+    });
+  }
+
+  function finishChatResponse() {
+    const pending = state.chat.turns.some((turn) => turn.status === 'pending');
+    const failed = state.chat.turns.length && state.chat.turns[state.chat.turns.length - 1].status === 'failed';
+    updateChatStatus(
+      state.chat.isCompleted ? 'ended' : pending ? 'waiting' : 'ready',
+      state.chat.isCompleted ? widgetText('conversationEndedText') : failed ? 'Assistant failed to respond.' : null
+    );
+  }
+
+  async function readChatStream(response) {
+    if (!response.body) throw new Error('Chat streaming is unavailable');
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let data = [];
+    let completed = false;
+
+    function dispatch() {
+      if (!data.length) return;
+      const event = JSON.parse(data.join('\n'));
+      data = [];
+      if (event.type === 'session' || event.type === 'complete') {
+        if (event.session_token) state.sessionToken = event.session_token;
+        if (event.workflow_run_id) state.workflowRunId = event.workflow_run_id;
+        applyChatSession(event.session);
+        completed = event.type === 'complete';
+      } else if (event.type === 'message') {
+        const turn = state.chat.turns.find((candidate) => candidate.id === event.turn_id);
+        if (turn) {
+          if (!Array.isArray(turn.assistant_messages)) turn.assistant_messages = [];
+          turn.assistant_messages[event.index] = event.message;
+          notifyNewAssistantMessages();
+        }
+      } else if (event.type === 'error') {
+        throw new Error(event.message || 'Assistant failed to respond');
+      }
+      renderChat();
+    }
+
+    try {
+      while (!completed) {
+        const { value, done } = await reader.read();
+        buffer += decoder.decode(value, { stream: !done });
+        let newline;
+        while ((newline = buffer.indexOf('\n')) !== -1) {
+          const line = buffer.slice(0, newline).replace(/\r$/, '');
+          buffer = buffer.slice(newline + 1);
+          if (line === '') dispatch();
+          else if (line.startsWith('data:')) data.push(line.slice(5).replace(/^ /, ''));
+        }
+        if (done) break;
+      }
+      if (!completed) throw new Error('Chat stream ended before the response finished');
+    } finally {
+      await reader.cancel().catch(() => {});
+      reader.releaseLock();
+    }
+  }
+
+  async function recoverChatSession() {
+    // An accepted POST keeps executing after disconnect. Only GET is retried;
+    // replaying the visitor message could run a tool twice.
+    let failures = 0;
+    updateChatStatus('waiting', 'Reconnecting…');
+    while (state.sessionToken) {
+      if (await resyncChatSession()) {
+        failures = 0;
+        const submission = state.chat.pendingSubmission;
+        const notAccepted = submission && state.chat.revision === submission.revision;
+        if (submission) {
+          if (notAccepted) state.chat.draft = submission.text;
+          state.chat.pendingSubmission = null;
+        }
+        finishChatResponse();
+        if (notAccepted && state.chat.status === 'ready') {
+          updateChatStatus('ready', 'Message not sent — please try again.');
+        }
+        if (state.chat.status !== 'waiting') return true;
+      } else if (state.chat.status === 'expired') {
+        updateChatStatus('expired');
+        return false;
+      } else if (++failures >= 3) {
+        updateChatStatus('recovering', 'Connection interrupted. Reconnect to check the response.');
+        return false;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+    return false;
+  }
+
+  /**
+   * Send a visitor message. Resolves with the updated turns array, or null if
+   * the message could not be delivered.
+   */
+  async function sendChatMessage(text) {
+    const trimmed = (text || '').trim();
+    if (!trimmed) return null;
+    if (!isChatWidget()) {
+      console.warn('BotrixAI Widget: sendMessage() called on a voice widget');
+      return null;
+    }
+    if (!state.sessionToken || state.chat.status === 'ended' || state.chat.status === 'expired') {
+      console.warn('BotrixAI Widget: no active chat session');
+      return null;
+    }
+    if (state.chat.status === 'waiting' || state.chat.status === 'starting' || state.chat.status === 'recovering') {
+      return null; // one turn at a time; the composer is disabled anyway
+    }
+
+    state.chat.pendingUserText = trimmed;
+    state.chat.pendingSubmission = { text: trimmed, revision: state.chat.revision };
+    updateChatStatus('waiting');
+
+    try {
+      const response = await fetch(
+        `${state.config.apiBaseUrl}/api/v1/public/embed/chat/${state.sessionToken}/messages/stream`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Origin': window.location.origin
+          },
+          body: JSON.stringify({ text: trimmed, expected_revision: state.chat.revision })
+        }
+      );
+
+      if (response.ok) {
+        await readChatStream(response);
+        state.chat.pendingSubmission = null;
+        finishChatResponse();
+        return state.chat.turns;
+      }
+
+      state.chat.pendingUserText = null;
+
+      if (response.status === 409) {
+        state.chat.pendingSubmission = null;
+        state.chat.draft = trimmed;
+        await recoverChatSession();
+        if (state.chat.status === 'ready') {
+          updateChatStatus('ready', 'Message not sent — please try again.');
+        }
+        return null;
+      }
+      if (response.status === 402) {
+        state.chat.pendingSubmission = null;
+        updateChatStatus('ended', 'The agent is unavailable right now.');
+        return null;
+      }
+      if (response.status === 429) {
+        state.chat.pendingSubmission = null;
+        updateChatStatus('ended', 'Message limit reached for this conversation.');
+        return null;
+      }
+      if (response.status === 403 || response.status === 404) {
+        state.chat.pendingSubmission = null;
+        // The 1-hour embed session expired (or the token was deactivated).
+        updateChatStatus('expired');
+        return null;
+      }
+      if (response.status === 400) {
+        state.chat.pendingSubmission = null;
+        // Conversation completed server-side (e.g. reached an end node).
+        updateChatStatus('ended', widgetText('conversationEndedText'));
+        return null;
+      }
+      throw new Error(`Chat message failed: ${response.status}`);
+    } catch (error) {
+      console.error('BotrixAI Widget: Failed to send message', error);
+      state.chat.pendingUserText = null;
+      await recoverChatSession();
+      if (state.callbacks.onError) {
+        state.callbacks.onError(error);
+      }
+      return null;
+    }
+  }
+
+  /**
+   * End the active chat and persist completion before updating local UI state.
+   * The endpoint is revision-guarded, and one resync/retry handles a session
+   * advanced from another browser tab.
+   */
+  async function endChatSession(retryOnConflict = true) {
+    if (!state.isInitialized) {
+      await init();
+    }
+    if (!state.isInitialized) {
+      return null;
+    }
+    if (!isChatWidget()) {
+      console.warn('BotrixAI Widget: endChat() called on a voice widget');
+      return null;
+    }
+    if (!state.sessionToken || state.chat.status === 'ended' || state.chat.status === 'expired') {
+      return state.chat.turns.slice();
+    }
+    if (state.chat.status === 'starting' || state.chat.status === 'waiting' || state.chat.status === 'recovering' || state.chat.ending) {
+      return null;
+    }
+
+    state.chat.confirmingEnd = false;
+    state.chat.ending = true;
+    renderChat();
+
+    try {
+      const response = await fetch(
+        `${state.config.apiBaseUrl}/api/v1/public/embed/chat/${state.sessionToken}/end`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Origin': window.location.origin
+          },
+          body: JSON.stringify({ expected_revision: state.chat.revision })
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        applyChatSession(data);
+        state.chat.ending = false;
+        updateChatStatus('ended', widgetText('conversationEndedText'));
+        return state.chat.turns.slice();
+      }
+
+      if (response.status === 409 && retryOnConflict) {
+        const resynced = await resyncChatSession();
+        state.chat.ending = false;
+        if (resynced) {
+          return endChatSession(false);
+        }
+        if (state.chat.status === 'expired') {
+          updateChatStatus('expired');
+          return null;
+        }
+      }
+      if (response.status === 403 || response.status === 404) {
+        state.chat.ending = false;
+        updateChatStatus('expired');
+        return null;
+      }
+      throw new Error(`Failed to end chat: ${response.status}`);
+    } catch (error) {
+      console.error('BotrixAI Widget: Failed to end chat', error);
+      state.chat.ending = false;
+      updateChatStatus('ready', 'Could not end the chat. Please try again.');
+      if (state.callbacks.onError) {
+        state.callbacks.onError(error);
+      }
+      return null;
+    }
+  }
+
+  /**
+   * Refetch the transcript after a conflict or disconnect. Marks it expired on
+   * 403/404 so the caller can surface the restart UI.
+   */
+  async function resyncChatSession() {
+    try {
+      const response = await fetch(
+        `${state.config.apiBaseUrl}/api/v1/public/embed/chat/${state.sessionToken}`,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Origin': window.location.origin
+          }
+        }
+      );
+      if (response.ok) {
+        applyChatSession(await response.json());
+        return true;
+      }
+      if (response.status === 403 || response.status === 404) {
+        state.chat.status = 'expired';
+      }
+    } catch (error) {
+      console.warn('BotrixAI Widget: chat resync failed', error);
+    }
+    return false;
+  }
+
+  async function submitChatComposer() {
+    const text = (state.chat.draft || '').trim();
+    if (!text || state.chat.status !== 'ready') return;
+    state.chat.draft = '';
+    if (state.chatEls) {
+      state.chatEls.input.value = '';
+      autoGrowChatInput(state.chatEls.input);
+    }
+    await sendChatMessage(text);
+
+    if (state.chatEls && state.chat.panelOpen && state.chat.status === 'ready') {
+      state.chatEls.input.focus();
+    }
+  }
+
+  function updateChatStatus(status, banner) {
+    if (status !== 'ready') state.chat.confirmingEnd = false;
+    state.chat.status = status;
+    state.chat.banner = banner || null;
+    renderChat();
+    if (state.callbacks.onChatStateChange) {
+      state.callbacks.onChatStateChange(status);
+    }
+  }
+
+  /**
+   * Update the panel in place from chat state. No-op in headless mode.
+   */
+  function renderChat() {
+    if (!state.chatEls) return;
+    renderChatMessages();
+    renderChatBanner();
+    updateChatEndConfirmationState();
+    updateChatComposerState();
+    updateChatEndButtonState();
+  }
+
+  function renderChatMessages() {
+    const messages = state.chatEls.messages;
+    // Keep autoscroll only when the viewer is already pinned to the bottom.
+    const pinned = messages.scrollHeight - messages.scrollTop - messages.clientHeight < 40;
+    messages.textContent = '';
+
+    state.chat.turns.forEach((turn) => {
+      if (turn.user_message && turn.user_message.text) {
+        messages.appendChild(buildChatBubble(turn.user_message.text, 'user', turn.status === 'failed'));
+      }
+      assistantMessages(turn).forEach((message) => {
+        if (message && message.text) messages.appendChild(buildChatBubble(message.text, 'assistant', false));
+      });
+    });
+
+    if (state.chat.pendingUserText) {
+      messages.appendChild(buildChatBubble(state.chat.pendingUserText, 'user', false));
+    }
+    if (state.chat.status === 'waiting' || state.chat.status === 'starting') {
+      const typing = document.createElement('div');
+      typing.className = 'botrixai-chat-typing';
+      typing.innerHTML = '<span></span><span></span><span></span>';
+      messages.appendChild(typing);
+    }
+
+    if (pinned) {
+      messages.scrollTop = messages.scrollHeight;
+    }
+  }
+
+  function buildChatBubble(text, role, failed) {
+    const bubble = document.createElement('div');
+    bubble.className = `botrixai-chat-bubble botrixai-chat-bubble--${role}${failed ? ' botrixai-chat-bubble--failed' : ''}`;
+    if (role === 'user') {
+      bubble.style.backgroundColor = state.config.buttonColor;
+    }
+    bubble.textContent = text; // XSS boundary: never innerHTML for message text
+    return bubble;
+  }
+
+  function renderChatBanner() {
+    const banner = state.chatEls.banner;
+    banner.textContent = '';
+
+    let text = state.chat.banner;
+    if (state.chat.status === 'expired') {
+      text = 'This chat session has expired.';
+    }
+    if (!text) {
+      banner.style.display = 'none';
+      return;
+    }
+
+    banner.style.display = 'flex';
+    banner.className = `botrixai-chat-banner${state.chat.status === 'ended' ? ' botrixai-chat-banner--info' : ''}`;
+
+    const span = document.createElement('span');
+    span.textContent = text;
+    banner.appendChild(span);
+
+    if (state.chat.status === 'expired' || state.chat.status === 'ended') {
+      const restart = document.createElement('button');
+      restart.type = 'button';
+      restart.className = 'botrixai-chat-restart';
+      restart.textContent = widgetText('startNewChatText');
+      restart.onclick = startNewChatSession;
+      banner.appendChild(restart);
+    } else if (state.chat.status === 'error' || state.chat.status === 'recovering') {
+      const retry = document.createElement('button');
+      retry.type = 'button';
+      retry.className = 'botrixai-chat-restart';
+      retry.textContent = widgetText('chatRetryText');
+      retry.onclick = () => state.chat.status === 'recovering' ? recoverChatSession() : startChatSession();
+      banner.appendChild(retry);
+    }
+  }
+
+  function updateChatComposerState() {
+    const input = state.chatEls.input;
+    const sendBtn = state.chatEls.sendBtn;
+    const canType = state.chat.status === 'ready' && !state.chat.ending && !state.chat.confirmingEnd;
+    input.disabled = !canType && state.chat.status !== 'idle';
+    sendBtn.disabled = !canType;
+    if (document.activeElement !== input) {
+      input.value = state.chat.draft || '';
+    }
+  }
+
+  function updateChatEndConfirmationState() {
+    const showConfirmation = state.chat.confirmingEnd
+      && state.chat.status === 'ready'
+      && !state.chat.ending;
+    state.chatEls.endConfirmation.style.display = showConfirmation ? 'flex' : 'none';
+    state.chatEls.endBtn.setAttribute('aria-expanded', showConfirmation ? 'true' : 'false');
+  }
+
+  function updateChatEndButtonState() {
+    const endBtn = state.chatEls.endBtn;
+    const hasActiveSession = Boolean(
+      state.sessionToken && state.chat.status !== 'ended' && state.chat.status !== 'expired'
+    );
+    endBtn.style.display = hasActiveSession ? 'inline-flex' : 'none';
+    endBtn.disabled = state.chat.ending || state.chat.confirmingEnd || state.chat.status !== 'ready';
+    endBtn.textContent = state.chat.ending ? widgetText('endingChatText') : widgetText('endChatText');
+  }
+
   // Public API
   window.BotrixAIWidget = {
-    // Core methods
+    // Core methods. In chat mode start() opens the chat, stop() only hides a
+    // floating panel, and end() completes the server-side session.
     init: init,
-    start: startCall,
-    stop: stopCall,
-    end: stopCall, // Alias for stop
+    start: startWidget,
+    stop: (...args) => (isChatWidget() ? closeChatPanel() : stopCall(...args)),
+    end: endWidget,
     retry: retryCall,
+
+    // Visitor context (voice and chat, every embed mode). Merges into whatever
+    // data-botrixai-context supplied; applies to the next conversation started.
+    setContext: setContextVariables,
+    getContext: () => ({ ...(state.config.contextVariables || {}) }),
 
     // Floating widget specific
     open: openWidget,
     close: closeWidget,
+
+    // Chat API (widgetType === 'chat')
+    startChat: startChat,
+    endChat: endChatSession,
+    sendMessage: sendChatMessage,
+    getMessages: () => state.chat.turns.slice(),
+    isChatMode: () => isChatWidget(),
+    onMessage: (callback) => { state.callbacks.onMessage = callback; },
+    onChatStateChange: (callback) => { state.callbacks.onChatStateChange = callback; },
 
     // State and callbacks
     getState: () => state,
@@ -1138,12 +2499,6 @@
       }
     }
   };
-
-  // Every page embedded before the rename calls `window.DograhWidget`. Those
-  // are live pages on customer sites; the old name has to keep working, so it
-  // points at the same object rather than a copy -- callbacks registered
-  // through either name reach the same widget.
-
 
   // Every page embedded before the rename calls `window.DograhWidget`. Those
   // are live pages on customer sites; the old name has to keep working, so it

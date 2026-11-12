@@ -5,7 +5,7 @@ concurrency service: text chat must not consume voice-call slots or affect the
 fleet autoscaling projection.
 """
 
-from api.services.call_concurrency.rate_limiter import rate_limiter
+from api.services.campaign.rate_limiter import rate_limiter
 
 EMBED_CHAT_INIT_RATE_LIMIT_PER_SECOND = 5
 EMBED_CHAT_MESSAGE_RATE_LIMIT_PER_SECOND = 5

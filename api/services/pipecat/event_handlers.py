@@ -144,8 +144,10 @@ def register_event_handlers(
                     fetch_result = pre_call_fetch_task.result()
 
                 if fetch_result:
-                    engine._call_context_vars = merge_external_initial_context(
-                        engine._call_context_vars, fetch_result
+                    # Updated in place: the pipeline shares this dict. The
+                    # customer endpoint's response may not replace run-owned keys.
+                    engine._call_context_vars.update(
+                        merge_external_initial_context({}, fetch_result)
                     )
                     try:
                         await db_client.update_workflow_run(

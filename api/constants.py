@@ -216,8 +216,17 @@ DEFAULT_CIRCUIT_BREAKER_CONFIG = {
 }
 
 
-# Whether this deployment runs a TURN server (coturn).
-ENABLE_COTURN = os.getenv("ENABLE_COTURN", "false").lower() == "true"
+# Whether this deployment runs a TURN server (coturn). Deployments set up
+# before this switch existed never set it, so when it is absent a configured
+# TURN_HOST + TURN_SECRET keeps meaning "TURN is on", as it always has.
+def resolve_enable_coturn(env) -> bool:
+    explicit = (env.get("ENABLE_COTURN") or "").strip().lower()
+    if explicit:
+        return explicit == "true"
+    return bool(env.get("TURN_HOST") and env.get("TURN_SECRET"))
+
+
+ENABLE_COTURN = resolve_enable_coturn(os.environ)
 TURN_SECRET = os.getenv("TURN_SECRET")
 # Host browsers dial for TURN/ICE. Derives from PUBLIC_HOST; set explicitly only
 # when the TURN server runs on a separate host from the app.

@@ -1,5 +1,6 @@
 import { Check, ChevronDown, Copy, ExternalLink, Loader2, MessageCircle, Mic, Plus, Rocket, Send, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import {
     createOrUpdateEmbedTokenApiV1WorkflowWorkflowIdEmbedTokenPost,
@@ -417,10 +418,14 @@ export function EmbedDialog({
         }
     };
 
-    const copyToClipboard = (text: string) => {
-        navigator.clipboard.writeText(text);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+    const copyToClipboard = async (text: string) => {
+        try {
+            await copyTextToClipboard(text);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch {
+            toast.error("Failed to copy embed code");
+        }
     };
 
     const addDomain = () => {
@@ -611,7 +616,7 @@ export function EmbedDialog({
                                             </span>
                                         </div>
                                         <p className="text-xs text-muted-foreground">
-                                            End a text chat and trigger its completion webhook after this long without chat activity. 
+                                            End a text chat and trigger its completion webhook after this long without chat activity.
                                         </p>
                                         {!textChatInactivityIsValid && (
                                             <p className="text-xs text-destructive">
@@ -858,12 +863,12 @@ export function EmbedDialog({
                                                 <ul className="text-sm space-y-2 text-muted-foreground">
                                                     <li>• Add the embed script tag to your page (see below).</li>
                                                     <li>• The widget renders no UI - render your own chat interface.</li>
-                                                    <li>• Call <code className="text-xs">window.DograhWidget.startChat()</code> to start a conversation (the agent greeting arrives via <code className="text-xs">onMessage</code>).</li>
-                                                    <li>• Call <code className="text-xs">window.DograhWidget.sendMessage(text)</code> to send a visitor message; it resolves with the updated transcript, or <code className="text-xs">null</code> if the message could not be delivered.</li>
-                                                    <li>• Call <code className="text-xs">window.DograhWidget.endChat()</code> to end the active conversation and trigger its completion webhook.</li>
+                                                    <li>• Call <code className="text-xs">window.BotrixAIWidget.startChat()</code> to start a conversation (the agent greeting arrives via <code className="text-xs">onMessage</code>).</li>
+                                                    <li>• Call <code className="text-xs">window.BotrixAIWidget.sendMessage(text)</code> to send a visitor message; it resolves with the updated transcript, or <code className="text-xs">null</code> if the message could not be delivered.</li>
+                                                    <li>• Call <code className="text-xs">window.BotrixAIWidget.endChat()</code> to end the active conversation and trigger its completion webhook.</li>
                                                     <li>• Use <code className="text-xs">getMessages()</code> to read the transcript at any time.</li>
                                                     <li>• Subscribe to <code className="text-xs">onMessage</code> and <code className="text-xs">onChatStateChange</code> to drive your UI. States are <code className="text-xs">idle</code>, <code className="text-xs">starting</code>, <code className="text-xs">ready</code>, <code className="text-xs">waiting</code>, <code className="text-xs">ended</code>, <code className="text-xs">expired</code>, <code className="text-xs">error</code>.</li>
-                                                    <li>• Call <code className="text-xs">window.DograhWidget.setContext({"{ ... }"})</code> before <code className="text-xs">startChat()</code> to pass visitor details the page learned after load.</li>
+                                                    <li>• Call <code className="text-xs">window.BotrixAIWidget.setContext({"{ ... }"})</code> before <code className="text-xs">startChat()</code> to pass visitor details the page learned after load.</li>
                                                 </ul>
                                             </div>
 
@@ -888,7 +893,7 @@ export function EmbedDialog({
                                                     <li>• Call <code className="text-xs">window.BotrixAIWidget.end()</code> to end it.</li>
                                                     <li>• Subscribe to <code className="text-xs">onCallStart</code>, <code className="text-xs">onCallEnd</code>, <code className="text-xs">onStatusChange</code>, <code className="text-xs">onError</code> to drive your UI.</li>
                                                     <li>• <code className="text-xs">start()</code> must run inside a user-gesture handler (click) so the browser grants microphone access.</li>
-                                                    <li>• Call <code className="text-xs">window.DograhWidget.setContext({"{ ... }"})</code> before <code className="text-xs">start()</code> to pass visitor details the page learned after load.</li>
+                                                    <li>• Call <code className="text-xs">window.BotrixAIWidget.setContext({"{ ... }"})</code> before <code className="text-xs">start()</code> to pass visitor details the page learned after load.</li>
                                                 </ul>
                                             </div>
 
@@ -948,8 +953,8 @@ document.getElementById('talk-btn').addEventListener('click', () => {
                                                         <li>• The chat panel renders in the container; the conversation starts when the visitor clicks the button</li>
                                                     ) : (
                                                         <>
-                                                            <li>• Call window.DograhWidget.start() to begin the call</li>
-                                                            <li>• Call window.DograhWidget.end() to end the call</li>
+                                                            <li>• Call window.BotrixAIWidget.start() to begin the call</li>
+                                                            <li>• Call window.BotrixAIWidget.end() to end the call</li>
                                                         </>
                                                     )}
                                                 </ul>
@@ -960,7 +965,7 @@ document.getElementById('talk-btn').addEventListener('click', () => {
                                                     <h4 className="font-medium mb-2 text-blue-900 dark:text-blue-100">Example</h4>
                                                     <pre className="text-xs overflow-x-auto">
                                                         <code className="text-blue-800 dark:text-blue-200">{`<h2>Chat with Our Agent</h2>
-<div id="dograh-inline-container" style="min-height: 480px">
+<div id="botrixai-inline-container" style="min-height: 480px">
   <!-- Chat panel renders here; no extra JS needed -->
 </div>`}</code>
                                                     </pre>
@@ -969,7 +974,7 @@ document.getElementById('talk-btn').addEventListener('click', () => {
                                                 <div className="rounded-lg bg-blue-50 dark:bg-blue-950/20 p-4 border border-blue-200 dark:border-blue-800">
                                                     <h4 className="font-medium mb-2 text-blue-900 dark:text-blue-100">Example React Component</h4>
                                                     <pre className="text-xs overflow-x-auto">
-                                                        <code className="text-blue-800 dark:text-blue-200">{`export function DograhAgent() {
+                                                        <code className="text-blue-800 dark:text-blue-200">{`export function BotrixAIAgent() {
   const [isCallActive, setIsCallActive] = useState(false);
 
   useEffect(() => {
@@ -1063,8 +1068,8 @@ document.getElementById('talk-btn').addEventListener('click', () => {
                                             </p>
                                             <p className="text-xs text-muted-foreground">
                                                 To pass visitor details to the agent, edit the{" "}
-                                                <code className="text-xs">data-dograh-context</code> values above — or call{" "}
-                                                <code className="text-xs">{"window.DograhWidget.setContext({ ... })"}</code> for
+                                                <code className="text-xs">data-botrixai-context</code> values above — or call{" "}
+                                                <code className="text-xs">{"window.BotrixAIWidget.setContext({ ... })"}</code> for
                                                 details your page learns later. Each one is available in your prompts as{" "}
                                                 <code className="text-xs">{"{{initial_context.page_url}}"}</code>.{" "}
                                                 <a

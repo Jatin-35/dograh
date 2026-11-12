@@ -1,12 +1,12 @@
 ---
 title: Add to Website
-description: Add your BotrixAI voice agent to any website so visitors can talk to it.
+description: Add your BotrixAI agent to any website so visitors can talk to it by voice or chat with it by text.
 tag: "NEW"
 ---
 
 ### How to add it
 
-Add your voice agent to any website using the Configure Widget dialog in your agent's settings.
+Add your agent to any website using the Configure Widget dialog in your agent's settings.
 
 Step 1: Open the agent settings by clicking the gear icon in the top-right of the agent editor.
 
@@ -16,7 +16,7 @@ Step 2: Scroll to the **Add to Website** section and click **Configure Widget**.
 
 ![Go to Add to Website](../images/add-to-website.png)
 
-Step 3: Enable embedding, add your website's domain to **Allowed Domains**, choose **Floating Widget**, **Inline Component**, or **Headless (Bring Your Own UI)**, customize the button (position, color, text) if applicable, and click **Save Configurations**.
+Step 3: Enable embedding, add your website's domain to **Allowed Domains**, choose a **Widget Type** (Voice or Chat) and an embed mode (**Floating Widget**, **Inline Component**, or **Headless (Bring Your Own UI)**), customize the button (position, color, text) if applicable, and click **Save Configurations**.
 
 ![Save configurations](../images/save-configurations.png)
 
@@ -24,29 +24,127 @@ Step 4: Copy the generated embed code and paste it into your web page to test yo
 
 ![Copy deployment code](../images/copy-deployment-code.png)
 
+## Widget types
+
+Each widget is either a voice widget or a chat widget. Pick the type in the Configure Widget dialog. Both types support all three embed modes.
+
+| Type      | How visitors interact                                                                |
+| --------- | ------------------------------------------------------------------------------------ |
+| **Voice** | Visitors talk to your agent over a live audio call (microphone required).            |
+| **Chat**  | Visitors type messages in a chat panel and the agent replies as text. No microphone. |
+
+How chat conversations behave:
+
+- The conversation starts when the visitor opens the chat, and the agent greets them first. Loading the page alone never starts a conversation.
+- Replies appear as they are written, including any "one moment, let me check" line before a tool finishes.
+- A chat session lasts up to **1 hour**. When it expires, the visitor is offered a **Start new chat** button.
+- Reloading the page starts a fresh conversation on the next open. Chat history isn't carried across page loads.
+- A chat that goes quiet is closed automatically (30 minutes by default; change it under **Chat Inactivity Timeout** in the same dialog). The visitor can also end it with the **End chat** button.
+- When a chat ends, the same post-call steps run as for a call: variable extraction, webhooks and integrations.
+- Each conversation counts once toward the embed token's usage limit, the same as one voice call.
+- Chat conversations appear in your agent's run history with a full transcript.
+
 ## Embed modes
 
 | Mode                  | What it renders                                                                                    | When to use                                                                                          |
 | --------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| **Floating Widget**   | A pill-shaped CTA button anchored to a corner of the page.                                         | You want a turn-key chat-bubble experience that doesn't disturb your existing layout.                |
+| **Floating Widget**   | A pill-shaped CTA button anchored to a corner of the page. For chat widgets it opens a chat panel. | You want a turn-key chat-bubble experience that doesn't disturb your existing layout.                |
 | **Inline Component**  | A panel rendered inside a `<div id="botrixai-inline-container">` that you place in your page.        | You want the agent embedded in a specific section (landing-page hero, support tab, etc.).            |
-| **Headless**          | No UI. Only the audio pipeline, driven from your own code.                                         | You want full control over the UI — your own buttons, design system, framework state, animations.    |
+| **Headless**          | No UI. Only the audio or chat pipeline, driven from your own code.                                 | You want full control over the UI — your own buttons, design system, framework state, animations.    |
 
 ## Prerequisites
 
 These apply to all three modes:
 
-- Serve your page over **HTTPS** or from `http://localhost`. Browsers refuse microphone access on plain HTTP origins or `file://`.
+- **Voice widgets:** serve your page over **HTTPS** or from `http://localhost`. Browsers refuse microphone access on plain HTTP origins or `file://`. Chat widgets need no microphone, though HTTPS is still recommended.
 - If you set **Allowed Domains** in the dashboard, include your test origin (e.g. `localhost`) — otherwise the widget's config and signaling requests are rejected. Leave the list empty to allow all domains.
 - The embed snippet you copy from the dashboard is a single `<script>` tag that loads **asynchronously**. The widget initializes itself once the script arrives.
+
+## Pass context to the agent
+
+Your page usually knows something about the visitor: their name, plan, cart value, the page they are on. Pass it along and your agent can use it from the first word.
+
+The snippet you copy from the dashboard carries a `data-botrixai-context` attribute, a JSON object of details about the visitor. The relevant part looks like this (keep the generated `js.src` value, which contains your embed token):
+
+```html
+<script>
+  (function(d, s, id) {
+    var js, fjs = d.getElementsByTagName(s)[0];
+    if (d.getElementById(id)) return;
+    js = d.createElement(s);
+    js.id = id;
+    js.src = '<dashboard-generated widget URL>';
+    js.setAttribute('data-botrixai-context', JSON.stringify({
+      page_url: window.location.href,
+      today: new Date().toISOString().slice(0, 10)
+    }));
+    js.async = true;
+    fjs.parentNode.insertBefore(js, fjs);
+  }(document, 'script', 'botrixai-widget'));
+</script>
+```
+
+It is built in JavaScript at page load, so you can put anything your page knows in it. Replace the object inside `JSON.stringify(...)`, for example:
+
+```js
+{
+  customer_name: currentUser.firstName,
+  plan: currentUser.plan,
+  cart: { items: cart.length, total: cart.total }
+}
+```
+
+Each key is then available in any node prompt as `{{initial_context.<name>}}`:
+
+```text
+Greet {{initial_context.customer_name | there}} and mention their {{initial_context.plan}} plan.
+```
+
+Values can be strings, numbers, booleans or nested objects. This works for voice and chat widgets alike, and the values are recorded on the conversation so you can see what the agent was given.
+
+<Warning>
+Key names cannot contain dots, whitespace, pipes or braces, because those
+characters have a meaning in template expressions. Invalid entries are dropped
+and the conversation still starts.
+</Warning>
+
+### Update context after the page loads
+
+The attribute is fixed at page load, which doesn't fit a single-page app where the visitor logs in or fills a cart later. For that, call `setContext()`:
+
+```js
+window.BotrixAIWidget.setContext({
+  customer_name: user.firstName,
+  plan: user.plan
+});
+```
+
+Each call merges into the context already collected. `getContext()` returns the current set. Context is read when a conversation starts, so `setContext()` applies to the **next** conversation, not one already in progress.
+
+<Warning>
+Context comes from the page, so a visitor can read it and change it before it
+reaches your agent. Never pass secrets, and don't let it decide what the agent
+will do or disclose. For data the agent must trust, pass an id such as
+`customer_id` and fetch the real details from your own API with
+[Pre-Call Data Fetch](/voice-agent/pre-call-data-fetch).
+</Warning>
+
+Limits, per conversation: up to 50 variables, 64 characters per name, 2000 characters per value, and 8 KB in total. Anything past a limit is dropped and the conversation still starts. The names `provider` and `runtime_configuration` are reserved and ignored.
 
 ## Floating Widget
 
 ![Floating widget shown in the corner of a host page](../images/floating-widget-example.png)
 
-Renders a pill-shaped button (microphone icon + text) anchored to a corner of the page. Clicking it starts a call; clicking again ends it. The button auto-updates its label and color across the call lifecycle: configured text → "Connecting…" → "End Call" → "Retry" on failure.
+Renders a pill-shaped button anchored to a corner of the page.
+
+- **Voice:** clicking the button (microphone icon + text) starts a call; clicking again ends it. The button updates its label and color across the call: configured text → "Connecting…" → "End Call" → "Retry" on failure.
+- **Chat:** clicking the button (chat icon + text) opens a chat panel in the same corner. The agent greets the visitor and the conversation happens in the panel. Closing the panel does not end the conversation; reopening shows the same transcript.
 
 Configure **Button Text**, **Button Color**, and **Position** (top/bottom + left/right) from the dashboard.
+
+### Change the widget's wording or language
+
+Every other word a visitor sees can be changed too, under a collapsible section in the same dialog: **Chat Panel Text** for chat widgets (end-chat button, conversation-ended message, start-new-chat and retry buttons, message placeholder) or **Voice Call Text** for voice widgets ("Connecting…", "End Call", "Call ended" and so on). Use it to run the widget in Hindi or any other language. Leave a field blank to keep the English default.
 
 The host page writes no JavaScript — pasting the embed snippet is the entire integration.
 
@@ -54,7 +152,10 @@ The host page writes no JavaScript — pasting the embed snippet is the entire i
 
 ![Inline widget rendered inside a page section](../images/inline-widget-example.png)
 
-Renders a panel (status icon + status text + CTA button) inside a `<div>` you place in your page. Status changes update the panel in place.
+Renders a panel inside a `<div>` you place in your page.
+
+- **Voice:** a status panel (status icon + status text + CTA button). Status changes update the panel in place.
+- **Chat:** a call-to-action screen first; clicking the button replaces it with a chat panel that fills the container.
 
 Configure **Button Text**, **Button Color**, and **Call to Action Text** from the dashboard.
 
@@ -108,9 +209,9 @@ export function Assistant() {
 
 ![Headless widget driven by host-page UI](../images/headless-widget-example.png)
 
-In Headless mode the widget injects no UI of its own. You render whatever buttons, banners or in-call indicators you want, and call the JavaScript API to start and end calls.
+In Headless mode the widget injects no UI of its own. You render whatever buttons, banners, in-call indicators or chat interface you want, and drive the agent through the JavaScript API.
 
-### JavaScript API
+### JavaScript API (voice widgets)
 
 The widget exposes `window.BotrixAIWidget` once its script has loaded.
 
@@ -123,6 +224,7 @@ The widget exposes `window.BotrixAIWidget` once its script has loaded.
 | `isInlineMode()` | `true` when the widget is in Inline mode. |
 | `refresh()` | Re-render the inline panel — useful when a component remounts. |
 | `initInline({ container })` | Attach the inline widget to an element yourself. |
+| `setContext(vars)` / `getContext()` | Set or read visitor context for the next conversation. See [Pass context to the agent](#pass-context-to-the-agent). |
 
 Call status moves through `idle` → `connecting` → `connected` → `failed`.
 
@@ -193,9 +295,54 @@ export function TalkButton() {
 }
 ```
 
+### JavaScript API (chat widgets)
+
+| Method / Callback | What it does |
+| --- | --- |
+| `startChat()` | Start a conversation. The agent's greeting arrives through `onMessage`. |
+| `sendMessage(text)` | Send a visitor message. Returns a Promise that resolves with the updated transcript, or `null` if the message could not be delivered. |
+| `getMessages()` | The current transcript as an array of turns: `{ id, status, user_message, assistant_message }`. |
+| `endChat()` | End the conversation. Post-chat steps (extraction, webhooks) then run. |
+| `onMessage(cb)` | Fires as each agent message arrives. The callback receives `(text, turn)`. |
+| `onChatStateChange(cb)` | Fires on every state change: `idle`, `starting`, `ready`, `waiting` (agent is replying), `ended`, `expired`, `error`. |
+| `onError(cb)` | Fires on errors. |
+| `isChatMode()` | `true` when this is a chat widget. |
+| `setContext(vars)` | Set visitor context for the next conversation. |
+
+In chat mode `start()` is the same as `startChat()`, so generic snippets keep working. Only one message is sent at a time: `sendMessage` while a reply is pending resolves to `null`.
+
+```html
+<button id="open-chat">Chat with us</button>
+<div id="transcript"></div>
+<input id="chat-input" /><button id="send-btn">Send</button>
+
+<script>
+  window.addEventListener('load', () => {
+    window.BotrixAIWidget.onMessage((text) => {
+      const p = document.createElement('p');
+      p.textContent = 'Agent: ' + text;
+      document.getElementById('transcript').appendChild(p);
+    });
+
+    document.getElementById('open-chat').addEventListener('click', () => {
+      window.BotrixAIWidget.startChat();
+    });
+
+    document.getElementById('send-btn').addEventListener('click', async () => {
+      const input = document.getElementById('chat-input');
+      const p = document.createElement('p');
+      p.textContent = 'You: ' + input.value;
+      document.getElementById('transcript').appendChild(p);
+      await window.BotrixAIWidget.sendMessage(input.value);
+      input.value = '';
+    });
+  });
+</script>
+```
+
 ## Lifecycle callbacks (all modes)
 
-These work in Floating and Inline mode too, not just Headless — useful for analytics without changing how the widget looks.
+These work in Floating and Inline mode too, not just Headless — useful for analytics without changing how the widget looks. The `onCall*` callbacks fire for voice widgets; for chat widgets use `onMessage` and `onChatStateChange` the same way.
 
 ```js
 window.BotrixAIWidget?.onReady(() => {/* widget loaded and configured */});

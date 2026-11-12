@@ -131,3 +131,16 @@ def test_get_ice_servers_relay_only_without_turn_returns_no_servers(monkeypatch)
     monkeypatch.setattr(webrtc_signaling, "TURN_HOST", "")
 
     assert webrtc_signaling.get_ice_servers(user_id="1") == []
+
+
+def test_enable_coturn_defaults_to_configured_turn():
+    """Deployments that predate ENABLE_COTURN keep TURN on when it is configured."""
+    from api.constants import resolve_enable_coturn
+
+    turn = {"TURN_HOST": "turn.example", "TURN_SECRET": "s"}
+    assert resolve_enable_coturn(turn) is True
+    assert resolve_enable_coturn({"ENABLE_COTURN": "", **turn}) is True
+    assert resolve_enable_coturn({"TURN_HOST": "turn.example"}) is False
+    assert resolve_enable_coturn({}) is False
+    assert resolve_enable_coturn({"ENABLE_COTURN": "false", **turn}) is False
+    assert resolve_enable_coturn({"ENABLE_COTURN": "true"}) is True
