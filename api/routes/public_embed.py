@@ -22,7 +22,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from api.constants import ENABLE_COTURN, FORCE_TURN_RELAY
 from api.db import db_client
-from api.enums import WorkflowRunMode
+from api.enums import CallType, WorkflowRunMode
 from api.routes.turn_credentials import (
     TURN_SECRET,
     TurnCredentialsResponse,
@@ -383,6 +383,8 @@ async def _initialize_embed_session(
             initial_context = {
                 **context_variables,
                 "provider": WorkflowRunMode.SMALLWEBRTC.value,
+                # Embed visitors initiate the voice call into the workflow.
+                "direction": CallType.INBOUND.value,
             }
         workflow_run = await db_client.create_workflow_run(
             name=name,
@@ -390,6 +392,7 @@ async def _initialize_embed_session(
             mode=mode,
             user_id=embed_token.created_by,  # Use token creator as run owner
             organization_id=embed_token.organization_id,
+            call_type=CallType.INBOUND,
             initial_context=initial_context,
         )
         if is_chat:

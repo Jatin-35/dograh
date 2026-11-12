@@ -37,3 +37,19 @@ def test_external_context_cannot_introduce_reserved_run_metadata():
             "customer_name": "Ada",
         },
     ) == {"customer_name": "Ada"}
+
+
+def test_external_context_cannot_supply_run_identifiers_or_model_settings():
+    merged = merge_external_initial_context(
+        {"call_id": "real-call"},
+        {
+            "call_id": "forged",
+            "workflow_run_id": 999,
+            "model_overrides": {"llm": "x"},
+            "model_configuration_snapshot": {"llm": "x"},
+            "model_configuration_overrides": {"llm": "x"},
+            "lead_id": "L-1",
+        },
+    )
+
+    assert merged == {"call_id": "real-call", "lead_id": "L-1"}

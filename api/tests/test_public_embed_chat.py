@@ -335,6 +335,9 @@ def test_init_voice_token_keeps_smallwebrtc(_patch_db):
     kwargs = _patch_db.created_runs[0]
     assert kwargs["mode"] == "smallwebrtc"
     assert kwargs["initial_context"]["provider"] == "smallwebrtc"
+    # The visitor calls the agent: reports and call history count it as inbound.
+    assert kwargs["call_type"].value == "inbound"
+    assert kwargs["initial_context"]["direction"] == "inbound"
 
     body = resp.json()
     assert body["widget_type"] == "voice"
@@ -360,7 +363,39 @@ def test_init_sanitizes_context_variables(_patch_db):
     assert initial_context["customer_name"] == "Abhishek"
     # The host page can't rewrite the transport the backend picked.
     assert initial_context["provider"] == "smallwebrtc"
+
     assert len(initial_context["bio"]) == MAX_VALUE_LENGTH
+
+
+def test_init_drops_visitor_supplied_run_identifiers(_patch_db):
+    """A page can't plant ids the pipeline keeps (call_id is setdefault'ed)."""
+    resp = client.post(
+        "/api/v1/public/embed/init",
+        headers={"Origin": ORIGIN},
+        json={
+            "token": "voice",
+            "context_variables": {
+                "call_id": "forged",
+                "workflow_run_id": 999,
+                "model_overrides": {"llm": "x"},
+                "model_configuration_overrides": {"llm": "x"},
+                "model_configuration_snapshot": {"llm": "x"},
+                "customer_name": "Asha",
+            },
+        },
+    )
+    assert resp.status_code == 200
+
+    initial_context = _patch_db.created_runs[0]["initial_context"]
+    assert initial_context["customer_name"] == "Asha"
+    for key in (
+        "call_id",
+        "workflow_run_id",
+        "model_overrides",
+        "model_configuration_overrides",
+        "model_configuration_snapshot",
+    ):
+        assert key not in initial_context
 
 
 def test_init_rejects_exhausted_usage_reservation(monkeypatch, _patch_db):
