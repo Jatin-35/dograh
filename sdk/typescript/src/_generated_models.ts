@@ -284,6 +284,23 @@ export interface components {
              * @default 0.3
              */
             volume: number;
+            /**
+             * Play Mode
+             * @default whole_call
+             * @enum {string}
+             */
+            play_mode: "whole_call" | "thinking" | "tool_calls";
+            /**
+             * Start Delay Secs
+             * @default 0.5
+             */
+            start_delay_secs: number;
+            /**
+             * Sound
+             * @default office
+             * @enum {string}
+             */
+            sound: "office" | "typing";
         } & {
             [key: string]: unknown;
         };
@@ -1104,6 +1121,13 @@ export interface components {
              */
             destination: string;
             /**
+             * Number Format
+             * @description How the number is sent to the telephony provider: auto (the provider's own handling; VoiceLink sends 10 digits), keep_zero (0 + 10 digits, e.g. landlines), with_91, with_plus_91, or as_typed (exactly as entered).
+             * @default auto
+             * @enum {string}
+             */
+            number_format: "auto" | "keep_zero" | "with_91" | "with_plus_91" | "as_typed";
+            /**
              * Messagetype
              * @description Type of message to play before transfer.
              * @default none
@@ -1200,20 +1224,15 @@ export interface components {
             smart_turn_stop_secs: number;
             /**
              * Turn Start Strategy
-             * @default default
+             * @default min_words
              * @enum {string}
              */
-            turn_start_strategy: "default" | "min_words" | "provisional_vad";
+            turn_start_strategy: "default" | "min_words";
             /**
              * Turn Start Min Words
-             * @default 3
+             * @default 2
              */
             turn_start_min_words: number;
-            /**
-             * Provisional Vad Pause Secs
-             * @default 1.5
-             */
-            provisional_vad_pause_secs: number;
             /**
              * Turn Stop Strategy
              * @default transcription
@@ -1230,6 +1249,17 @@ export interface components {
              * @default false
              */
             context_compaction_enabled: boolean;
+            /**
+             * Noise Reduction
+             * @default off
+             * @enum {string}
+             */
+            noise_reduction: "off" | "rnnoise";
+            /**
+             * Text Chat Inactivity Timeout Seconds
+             * @default 1800
+             */
+            text_chat_inactivity_timeout_seconds: number;
         } & {
             [key: string]: unknown;
         };
