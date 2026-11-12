@@ -86,11 +86,18 @@ class WorkflowRunClient(BaseDBClient):
             # Get the current storage backend based on ENABLE_AWS_S3 flag
             current_backend = StorageBackend.get_current_backend()
 
-            # Use initial_context from the version if available, else from workflow
+            # Template context variables are the editor's sample values for
+            # test calls (use_draft). A live call must never fall back to them:
+            # a campaign row missing `name` would greet the customer by the
+            # sample name (upstream #560).
             default_context = (
-                target_def.template_context_variables
-                if target_def and target_def.template_context_variables
-                else workflow.template_context_variables
+                (
+                    target_def.template_context_variables
+                    if target_def and target_def.template_context_variables
+                    else workflow.template_context_variables
+                )
+                if use_draft
+                else None
             )
 
             merged_initial_context = {

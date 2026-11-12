@@ -607,10 +607,14 @@ class TestRunDefinitionBinding:
 
         assert run.definition_id == draft.id
 
-    async def test_run_initial_context_merges_with_template_context(
+    async def test_live_run_does_not_use_template_context(
         self, db_session, workflow_with_v1
     ):
-        """Explicit run context should augment template context, not replace it."""
+        """A live run stores only the context it was given (upstream #560).
+
+        Template context variables are the editor's sample values; a live call
+        missing one must not be filled in with the sample.
+        """
         workflow, user = workflow_with_v1
         await db_session.save_workflow_draft(
             workflow_id=workflow.id,
@@ -626,6 +630,37 @@ class TestRunDefinitionBinding:
             workflow_id=workflow.id,
             mode="smallwebrtc",
             user_id=user.id,
+            initial_context={
+                "company_name": "Override Co",
+                "provider": "smallwebrtc",
+            },
+        )
+
+        assert run.initial_context == {
+            "company_name": "Override Co",
+            "provider": "smallwebrtc",
+        }
+
+    async def test_test_run_initial_context_merges_with_template_context(
+        self, db_session, workflow_with_v1
+    ):
+        """A test call fills missing values from the sample values."""
+        workflow, user = workflow_with_v1
+        await db_session.save_workflow_draft(
+            workflow_id=workflow.id,
+            template_context_variables={
+                "company_name": "Acme",
+                "default_only": "kept",
+            },
+        )
+        await db_session.publish_workflow_draft(workflow.id)
+
+        run = await db_session.create_workflow_run(
+            name="Test Run",
+            workflow_id=workflow.id,
+            mode="smallwebrtc",
+            user_id=user.id,
+            use_draft=True,
             initial_context={
                 "company_name": "Override Co",
                 "provider": "smallwebrtc",
