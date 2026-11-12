@@ -140,6 +140,9 @@ def test_enable_coturn_defaults_to_configured_turn():
     turn = {"TURN_HOST": "turn.example", "TURN_SECRET": "s"}
     assert resolve_enable_coturn(turn) is True
     assert resolve_enable_coturn({"ENABLE_COTURN": "", **turn}) is True
+    # The standard remote install: no TURN_HOST (derived from PUBLIC_HOST),
+    # only the shared secret. Prod runs like this.
+    assert resolve_enable_coturn({"TURN_SECRET": "s"}) is True
     assert resolve_enable_coturn({"TURN_HOST": "turn.example"}) is False
     assert resolve_enable_coturn({}) is False
     assert resolve_enable_coturn({"ENABLE_COTURN": "false", **turn}) is False

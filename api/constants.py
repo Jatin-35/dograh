@@ -217,13 +217,14 @@ DEFAULT_CIRCUIT_BREAKER_CONFIG = {
 
 
 # Whether this deployment runs a TURN server (coturn). Deployments set up
-# before this switch existed never set it, so when it is absent a configured
-# TURN_HOST + TURN_SECRET keeps meaning "TURN is on", as it always has.
+# before this switch existed never set it, so when it is absent TURN_SECRET
+# alone keeps meaning "TURN is on", as it always has. TURN_HOST is not part of
+# the test: it is usually unset and derived from PUBLIC_HOST below.
 def resolve_enable_coturn(env) -> bool:
     explicit = (env.get("ENABLE_COTURN") or "").strip().lower()
     if explicit:
         return explicit == "true"
-    return bool(env.get("TURN_HOST") and env.get("TURN_SECRET"))
+    return bool(env.get("TURN_SECRET"))
 
 
 ENABLE_COTURN = resolve_enable_coturn(os.environ)
