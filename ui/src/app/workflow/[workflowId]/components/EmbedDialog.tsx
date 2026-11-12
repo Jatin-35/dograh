@@ -316,6 +316,12 @@ export function EmbedDialog({
                 if (response.data.allowed_domains) {
                     setDomains(response.data.allowed_domains);
                 }
+            } else if (!response.error) {
+                // Nothing saved (never enabled, or disabled and saved). Show
+                // that, rather than whatever the switch was left at the last
+                // time the dialog was open without saving.
+                setEmbedToken(null);
+                setIsEnabled(false);
             }
         } catch (error) {
             console.error("Failed to load embed token:", error);
@@ -405,7 +411,9 @@ export function EmbedDialog({
             }
 
             toast.success(
-                "Widget configuration saved. Publish the agent to apply the changes.",
+                isEnabled
+                    ? "Widget configuration saved. Publish the agent to apply the changes."
+                    : "Embedding turned off. The widget stops working on every site.",
             );
             // Don't close modal after saving - let user copy the embed code
         } catch (error) {
@@ -1095,6 +1103,27 @@ document.getElementById('talk-btn').addEventListener('click', () => {
                                     </>
                                 )}
                             </>
+                        )}
+
+                        {/* Switched off while embedding is saved as on: the
+                            settings (and their Save button) are hidden, so
+                            offer the save that actually turns it off. */}
+                        {!isEnabled && embedToken?.is_active && (
+                            <div className="flex items-center justify-between gap-4">
+                                <p className="text-sm text-muted-foreground">
+                                    Embedding is still on. Save to turn the widget off on every site that uses it.
+                                </p>
+                                <Button onClick={handleSave} disabled={saving}>
+                                    {saving ? (
+                                        <>
+                                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                            Saving...
+                                        </>
+                                    ) : (
+                                        "Save Configurations"
+                                    )}
+                                </Button>
+                            </div>
                         )}
                     </div>
                 )}
