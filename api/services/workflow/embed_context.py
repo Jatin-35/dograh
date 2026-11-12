@@ -1,7 +1,7 @@
 """Sanitization for visitor context supplied by an embedded widget.
 
 Embed context reaches us from a third-party page via the widget script tag's
-`data-dograh-context` JSON attribute, so it is untrusted in shape and size even
+`data-botrixai-context` JSON attribute, so it is untrusted in shape and size even
 though the site owner holds the token.
 
 Accepted variables land in the run's ``initial_context`` and are addressable from

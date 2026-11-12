@@ -1,27 +1,20 @@
 /**
  * The embed widget's public contract.
  *
- * Renaming this widget is the one change in the codebase that can break sites
- * we do not control. The script is pasted into customer pages, and those pages
- * are not going to be edited when we rename something — so every name that was
- * ever public has to keep working.
- *
- * Three earlier rebrands got this wrong in the *other* direction: the docs were
- * renamed while the code was not, so `pip install botrixai-sdk`,
- * `botrixai-widget.js` and `botrixai-inline-container` were all published as
- * instructions that could not work. These tests pin the code side, so the docs
- * have something true to describe.
+ * The script is pasted into customer pages, so the names it exposes are a
+ * public API: the script path, `window.BotrixAIWidget`, the
+ * `data-botrixai-context` attribute and the `botrixai-inline-container` id.
+ * These tests pin the code side, so the docs have something true to describe.
  *
  * @vitest-environment jsdom
  */
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const WIDGET = join(process.cwd(), "public/embed/botrixai-widget.js");
-const SHIM = join(process.cwd(), "public/embed/dograh-widget.js");
 
 /** The widget is a plain script, not a module, so nothing in `src/` declares
  * these. Typed loosely on purpose: the point of these tests is to assert what
@@ -31,16 +24,21 @@ type WidgetApi = Record<string, unknown>;
 declare global {
     interface Window {
         BotrixAIWidget?: WidgetApi;
-        DograhWidget?: WidgetApi;
     }
 }
 
-/** Run the widget IIFE against the current jsdom document. */
-function loadWidget() {
-    // The widget reads its own <script src> for the token, so give it one.
+function addScriptTag(src: string, context?: Record<string, unknown>) {
     const tag = document.createElement("script");
-    tag.src = "https://example.test/embed/botrixai-widget.js?token=t&environment=test";
+    tag.src = src;
+    if (context) tag.setAttribute("data-botrixai-context", JSON.stringify(context));
     document.head.appendChild(tag);
+    // As on a real page, the running script is this tag.
+    Object.defineProperty(document, "currentScript", { value: tag, configurable: true });
+    return tag;
+}
+
+/** Run the widget IIFE against the current jsdom document. */
+function runWidget() {
     // eslint-disable-next-line no-new-func
     new Function(readFileSync(WIDGET, "utf8"))();
 }
@@ -50,24 +48,17 @@ describe("the widget's public global", () => {
         document.head.innerHTML = "";
         document.body.innerHTML = "";
         delete window.BotrixAIWidget;
-        delete window.DograhWidget;
     });
 
     it("exposes window.BotrixAIWidget", () => {
-        loadWidget();
+        addScriptTag("https://example.test/embed/botrixai-widget.js?token=t&environment=test");
+        runWidget();
         expect(window.BotrixAIWidget).toBeDefined();
     });
 
-    it("still exposes window.DograhWidget, and as the SAME object", () => {
-        // A copy would silently break callbacks: a customer registering
-        // through the old name would attach to an object the widget never
-        // reads. Identity is the property that matters, not mere presence.
-        loadWidget();
-        expect(window.DograhWidget).toBe(window.BotrixAIWidget);
-    });
-
     it("keeps every method the documentation promises", () => {
-        loadWidget();
+        addScriptTag("https://example.test/embed/botrixai-widget.js?token=t&environment=test");
+        runWidget();
         for (const method of [
             "init", "start", "stop", "end", "retry", "open", "close",
             "getState", "isInlineMode", "refresh", "initInline",
@@ -85,83 +76,24 @@ describe("the widget's public global", () => {
     });
 });
 
-describe("the compatibility shim at the old path", () => {
-    it("forwards to the new filename, keeping the query string", () => {
-        document.head.innerHTML = "";
-        const tag = document.createElement("script");
-        tag.src = "https://example.test/embed/dograh-widget.js?token=abc123&environment=production";
-        document.head.appendChild(tag);
-        Object.defineProperty(document, "currentScript", {
-            value: tag,
-            configurable: true,
-        });
-
-        // eslint-disable-next-line no-new-func
-        new Function(readFileSync(SHIM, "utf8"))();
-
-        const injected = [...document.head.querySelectorAll("script")].find((s) =>
-            s.src.includes("botrixai-widget.js"),
-        );
-        expect(injected, "the shim did not inject the renamed script").toBeDefined();
-        // The token is how the widget authenticates. Dropping the query string
-        // would leave every pre-rename embed loading a widget with no token.
-        expect(injected!.src).toContain("token=abc123");
-        expect(injected!.src).toContain("environment=production");
-    });
-});
-
-describe("no other company's identifiers ship in the widget", () => {
-    const source = readFileSync(WIDGET, "utf8");
-
-    it("does not call another company's API", () => {
-        expect(source).not.toContain("api.dograh.com");
-    });
-
-    it("only mentions the old name where back-compat requires it", () => {
-        // Every remaining occurrence must be one of the three deliberate
-        // fallbacks. A new one means a rename was missed.
-        const lines = source
-            .split("\n")
-            .filter((l) => /dograh/i.test(l))
-            .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)); // ignore comments
-
-        for (const line of lines) {
-            expect(
-                /window\.DograhWidget = window\.BotrixAIWidget|dograh-inline-container|data-dograh-context|dograh-widget\.js/.test(
-                    line,
-                ),
-                `unexpected Dograh reference: ${line.trim()}`,
-            ).toBe(true);
-        }
-    });
-});
-
-describe("a page embedded before the rename, on the chat-capable widget", () => {
-    // The oldest embed code a customer can have: the pre-rename script path,
-    // context attribute and inline container id. None of it may stop working
-    // because the widget learned to chat.
+describe("the documented embed code, voice and chat", () => {
     beforeEach(() => {
         document.head.innerHTML = "";
-        document.body.innerHTML = '<div id="dograh-inline-container"></div>';
+        document.body.innerHTML = '<div id="botrixai-inline-container"></div>';
         delete window.BotrixAIWidget;
-        delete window.DograhWidget;
     });
 
     afterEach(() => {
         vi.unstubAllGlobals();
     });
 
-    async function loadOldEmbed(widgetType: "chat" | "voice") {
-        const tag = document.createElement("script");
-        tag.src = "https://example.test/embed/dograh-widget.js?token=emb_OLD&environment=test";
-        tag.setAttribute("data-dograh-context", JSON.stringify({ customer_name: "Asha" }));
-        document.head.appendChild(tag);
-        // As on a real page, the running script is this tag (the shim test
-        // above leaves its own tag here otherwise).
-        Object.defineProperty(document, "currentScript", { value: tag, configurable: true });
-
+    async function loadEmbed(widgetType: "chat" | "voice") {
+        addScriptTag(
+            "https://example.test/embed/botrixai-widget.js?token=emb_TEST&environment=test",
+            { customer_name: "Asha" },
+        );
         const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-            expect(String(input)).toContain("/api/v1/public/embed/config/emb_OLD");
+            expect(String(input)).toContain("/api/v1/public/embed/config/emb_TEST");
             return {
                 ok: true,
                 status: 200,
@@ -174,31 +106,45 @@ describe("a page embedded before the rename, on the chat-capable widget", () => 
             } as Response;
         });
         vi.stubGlobal("fetch", fetchMock);
-        // eslint-disable-next-line no-new-func
-        new Function(readFileSync(WIDGET, "utf8"))();
+        runWidget();
         // init() is single-flight: this awaits the load the script started.
-        await (window.DograhWidget!.init as () => Promise<void>)();
+        await (window.BotrixAIWidget!.init as () => Promise<void>)();
         return fetchMock;
     }
 
-    it("reads the token from the old script path and the old context attribute", async () => {
-        const fetchMock = await loadOldEmbed("chat");
+    it("reads the token from the script URL and the context attribute", async () => {
+        const fetchMock = await loadEmbed("chat");
         expect(fetchMock).toHaveBeenCalled();
-        const getContext = window.DograhWidget!.getContext as () => Record<string, unknown>;
+        const getContext = window.BotrixAIWidget!.getContext as () => Record<string, unknown>;
         expect(getContext()).toMatchObject({ customer_name: "Asha" });
     });
 
-    it("renders a chat widget inside the old inline container", async () => {
-        await loadOldEmbed("chat");
-        const container = document.getElementById("dograh-inline-container")!;
-        expect((window.DograhWidget!.isChatMode as () => boolean)()).toBe(true);
-        expect(container.children.length).toBeGreaterThan(0);
+    it("renders a chat widget inside the inline container", async () => {
+        await loadEmbed("chat");
+        expect((window.BotrixAIWidget!.isChatMode as () => boolean)()).toBe(true);
+        expect(document.getElementById("botrixai-inline-container")!.children.length).toBeGreaterThan(0);
     });
 
-    it("renders a voice widget inside the old inline container", async () => {
-        await loadOldEmbed("voice");
-        const container = document.getElementById("dograh-inline-container")!;
-        expect((window.DograhWidget!.isChatMode as () => boolean)()).toBe(false);
-        expect(container.children.length).toBeGreaterThan(0);
+    it("renders a voice widget inside the inline container", async () => {
+        await loadEmbed("voice");
+        expect((window.BotrixAIWidget!.isChatMode as () => boolean)()).toBe(false);
+        expect(document.getElementById("botrixai-inline-container")!.children.length).toBeGreaterThan(0);
+    });
+});
+
+describe("no other company's identifiers ship in the widget", () => {
+    const source = readFileSync(WIDGET, "utf8");
+
+    it("does not call another company's API", () => {
+        expect(source).not.toContain("api.dograh.com");
+    });
+
+    it("never mentions the upstream product name", () => {
+        const lines = source.split("\n").filter((l) => /dograh/i.test(l));
+        expect(lines, `unexpected Dograh reference: ${lines[0]?.trim()}`).toEqual([]);
+    });
+
+    it("ships no script under the upstream name", () => {
+        expect(existsSync(join(process.cwd(), "public/embed/dograh-widget.js"))).toBe(false);
     });
 });

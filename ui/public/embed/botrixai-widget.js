@@ -81,25 +81,9 @@
     return initializationPromise;
   }
 
-  // The container the host page creates. `botrixai-inline-container` is the
-  // documented name; `dograh-inline-container` is what pages embedded before
-  // the rename used, and must keep working -- those are live pages on customer
-  // sites that nobody is going to edit for us.
-  function resolveContainerId() {
-    return document.getElementById('botrixai-inline-container')
-      ? 'botrixai-inline-container'
-      : 'dograh-inline-container';
-  }
-
   async function initializeWidget() {
-    // Get token from script URL. `currentScript` is null once this runs from
-    // an async callback, so the fallback looks the tag up by src -- and has to
-    // match either filename: pages embedded before the rename request
-    // `dograh-widget.js`, which forwards here but leaves its own tag on the page.
-    const script =
-      document.currentScript ||
-      document.querySelector('script[src*="botrixai-widget.js"]') ||
-      document.querySelector('script[src*="dograh-widget.js"]');
+    // Get token from script URL
+    const script = document.currentScript || document.querySelector('script[src*="botrixai-widget.js"]');
     if (!script) {
       console.error('BotrixAI Widget: Script not found');
       return;
@@ -145,12 +129,7 @@
       // assignment (init awaits a fetch), so anything already set is merged
       // back on top rather than overwritten.
       contextVariables: {
-        // The customer writes this on their own script tag, so the pre-rename
-        // attribute name has to keep working alongside the documented one.
-        ...parseContextVariables(
-          script.getAttribute('data-botrixai-context') ||
-          script.getAttribute('data-dograh-context')
-        ),
+        ...parseContextVariables(script.getAttribute('data-botrixai-context')),
         ...(state.config.contextVariables || {})
       }
     };
@@ -183,7 +162,7 @@
         workflowId: configData.workflow_id,
         widgetType: widgetType,
         embedMode: configData.settings?.embedMode || 'floating',
-        containerId: configData.settings?.containerId || resolveContainerId(),
+        containerId: configData.settings?.containerId || 'botrixai-inline-container',
         position: configData.position || DEFAULT_CONFIG.position,
         buttonColor: configData.settings?.buttonColor || '#10b981',
         buttonText: configData.settings?.buttonText || (widgetType === 'chat' ? 'Chat with Agent' : 'Talk to Agent'),
@@ -2480,7 +2459,7 @@
     // Initialize inline mode manually (for advanced use cases)
     initInline: (options) => {
       if (options.container) {
-        state.config.containerId = options.container.id || resolveContainerId();
+        state.config.containerId = options.container.id || 'botrixai-inline-container';
       }
       state.config.embedMode = 'inline';
 
@@ -2499,12 +2478,6 @@
       }
     }
   };
-
-  // Every page embedded before the rename calls `window.DograhWidget`. Those
-  // are live pages on customer sites; the old name has to keep working, so it
-  // points at the same object rather than a copy -- callbacks registered
-  // through either name reach the same widget.
-  window.DograhWidget = window.BotrixAIWidget;
 
   // Auto-initialize on DOM ready
   if (document.readyState === 'loading') {
