@@ -32,6 +32,7 @@ reused as is. Where Boson differs from OpenAI, this class adapts:
 """
 
 import json
+from types import SimpleNamespace
 from typing import Any
 
 from loguru import logger
@@ -109,6 +110,10 @@ class DograhBosonRealtimeLLMService(DograhOpenAIRealtimeLLMService):
         # Turn detection is fixed once the session starts; it goes in the
         # first session.update only.
         self._session_started = False
+        # Tool calls by call_id: names seen in Boson's events, and calls run.
+        # Boson can announce one call twice (arguments.done and response.done).
+        self._tool_call_names: dict[str, str] = {}
+        self._handled_tool_calls: set[str] = set()
 
     # ── Connection ────────────────────────────────────────────────────
 
@@ -143,11 +148,50 @@ class DograhBosonRealtimeLLMService(DograhOpenAIRealtimeLLMService):
         # A new connection is a new session: it needs turn detection again.
         self._session_started = False
         self._transcribed_items.clear()
+        self._tool_call_names.clear()
+        self._handled_tool_calls.clear()
 
     async def _handle_evt_response_done(self, evt):
         await super()._handle_evt_response_done(evt)
+        # Boson's documented flow runs tools from response.done's output; a
+        # call never streamed as arguments.done would otherwise be lost.
+        response = getattr(evt, "response", None)
+        for item in getattr(response, "output", None) or []:
+            call_id = getattr(item, "call_id", None)
+            if (
+                getattr(item, "type", None) != "function_call"
+                or not call_id
+                or call_id in self._handled_tool_calls
+                or item.name == "web_search"  # Boson runs its own search
+            ):
+                continue
+            logger.warning(
+                f"{self}: Boson tool call {item.name} only in response.done; running it"
+            )
+            self._tool_call_names.setdefault(call_id, item.name)
+            await self._handle_evt_function_call_arguments_done(
+                SimpleNamespace(
+                    call_id=call_id, arguments=item.arguments, name=item.name
+                )
+            )
         # Done, cancelled or failed: the next reply may start.
         await self._release_held_response()
+
+    async def _handle_evt_function_call_arguments_done(self, evt):
+        call_id = evt.call_id
+        if call_id in self._handled_tool_calls:
+            return
+        self._handled_tool_calls.add(call_id)
+        name = getattr(evt, "name", None) or self._tool_call_names.get(call_id)
+        if call_id not in self._pending_function_calls and name:
+            # Not announced by conversation.item.added: track it from its name.
+            self._pending_function_calls[call_id] = events.ConversationItem(
+                type="function_call", call_id=call_id, name=name
+            )
+        arguments = (evt.arguments or "").strip() or "{}"
+        await super()._handle_evt_function_call_arguments_done(
+            SimpleNamespace(call_id=call_id, arguments=arguments, name=name)
+        )
 
     async def _handle_evt_speech_started(self, evt):
         # The caller cut in. Boson answers when they stop, and that reply sees
@@ -272,6 +316,15 @@ class DograhBosonRealtimeLLMService(DograhOpenAIRealtimeLLMService):
         elif kind == "response.function_call_arguments.done":
             logger.info(
                 f"{self}: Boson called tool {evt.get('name')} ({evt.get('call_id')})"
+            )
+            if evt.get("call_id") and evt.get("name"):
+                self._tool_call_names[evt["call_id"]] = evt["name"]
+        elif kind == "response.done":
+            response = evt.get("response") or {}
+            output = response.get("output") or []
+            logger.info(
+                f"{self}: Boson reply {response.get('status')}, output="
+                f"{[(o.get('type'), o.get('name')) for o in output if isinstance(o, dict)]}"
             )
         # The pinned parser requires event_id, which Boson need not send.
         added_id = "event_id" not in evt

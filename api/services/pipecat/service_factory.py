@@ -1320,7 +1320,13 @@ def _create_boson_realtime_service(realtime_config, api_key, model, voice, langu
 
     return DograhBosonRealtimeLLMService(
         api_key=api_key,
-        temperature=getattr(realtime_config, "temperature", None),
+        # Unset, Boson samples at 0.7; 0.3 (its documented session example)
+        # keeps replies and tool calls steadier.
+        temperature=(
+            0.3
+            if getattr(realtime_config, "temperature", None) is None
+            else realtime_config.temperature
+        ),
         settings=DograhBosonRealtimeLLMService.Settings(
             model=model or "higgs-realtime",
             session_properties=SessionProperties(

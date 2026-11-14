@@ -186,13 +186,13 @@ async def test_session_update_matches_what_boson_accepts():
 
 
 @pytest.mark.asyncio
-async def test_no_temperature_is_sent_unless_set():
+async def test_unset_temperature_sends_0_3_not_bosons_0_7():
     service = _make_service()
     sock = _with_socket(service)
 
     await service._send_session_update()
 
-    assert "temperature" not in sock.sent[0]["session"]
+    assert sock.sent[0]["session"]["temperature"] == 0.3
 
 
 @pytest.mark.asyncio
@@ -1046,3 +1046,119 @@ async def test_tool_choice_is_never_sent_to_boson():
     (msg,) = sock.sent
     assert "tool_choice" not in msg["response"]
     assert msg["response"]["instructions"] == "Greet"
+
+
+# ── Tool calls, however Boson announces them ─────────────────────────
+
+
+def _tool_service():
+    service = _make_service()
+    service.run_function_calls = AsyncMock()
+    service.push_frame = AsyncMock()
+    service.start_llm_usage_metrics = AsyncMock()
+    service.stop_processing_metrics = AsyncMock()
+    _with_socket(service)
+    return service
+
+
+def _done_with_call(call_id="call_1", name="move_to_main_agenda", arguments=""):
+    return json.dumps(
+        {
+            "type": "response.done",
+            "response": {
+                "id": "r",
+                "object": "realtime.response",
+                "status": "completed",
+                "status_details": None,
+                "output": [
+                    {
+                        "id": "item_f",
+                        "object": "realtime.item",
+                        "type": "function_call",
+                        "status": "completed",
+                        "call_id": call_id,
+                        "name": name,
+                        "arguments": arguments,
+                        "executor": "client",
+                    }
+                ],
+            },
+        }
+    )
+
+
+async def _feed(service, raw):
+    forwarded = await service._filter_server_message(raw)
+    if forwarded is None:
+        return
+    evt = events.parse_server_event(forwarded)
+    handler = {
+        "conversation.item.added": service._handle_evt_conversation_item_added,
+        "response.function_call_arguments.done": service._handle_evt_function_call_arguments_done,
+        "response.done": service._handle_evt_response_done,
+    }.get(evt.type)
+    if handler:
+        await handler(evt)
+
+
+def _args_done(call_id="call_1", name="move_to_main_agenda", arguments=""):
+    return json.dumps(
+        {
+            "type": "response.function_call_arguments.done",
+            "response_id": "r",
+            "item_id": "item_f",
+            "output_index": 0,
+            "call_id": call_id,
+            "name": name,
+            "arguments": arguments,
+        }
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_call_announced_only_in_response_done_still_runs():
+    service = _tool_service()
+
+    await _feed(service, _done_with_call())
+
+    (call,) = service.run_function_calls.await_args.args[0]
+    assert (call.function_name, call.tool_call_id, call.arguments) == (
+        "move_to_main_agenda",
+        "call_1",
+        {},
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_call_without_conversation_item_added_still_runs():
+    service = _tool_service()
+
+    await _feed(service, _args_done(arguments='{"pincode": "110001"}'))
+
+    (call,) = service.run_function_calls.await_args.args[0]
+    assert call.function_name == "move_to_main_agenda"
+    assert call.arguments == {"pincode": "110001"}
+
+
+@pytest.mark.asyncio
+async def test_a_call_announced_twice_runs_once():
+    service = _tool_service()
+
+    await _feed(service, _args_done())
+    await _feed(service, _done_with_call())
+
+    assert service.run_function_calls.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_boson_web_search_is_left_to_boson():
+    service = _tool_service()
+
+    await _feed(service, _done_with_call(call_id="ws_1", name="web_search"))
+
+    service.run_function_calls.assert_not_awaited()
+
+
+def test_temperature_defaults_to_0_3_and_can_be_set():
+    assert _make_service()._boson_temperature == 0.3
+    assert _make_service(temperature=0.7)._boson_temperature == 0.7

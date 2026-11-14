@@ -1519,7 +1519,7 @@ class BosonRealtimeLLMConfiguration(BaseLLMConfiguration):
         default=None,
         ge=0.0,
         le=2.0,
-        description="Reply randomness. Empty uses Boson's default (0.3).",
+        description="Reply randomness. Empty sends 0.3 (Boson's own default is 0.7).",
     )
     turn_detection: Literal["server_vad", "semantic_vad"] = Field(
         default="server_vad",
