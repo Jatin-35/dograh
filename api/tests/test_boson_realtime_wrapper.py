@@ -1026,3 +1026,23 @@ async def test_a_held_reply_is_dropped_when_the_caller_cuts_in():
     # Boson answers when the caller stops; no second reply from us.
     assert [m["type"] for m in sock.sent] == ["response.create"]
     service.broadcast_interruption.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_tool_choice_is_never_sent_to_boson():
+    # A greeting asks for tool_choice "none"; Boson must not see it, so tools
+    # stay usable for the rest of the session.
+    service = _make_service()
+    sock = _with_socket(service)
+
+    await service.send_client_event(
+        events.ResponseCreateEvent(
+            response=events.ResponseProperties(
+                output_modalities=["audio"], instructions="Greet", tool_choice="none"
+            )
+        )
+    )
+
+    (msg,) = sock.sent
+    assert "tool_choice" not in msg["response"]
+    assert msg["response"]["instructions"] == "Greet"

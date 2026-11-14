@@ -192,8 +192,17 @@ class DograhBosonRealtimeLLMService(DograhOpenAIRealtimeLLMService):
             self._awaiting_response = True
         data = event.model_dump(exclude_none=True)
         if isinstance(event, events.SessionUpdateEvent):
-            self._adapt_session(data.get("session") or {})
+            session = data.get("session") or {}
+            self._adapt_session(session)
             self._session_started = True
+            logger.info(
+                f"{self}: Boson session.update tools="
+                f"{[t.get('name') for t in session.get('tools') or []]}"
+            )
+        elif isinstance(event, events.ResponseCreateEvent):
+            # Boson documents tool_choice on response.create as ignored; drop
+            # it so a greeting's "none" can't turn tools off for the session.
+            (data.get("response") or {}).pop("tool_choice", None)
         await self._ws_send(data)
 
     def _adapt_session(self, session: dict[str, Any]) -> None:
@@ -260,6 +269,10 @@ class DograhBosonRealtimeLLMService(DograhOpenAIRealtimeLLMService):
             # Ours, or one Boson started itself when the caller stopped talking.
             self._response_active = True
             self._awaiting_response = False
+        elif kind == "response.function_call_arguments.done":
+            logger.info(
+                f"{self}: Boson called tool {evt.get('name')} ({evt.get('call_id')})"
+            )
         # The pinned parser requires event_id, which Boson need not send.
         added_id = "event_id" not in evt
         evt.setdefault("event_id", "boson")
