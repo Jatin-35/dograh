@@ -1288,6 +1288,64 @@ def _ms_in_range(value, low: int, high: int) -> int | None:
     return ms if low <= ms <= high else None
 
 
+def _create_boson_realtime_service(realtime_config, api_key, model, voice, language):
+    from api.services.pipecat.realtime.boson_realtime import (
+        BOSON_TRANSCRIPTION_MODEL,
+        DograhBosonRealtimeLLMService,
+    )
+    from pipecat.services.openai.realtime.events import (
+        AudioConfiguration,
+        AudioInput,
+        AudioOutput,
+        InputAudioNoiseReduction,
+        InputAudioTranscription,
+        SemanticTurnDetection,
+        SessionProperties,
+        TurnDetection,
+    )
+
+    if getattr(realtime_config, "turn_detection", None) == "semantic_vad":
+        turn_detection = SemanticTurnDetection()
+    else:
+        # Boson's own defaults (threshold 0.85, not OpenAI's 0.5) where unset.
+        threshold = getattr(realtime_config, "vad_threshold", None)
+        silence_ms = getattr(realtime_config, "silence_duration_ms", None)
+        padding_ms = getattr(realtime_config, "prefix_padding_ms", None)
+        turn_detection = TurnDetection(
+            threshold=0.85 if threshold is None else threshold,
+            silence_duration_ms=500 if silence_ms is None else silence_ms,
+            prefix_padding_ms=300 if padding_ms is None else padding_ms,
+        )
+    noise_reduction = getattr(realtime_config, "noise_reduction", "off")
+
+    return DograhBosonRealtimeLLMService(
+        api_key=api_key,
+        temperature=getattr(realtime_config, "temperature", None),
+        settings=DograhBosonRealtimeLLMService.Settings(
+            model=model or "higgs-realtime",
+            session_properties=SessionProperties(
+                output_modalities=["audio"],
+                audio=AudioConfiguration(
+                    input=AudioInput(
+                        # Caller transcripts only come when the model is named.
+                        transcription=InputAudioTranscription(
+                            model=BOSON_TRANSCRIPTION_MODEL,
+                            language=(language or "").strip() or None,
+                        ),
+                        turn_detection=turn_detection,
+                        noise_reduction=(
+                            InputAudioNoiseReduction(type=noise_reduction)
+                            if noise_reduction in ("near_field", "far_field")
+                            else None
+                        ),
+                    ),
+                    output=AudioOutput(voice=(voice or "").strip() or "default"),
+                ),
+            ),
+        ),
+    )
+
+
 def create_realtime_llm_service(user_config, audio_config: "AudioConfig"):
     """Create a realtime (speech-to-speech) LLM service that handles STT+LLM+TTS.
 
@@ -1371,6 +1429,8 @@ def create_realtime_llm_service(user_config, audio_config: "AudioConfig"):
                 ),
             ),
         )
+    elif provider == ServiceProviders.BOSON_REALTIME.value:
+        return _create_boson_realtime_service(realtime_config, api_key, model, voice, language)
     elif provider == ServiceProviders.INWORLD_REALTIME.value:
         from api.services.pipecat.realtime.inworld_realtime import (
             DograhInworldRealtimeLLMService,

@@ -116,6 +116,7 @@ class ServiceProviders(str, Enum):
     GOOGLE_VERTEX_REALTIME = "google_vertex_realtime"
     AZURE_REALTIME = "azure_realtime"
     INWORLD_REALTIME = "inworld_realtime"
+    BOSON_REALTIME = "boson_realtime"
     SMALLEST = "smallest"
     XAI = "xai"
     MURF = "murf"
@@ -159,6 +160,7 @@ class BaseServiceConfiguration(BaseModel):
         ServiceProviders.GOOGLE_VERTEX_REALTIME,
         ServiceProviders.AZURE_REALTIME,
         ServiceProviders.INWORLD_REALTIME,
+        ServiceProviders.BOSON_REALTIME,
         ServiceProviders.SARVAM,
         ServiceProviders.SMALLEST,
         ServiceProviders.XAI,
@@ -318,6 +320,16 @@ GEMINI_LIVE_38_PROVIDER_MODEL_CONFIG = provider_model_config(
 )
 GOOGLE_VERTEX_REALTIME_PROVIDER_MODEL_CONFIG = provider_model_config(
     "Google Vertex Realtime"
+)
+BOSON_REALTIME_PROVIDER_MODEL_CONFIG = provider_model_config(
+    "Boson Higgs Realtime",
+    description=(
+        "Boson AI's Higgs Realtime: one speech-to-speech model that hears the "
+        "caller and speaks the reply, with tool calling. Phone audio and Hindi "
+        "are supported; preset voices are American English, so use a cloned "
+        "voice for an Indian accent."
+    ),
+    provider_docs_url="https://docs.boson.ai/models/higgs-realtime/overview",
 )
 INWORLD_REALTIME_PROVIDER_MODEL_CONFIG = provider_model_config(
     "Inworld Realtime",
@@ -1470,6 +1482,100 @@ class AzureRealtimeLLMConfiguration(BaseLLMConfiguration):
     )
 
 
+BOSON_REALTIME_MODELS = ["higgs-realtime"]
+# Boson's preset voices are all American English; an Indian voice is a cloned
+# one, entered as its voice_<id>.
+BOSON_REALTIME_VOICES = ["default", "chloe", "eleanor", "jake", "marcus", "nora", "oliver"]
+BOSON_REALTIME_LANGUAGES = ["hi", "en", "bn", "ur", "ta", "te", "mr", "gu"]
+
+
+@register_service(ServiceType.REALTIME)
+class BosonRealtimeLLMConfiguration(BaseLLMConfiguration):
+    model_config = BOSON_REALTIME_PROVIDER_MODEL_CONFIG
+    provider: Literal[ServiceProviders.BOSON_REALTIME] = ServiceProviders.BOSON_REALTIME
+    model: str = Field(
+        default="higgs-realtime",
+        description="Boson speech-to-speech model.",
+        json_schema_extra={"examples": BOSON_REALTIME_MODELS, "allow_custom_input": True},
+    )
+    voice: str = Field(
+        default="default",
+        description=(
+            "Preset voices are American English. For an Indian voice, clone one "
+            "in Boson and enter its ID (voice_...)."
+        ),
+        json_schema_extra={"examples": BOSON_REALTIME_VOICES, "allow_custom_input": True},
+    )
+    language: str | None = Field(
+        default="hi",
+        description=(
+            "Language hint for the caller's transcript (ISO 639-1, e.g. hi, en). "
+            "The model understands mixed Hindi-English either way; the reply "
+            "language follows the agent's prompt."
+        ),
+        json_schema_extra={"examples": BOSON_REALTIME_LANGUAGES, "allow_custom_input": True},
+    )
+    temperature: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=2.0,
+        description="Reply randomness. Empty uses Boson's default (0.3).",
+    )
+    turn_detection: Literal["server_vad", "semantic_vad"] = Field(
+        default="server_vad",
+        description=(
+            "server_vad ends the caller's turn after a set silence. semantic_vad "
+            "also judges whether the caller has finished their thought."
+        ),
+        json_schema_extra={"label": "Turn detection"},
+    )
+    vad_threshold: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "How loud speech must be to count as the caller talking (and to "
+            "interrupt the bot). Higher ignores more background noise. Empty "
+            "uses Boson's default (0.85)."
+        ),
+        json_schema_extra={
+            "advanced": True,
+            "label": "Speech threshold",
+            "visible_when": {"turn_detection": "server_vad"},
+        },
+    )
+    silence_duration_ms: int | None = Field(
+        default=None,
+        ge=100,
+        le=5000,
+        description="Silence (ms) that ends the caller's turn. Empty uses Boson's default (500).",
+        json_schema_extra={
+            "advanced": True,
+            "label": "End-of-turn silence (ms)",
+            "visible_when": {"turn_detection": "server_vad"},
+        },
+    )
+    prefix_padding_ms: int | None = Field(
+        default=None,
+        ge=0,
+        le=2000,
+        description="Audio (ms) kept from before speech starts. Empty uses Boson's default (300).",
+        json_schema_extra={
+            "advanced": True,
+            "label": "Speech start padding (ms)",
+            "visible_when": {"turn_detection": "server_vad"},
+        },
+    )
+    noise_reduction: Literal["off", "near_field", "far_field"] = Field(
+        default="off",
+        description=(
+            "Boson-side noise reduction. near_field suits a phone held to the "
+            "ear; far_field a speakerphone or laptop microphone."
+        ),
+        json_schema_extra={"advanced": True, "label": "Noise reduction"},
+    )
+
+
 REALTIME_PROVIDERS = {
     ServiceProviders.OPENAI_REALTIME.value,
     ServiceProviders.GROK_REALTIME.value,
@@ -1479,6 +1585,7 @@ REALTIME_PROVIDERS = {
     ServiceProviders.GOOGLE_VERTEX_REALTIME.value,
     ServiceProviders.AZURE_REALTIME.value,
     ServiceProviders.INWORLD_REALTIME.value,
+    ServiceProviders.BOSON_REALTIME.value,
 }
 
 
@@ -1513,6 +1620,7 @@ RealtimeConfig = Annotated[
         GoogleVertexRealtimeLLMConfiguration,
         AzureRealtimeLLMConfiguration,
         InworldRealtimeLLMConfiguration,
+        BosonRealtimeLLMConfiguration,
     ],
     Field(discriminator="provider"),
 ]

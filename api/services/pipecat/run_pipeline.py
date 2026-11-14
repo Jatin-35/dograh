@@ -283,6 +283,10 @@ def _create_realtime_user_turn_config(provider: str, realtime_config=None):
         # Grok Voice Agent emits server-side speech-start/stop and
         # interruption signals, so local VAD should stay out of the way.
         return external_provider_turn_config()
+    if provider == ServiceProviders.BOSON_REALTIME.value:
+        # Higgs Realtime's server VAD emits speech-start/stop and cancels the
+        # reply on barge-in, as OpenAI Realtime does.
+        return external_provider_turn_config()
     if provider == ServiceProviders.INWORLD_REALTIME.value:
         if getattr(realtime_config, "turn_detection", None) == "local":
             # Inworld's own turn detection is off (manual mode): Dograh decides

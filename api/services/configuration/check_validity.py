@@ -91,6 +91,7 @@ class UserConfigurationValidator:
             ServiceProviders.OPENAI_REALTIME.value: self._check_openai_api_key,
             ServiceProviders.GROK_REALTIME.value: self._check_grok_realtime_api_key,
             ServiceProviders.INWORLD_REALTIME.value: self._check_inworld_realtime_api_key,
+            ServiceProviders.BOSON_REALTIME.value: self._check_boson_realtime_api_key,
             ServiceProviders.ULTRAVOX_REALTIME.value: self._check_ultravox_realtime_api_key,
             ServiceProviders.GOOGLE_REALTIME.value: self._check_google_api_key,
             ServiceProviders.GEMINI_LIVE_38.value: self._check_google_api_key,
@@ -537,6 +538,52 @@ class UserConfigurationValidator:
         except (OSError, TimeoutError) as exc:
             raise ValueError(
                 "Could not connect to Inworld Realtime. Please check your network "
+                "connection and try again."
+            ) from exc
+
+    def _check_boson_realtime_api_key(self, model: str, api_key: str) -> bool:
+        # Opening a socket costs nothing: Boson bills only once a session is
+        # configured. A rejected key fails the handshake or closes with 3000;
+        # an account with no credit closes with 4429.
+        from websockets.exceptions import ConnectionClosed, InvalidStatus
+        from websockets.sync.client import connect
+
+        url = "wss://api.boson.ai/v1/realtime?model=higgs-realtime"
+        try:
+            with connect(
+                url,
+                additional_headers={"Authorization": f"Bearer {api_key}"},
+                open_timeout=10,
+            ) as ws:
+                try:
+                    ws.recv(timeout=2)
+                except TimeoutError:
+                    return True
+                return True
+        except InvalidStatus as exc:
+            if exc.response.status_code in (401, 403):
+                raise ValueError(
+                    "Invalid Boson API key. The key was rejected by Boson Higgs "
+                    "Realtime. Please verify that your API key is correct and active."
+                ) from exc
+            return True
+        except ConnectionClosed as exc:
+            code = exc.rcvd.code if exc.rcvd else None
+            if code == 3000:
+                raise ValueError(
+                    "Invalid Boson API key. The key was rejected by Boson Higgs "
+                    "Realtime. Please verify that your API key is correct and active."
+                ) from exc
+            if code == 4429:
+                raise ValueError(
+                    "Boson accepted the key but refused a session: the account has "
+                    "no credit or has hit its spending cap. New accounts must claim "
+                    "their free credit in the Boson console first."
+                ) from exc
+            return True
+        except (OSError, TimeoutError) as exc:
+            raise ValueError(
+                "Could not connect to Boson Higgs Realtime. Please check your network "
                 "connection and try again."
             ) from exc
 
