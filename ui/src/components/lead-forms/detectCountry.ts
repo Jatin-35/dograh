@@ -77,6 +77,17 @@ export function detectTimezone(): string | undefined {
   }
 }
 
+// ISO 3166-1 alpha-2 code (e.g. "IN") from the timezone, else the locale region.
+export function detectCountryCode(): string | undefined {
+  let iso: string | undefined;
+  try {
+    iso = TZ_TO_ISO[Intl.DateTimeFormat().resolvedOptions().timeZone];
+  } catch {
+    // Intl unavailable — fall through to the locale region.
+  }
+  return iso || localeRegion();
+}
+
 export function detectCountry(): string | undefined {
   let iso: string | undefined;
   try {

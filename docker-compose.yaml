@@ -304,6 +304,9 @@ services:
       SMTP_PASSWORD: "${SMTP_PASSWORD:-}"
       SMTP_FROM: "${SMTP_FROM:-}"
       SMTP_SECURITY: "${SMTP_SECURITY:-starttls}"
+      # Where the in-app "Hire an expert" / "Enterprise" forms are emailed
+      # (comma-separated). Uses the SMTP settings above.
+      LEADS_EMAIL: "${LEADS_EMAIL:-contact@botrixai.com}"
 
       # Code Editor. The API does not execute anything itself — it calls the
       # handlers container, which owns the sandbox. This URL must be the

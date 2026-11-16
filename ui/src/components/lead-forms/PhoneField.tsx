@@ -4,13 +4,25 @@
 // Emits a clean E.164 string (the backend geo/qualification rule keys off the
 // dial code). The library is styled with its own CSS variables, which we map to
 // our dark surface tokens so the field matches the rest of the form. Default
-// country is the US; the user can switch via the flag selector.
+// country is the visitor's own (from the browser timezone), falling back to India;
+// the user can switch via the flag selector.
 
 import "react-international-phone/style.css";
 
-import { PhoneInput } from "react-international-phone";
+import { useState } from "react";
+import { defaultCountries, parseCountry, PhoneInput } from "react-international-phone";
 
 import { cn } from "@/lib/utils";
+
+import { detectCountryCode } from "./detectCountry";
+
+const FALLBACK_COUNTRY = "in";
+const KNOWN_COUNTRIES = new Set(defaultCountries.map((c) => parseCountry(c).iso2));
+
+function initialCountry(): string {
+  const iso = detectCountryCode()?.toLowerCase();
+  return iso && KNOWN_COUNTRIES.has(iso) ? iso : FALLBACK_COUNTRY;
+}
 
 interface PhoneFieldProps {
   id?: string;
@@ -44,10 +56,12 @@ const phoneThemeVars: React.CSSProperties = {
 };
 
 export function PhoneField({ id, value, onChange, required, disabled }: PhoneFieldProps) {
+  // Read once per mount; the library only uses it before the user picks a country.
+  const [defaultCountry] = useState(initialCountry);
   return (
     <div style={phoneThemeVars} className="phone-field-dark">
       <PhoneInput
-        defaultCountry="us"
+        defaultCountry={defaultCountry}
         value={value}
         onChange={(phone) => onChange(phone)}
         disabled={disabled}

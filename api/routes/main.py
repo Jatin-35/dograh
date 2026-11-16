@@ -13,6 +13,7 @@ from api.routes.campaign import router as campaign_router
 from api.routes.credentials import router as credentials_router
 from api.routes.folder import router as folder_router
 from api.routes.knowledge_base import router as knowledge_base_router
+from api.routes.leads import router as leads_router
 from api.routes.node_types import router as node_types_router
 from api.routes.organization import router as organization_router
 from api.routes.organization_usage import router as organization_usage_router
@@ -52,6 +53,7 @@ router.include_router(workflow_text_chat_router)
 router.include_router(code_editor_router)
 router.include_router(workflow_gen_chat_router)
 router.include_router(user_router)
+router.include_router(leads_router)
 router.include_router(campaign_router)
 router.include_router(credentials_router)
 router.include_router(tool_router)

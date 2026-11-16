@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { CONTACT_EMAIL } from "@/constants/brand";
 import { useAppConfig } from "@/context/AppConfigContext";
 import { useAuth } from "@/lib/auth";
 
@@ -103,10 +104,14 @@ export function HireExpertModal({ open, onOpenChange, source, onOpenEnterprise }
       if (result?.show_calendar && result.cal_link) {
         setSubmitting(false);
         setCalLink(result.cal_link);
-      } else {
-        toast.success("Check your inbox - we just emailed you the next steps (give it a minute).");
+      } else if (result?.ok) {
+        toast.success("Thanks! We've received your request. Our team will get in touch with you shortly.");
         reset();
         onOpenChange(false);
+      } else {
+        // Keep the form filled so nothing typed is lost; the user can retry or email us.
+        toast.error(`We couldn't send your request. Please try again, or email us at ${CONTACT_EMAIL}.`);
+        setSubmitting(false);
       }
     } catch {
       toast.error("Something went wrong. Please try again.");
