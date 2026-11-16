@@ -59,6 +59,8 @@ TRACE_LEVEL_ATTRIBUTES = frozenset(
     }
 )
 TRACE_METADATA_PREFIX = "langfuse.trace.metadata."
+# Open traces the attribute propagator tracks at once (far above concurrent calls).
+MAX_TRACKED_TRACES = 5000
 
 PROJECT_LOOKUP_TIMEOUT_SECONDS = 5.0
 
@@ -128,31 +130,64 @@ class _OrgAttributeSpanProcessor(SpanProcessor):
 
 
 class _TraceAttributePropagator(SpanProcessor):
-    """Copies trace-level Langfuse attributes from a parent span to its children.
+    """Copies trace-level Langfuse attributes onto every span of a trace.
 
     Langfuse v4 has no separate trace record: it filters and aggregates
     observations directly, so an attribute only on the root span is invisible
-    on its children. Each child inherits its in-process parent's trace-level
-    attributes at start (the parent already holds its own parent's, so they
-    reach every level). Remote parents carry no attributes and are skipped.
+    on its children. Pipecat parents turns and service spans through a
+    ``NonRecordingSpan`` that carries only ids, so the parent object can't be
+    read; instead the spans still open in each trace are tracked, and a new
+    span copies the trace-level attributes they hold. The conversation span
+    stays open for the whole call, so whatever it carries reaches every span.
     """
 
-    def on_start(self, span, parent_context=None):
-        from opentelemetry import trace as otel_trace
+    def __init__(self):
+        import threading
 
-        parent = otel_trace.get_current_span(parent_context)
-        attributes = getattr(parent, "attributes", None)
-        if not attributes:
-            return
-        for key, value in attributes.items():
-            if key in TRACE_LEVEL_ATTRIBUTES or key.startswith(TRACE_METADATA_PREFIX):
-                span.set_attribute(key, value)
+        self._lock = threading.Lock()
+        # trace id -> spans of that trace that have started and not yet ended.
+        self._open = {}
+
+    @staticmethod
+    def _is_trace_level(key):
+        return key in TRACE_LEVEL_ATTRIBUTES or key.startswith(TRACE_METADATA_PREFIX)
+
+    def on_start(self, span, parent_context=None):
+        trace_id = span.get_span_context().trace_id
+        with self._lock:
+            peers = list(self._open.get(trace_id, ()))
+            if trace_id not in self._open and len(self._open) >= MAX_TRACKED_TRACES:
+                # A span that never ends must not grow this forever: forget
+                # the oldest trace (dicts keep insertion order).
+                del self._open[next(iter(self._open))]
+            self._open.setdefault(trace_id, []).append(span)
+        inherited = {}
+        for peer in peers:
+            for key, value in (peer.attributes or {}).items():
+                if self._is_trace_level(key):
+                    inherited.setdefault(key, value)
+        for key, value in inherited.items():
+            span.set_attribute(key, value)
 
     def on_end(self, span):
-        pass
+        trace_id = span.get_span_context().trace_id
+        with self._lock:
+            spans = self._open.get(trace_id)
+            if spans is None:
+                return
+            for i, open_span in enumerate(spans):
+                if (
+                    open_span.get_span_context().span_id
+                    == span.get_span_context().span_id
+                ):
+                    del spans[i]
+                    break
+            if not spans:
+                del self._open[trace_id]
 
     def shutdown(self):
-        pass
+        with self._lock:
+            self._open.clear()
 
     def force_flush(self, timeout_millis=30000):
         return True

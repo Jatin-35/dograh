@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.trace import NonRecordingSpan, set_span_in_context
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
     InMemorySpanExporter,
@@ -180,6 +181,55 @@ def test_trace_level_attributes_reach_every_span():
         assert attrs["langfuse.user.id"] == "u1"
         assert attrs["langfuse.trace.metadata.agent"] == "vectus"
         assert "conversation.id" not in attrs
+
+
+def _tracer_with_propagator():
+    provider = TracerProvider()
+    memory = InMemorySpanExporter()
+    propagator = tracing_config._TraceAttributePropagator()
+    provider.add_span_processor(propagator)
+    provider.add_span_processor(SimpleSpanProcessor(memory))
+    return provider.get_tracer("test"), memory, propagator
+
+
+def test_attributes_reach_spans_parented_by_id_only():
+    """Pipecat parents turns via NonRecordingSpan(span_context): ids, no attributes."""
+    tracer, memory, propagator = _tracer_with_propagator()
+    root = tracer.start_span("conversation")
+    root.set_attribute("langfuse.trace.name", "call-9")
+    by_id = set_span_in_context(NonRecordingSpan(root.get_span_context()))
+    turn = tracer.start_span("turn-1", context=by_id)
+    llm = tracer.start_span(
+        "llm", context=set_span_in_context(NonRecordingSpan(turn.get_span_context()))
+    )
+    for span in (llm, turn, root):
+        span.end()
+
+    spans = {s.name: s for s in memory.get_finished_spans()}
+    assert spans["turn-1"].attributes["langfuse.trace.name"] == "call-9"
+    assert spans["llm"].attributes["langfuse.trace.name"] == "call-9"
+    assert propagator._open == {}  # nothing kept once the trace closes
+
+
+def test_attributes_do_not_cross_traces():
+    tracer, memory, _ = _tracer_with_propagator()
+    a = tracer.start_span("conversation-a")
+    a.set_attribute("langfuse.trace.name", "A")
+    b = tracer.start_span("conversation-b")  # new root: its own trace
+    child_b = tracer.start_span("turn-b", context=set_span_in_context(b))
+    for span in (child_b, b, a):
+        span.end()
+    spans = {s.name: s for s in memory.get_finished_spans()}
+    assert "langfuse.trace.name" not in spans["conversation-b"].attributes
+    assert "langfuse.trace.name" not in spans["turn-b"].attributes
+
+
+def test_tracker_is_bounded(monkeypatch):
+    monkeypatch.setattr(tracing_config, "MAX_TRACKED_TRACES", 3)
+    tracer, _, propagator = _tracer_with_propagator()
+    leaked = [tracer.start_span(f"never-ended-{i}") for i in range(10)]
+    assert len(propagator._open) == 3
+    assert leaked
 
 
 # --- links ------------------------------------------------------------------
