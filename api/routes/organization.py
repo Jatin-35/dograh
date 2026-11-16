@@ -69,6 +69,10 @@ from api.services.configuration.registry import (
 )
 from api.services.mps_billing import ensure_hosted_mps_billing_account_v2
 from api.services.mps_service_key_client import mps_service_key_client
+from api.services.pipecat.tracing_config import (
+    fetch_langfuse_project_id,
+    normalize_langfuse_host,
+)
 from api.services.organization_context import (
     OrganizationContextResponse,
     get_organization_context,
@@ -1090,12 +1094,20 @@ class LangfuseCredentialsRequest(BaseModel):
     host: str
     public_key: str
     secret_key: str
+    # Langfuse v4 trace links are project-scoped. Blank: looked up from
+    # Langfuse with the keys above.
+    project_id: str = ""
+    # Off unless the org asks for it: a public trace is readable by anyone
+    # holding its URL, with no Langfuse login.
+    traces_public: bool = False
 
 
 class LangfuseCredentialsResponse(BaseModel):
     host: str = ""
     public_key: str = ""
     secret_key: str = ""
+    project_id: str = ""
+    traces_public: bool = False
     configured: bool = False
 
 
@@ -1117,6 +1129,8 @@ async def get_langfuse_credentials(user: UserModel = Depends(get_user)):
         host=config.value.get("host", ""),
         public_key=mask_key(config.value.get("public_key", "")),
         secret_key=mask_key(config.value.get("secret_key", "")),
+        project_id=config.value.get("project_id", "") or "",
+        traces_public=bool(config.value.get("traces_public", False)),
         configured=True,
     )
 
@@ -1136,9 +1150,11 @@ async def save_langfuse_credentials(
     )
 
     config_value = {
-        "host": request.host,
+        "host": normalize_langfuse_host(request.host),
         "public_key": request.public_key,
         "secret_key": request.secret_key,
+        "project_id": request.project_id.strip(),
+        "traces_public": request.traces_public,
     }
 
     # Preserve masked fields
@@ -1147,6 +1163,16 @@ async def save_langfuse_credentials(
             config_value["public_key"] = existing_config.value["public_key"]
         if is_mask_of(request.secret_key, existing_config.value.get("secret_key", "")):
             config_value["secret_key"] = existing_config.value["secret_key"]
+
+    if not config_value["project_id"]:
+        config_value["project_id"] = (
+            await fetch_langfuse_project_id(
+                config_value["host"],
+                config_value["public_key"],
+                config_value["secret_key"],
+            )
+            or ""
+        )
 
     await db_client.upsert_configuration(
         user.selected_organization_id,
@@ -1161,7 +1187,18 @@ async def save_langfuse_credentials(
         org_id=user.selected_organization_id,
     )
 
-    return {"message": "Langfuse credentials saved successfully"}
+    if not config_value["project_id"]:
+        return {
+            "message": (
+                "Langfuse credentials saved, but the project ID could not be "
+                "detected. Trace links may not open until you enter it."
+            ),
+            "project_id": "",
+        }
+    return {
+        "message": "Langfuse credentials saved successfully",
+        "project_id": config_value["project_id"],
+    }
 
 
 @router.delete("/langfuse-credentials")

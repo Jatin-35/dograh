@@ -12,6 +12,7 @@ import type { LangfuseCredentialsResponse } from "@/client/types.gen";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/lib/auth";
 
 export function TelemetrySection() {
@@ -20,6 +21,8 @@ export function TelemetrySection() {
     host: "",
     public_key: "",
     secret_key: "",
+    project_id: "",
+    traces_public: false,
     configured: false,
   });
   const [loading, setLoading] = useState(true);
@@ -51,17 +54,27 @@ export function TelemetrySection() {
     e.preventDefault();
     setSaving(true);
     try {
-      const { error } = await saveLangfuseCredentialsApiV1OrganizationsLangfuseCredentialsPost({
+      const { data, error } = await saveLangfuseCredentialsApiV1OrganizationsLangfuseCredentialsPost({
         body: {
           host: credentials.host ?? "",
           public_key: credentials.public_key ?? "",
           secret_key: credentials.secret_key ?? "",
+          project_id: credentials.project_id ?? "",
+          traces_public: credentials.traces_public ?? false,
         },
       });
       if (error) {
         throw new Error("Failed to save");
       }
-      toast.success("Telemetry credentials saved");
+      // The API looks the project ID up when left blank; say so when it couldn't.
+      const saved = data as { project_id?: string } | undefined;
+      if (saved && saved.project_id === "") {
+        toast.warning(
+          "Saved, but the Langfuse project ID could not be detected. Enter it so trace links open.",
+        );
+      } else {
+        toast.success("Telemetry credentials saved");
+      }
       await fetchCredentials();
     } catch {
       toast.error("Failed to save telemetry credentials");
@@ -74,7 +87,14 @@ export function TelemetrySection() {
     setSaving(true);
     try {
       await deleteLangfuseCredentialsApiV1OrganizationsLangfuseCredentialsDelete();
-      setCredentials({ host: "", public_key: "", secret_key: "", configured: false });
+      setCredentials({
+        host: "",
+        public_key: "",
+        secret_key: "",
+        project_id: "",
+        traces_public: false,
+        configured: false,
+      });
       toast.success("Telemetry credentials removed");
     } catch {
       toast.error("Failed to remove telemetry credentials");
@@ -121,6 +141,33 @@ export function TelemetrySection() {
           value={credentials.secret_key}
           onChange={(e) => setCredentials({ ...credentials, secret_key: e.target.value })}
           required
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="langfuse-project-id">Project ID</Label>
+        <Input
+          id="langfuse-project-id"
+          placeholder="Detected automatically from the keys"
+          value={credentials.project_id ?? ""}
+          onChange={(e) => setCredentials({ ...credentials, project_id: e.target.value })}
+        />
+        <p className="text-xs text-muted-foreground">
+          Used for trace links. Leave blank to detect it, or copy it from your Langfuse URL:
+          /project/&lt;project-id&gt;/...
+        </p>
+      </div>
+      <div className="flex items-start justify-between gap-4 rounded-md border p-3">
+        <div className="space-y-1">
+          <Label htmlFor="langfuse-traces-public">Public trace links</Label>
+          <p className="text-xs text-muted-foreground">
+            Off: only people signed in to your Langfuse project can open a trace. On: anyone
+            with a trace link can read the whole call, including the transcript.
+          </p>
+        </div>
+        <Switch
+          id="langfuse-traces-public"
+          checked={credentials.traces_public ?? false}
+          onCheckedChange={(checked) => setCredentials({ ...credentials, traces_public: checked })}
         />
       </div>
       <div className="flex gap-2">

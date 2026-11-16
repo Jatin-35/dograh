@@ -253,6 +253,14 @@ services:
       # LANGFUSE_SECRET_KEY: ""
       # LANGFUSE_PUBLIC_KEY: ""
       # LANGFUSE_HOST: ""
+      # Optional: looked up from Langfuse with the keys when unset. Needed for
+      # Langfuse v4 trace links (/project/<id>/traces/<trace>).
+      # LANGFUSE_PROJECT_ID: ""
+      # Traces are private by default. "true" makes traces in the project above
+      # readable by anyone holding the trace URL, with no Langfuse login.
+      # Organizations that connected their own Langfuse project in Settings
+      # carry their own visibility setting instead.
+      LANGFUSE_TRACES_PUBLIC: "${LANGFUSE_TRACES_PUBLIC:-false}"
 
       # TURN server configuration (for WebRTC NAT traversal in remote server)
       # Uses time-limited credentials via TURN REST API (HMAC-SHA1)

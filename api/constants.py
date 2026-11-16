@@ -17,6 +17,9 @@ VOICEMAIL_RECORDING_DURATION = 5.0
 LANGFUSE_HOST = os.getenv("LANGFUSE_HOST")
 LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY")
 LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY")
+# Langfuse v4 trace links are project-scoped (/project/<id>/traces/<trace>).
+# Optional: when unset it is looked up from Langfuse with the keys above.
+LANGFUSE_PROJECT_ID = os.getenv("LANGFUSE_PROJECT_ID") or None
 
 # URLs for deployment
 #
