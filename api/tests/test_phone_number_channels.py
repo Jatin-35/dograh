@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from pydantic import ValidationError
 
-from api.services.campaign.rate_limiter import RateLimiter
+from api.services.call_concurrency.rate_limiter import RateLimiter
 
 requires_redis = pytest.mark.skipif(
     "REDIS_URL" not in os.environ,

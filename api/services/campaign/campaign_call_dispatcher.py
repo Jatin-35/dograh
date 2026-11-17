@@ -13,13 +13,13 @@ from api.services.call_concurrency import (
     CallConcurrencySlot,
     call_concurrency,
 )
+from api.services.call_concurrency.rate_limiter import rate_limiter
 from api.services.campaign.circuit_breaker import circuit_breaker, telephony_outage
 from api.services.campaign.errors import (
     CampaignDispatchPaused,
     ConcurrentSlotAcquisitionError,
     PhoneNumberPoolExhaustedError,
 )
-from api.services.campaign.rate_limiter import rate_limiter
 from api.services.quota_service import authorize_workflow_run_start
 from api.services.webhook_sync import calling as webhook_sync_calling
 from api.services.workflow.initial_context import merge_external_initial_context

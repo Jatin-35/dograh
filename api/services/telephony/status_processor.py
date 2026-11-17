@@ -17,7 +17,7 @@ from api.services.campaign.campaign_call_dispatcher import campaign_call_dispatc
 from api.services.campaign.campaign_event_publisher import (
     get_campaign_event_publisher,
 )
-from api.services.campaign.rate_limiter import rate_limiter
+from api.services.call_concurrency.rate_limiter import rate_limiter
 from api.services.webhook_sync import calling as webhook_sync_calling
 from api.tasks.arq import enqueue_job
 from api.tasks.function_names import FunctionNames

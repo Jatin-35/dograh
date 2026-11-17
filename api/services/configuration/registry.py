@@ -84,6 +84,7 @@ class ServiceType(Enum):
 class ServiceProviders(str, Enum):
     OPENAI = "openai"
     HOPPER = "hopper"
+    ATLASCLOUD = "atlascloud"
     DEEPGRAM = "deepgram"
     GROQ = "groq"
     OPENROUTER = "openrouter"
@@ -125,12 +126,14 @@ class ServiceProviders(str, Enum):
     SONIOX = "soniox"
     VARTALAAP = "vartalaap"
     SIXTYDB = "sixtydb"
+    LMNT = "lmnt"
 
 
 class BaseServiceConfiguration(BaseModel):
     provider: Literal[
         ServiceProviders.OPENAI,
         ServiceProviders.HOPPER,
+        ServiceProviders.ATLASCLOUD,
         ServiceProviders.DEEPGRAM,
         ServiceProviders.GROQ,
         ServiceProviders.ANTHROPIC,
@@ -168,6 +171,7 @@ class BaseServiceConfiguration(BaseModel):
         ServiceProviders.SONIOX,
         ServiceProviders.VARTALAAP,
         ServiceProviders.SIXTYDB,
+        ServiceProviders.LMNT,
     ]
     api_key: str | list[str]
 
@@ -293,6 +297,10 @@ HOPPER_PROVIDER_MODEL_CONFIG = provider_model_config(
     "Hopper",
     provider_docs_url="https://docs.withhopper.com",
 )
+ATLASCLOUD_PROVIDER_MODEL_CONFIG = provider_model_config(
+    "Atlas Cloud",
+    description="Atlas Cloud OpenAI-compatible LLM API.",
+)
 GOOGLE_PROVIDER_MODEL_CONFIG = provider_model_config("Google")
 GROQ_PROVIDER_MODEL_CONFIG = provider_model_config("Groq")
 OPENROUTER_PROVIDER_MODEL_CONFIG = provider_model_config("Open Router")
@@ -354,6 +362,7 @@ VARTALAAP_PROVIDER_MODEL_CONFIG = provider_model_config(
     ),
     provider_docs_url="https://docs.vartaloop.ai/api/websocket/",
 )
+LMNT_PROVIDER_MODEL_CONFIG = provider_model_config("LMNT")
 INWORLD_PROVIDER_MODEL_CONFIG = provider_model_config(
     "Inworld",
     description=(
@@ -447,6 +456,12 @@ INCEPTION_MODELS = [
     "mercury-2.5",
     "mercury-2",
 ]
+ATLASCLOUD_API_BASE_URL = "https://api.atlascloud.ai/v1"
+ATLASCLOUD_MODELS = [
+    "qwen/qwen3.5-flash",
+    "deepseek-ai/deepseek-v4-pro",
+]
+
 GROQ_MODELS = [
     "llama-3.3-70b-versatile",
     "deepseek-r1-distill-llama-70b",
@@ -510,6 +525,21 @@ class HopperLLMConfiguration(BaseLLMConfiguration):
     base_url: str = Field(
         default=HOPPER_API_BASE_URL,
         description="Override only for a dedicated or self-hosted Hopper endpoint.",
+    )
+
+
+@register_llm
+class AtlasCloudLLMService(BaseLLMConfiguration):
+    model_config = ATLASCLOUD_PROVIDER_MODEL_CONFIG
+    provider: Literal[ServiceProviders.ATLASCLOUD] = ServiceProviders.ATLASCLOUD
+    model: str = Field(
+        default="qwen/qwen3.5-flash",
+        description="Atlas Cloud OpenAI-compatible chat model identifier.",
+        json_schema_extra={"examples": ATLASCLOUD_MODELS, "allow_custom_input": True},
+    )
+    base_url: str = Field(
+        default=ATLASCLOUD_API_BASE_URL,
+        description="Atlas Cloud OpenAI-compatible API endpoint.",
     )
 
 
@@ -1593,6 +1623,7 @@ LLMConfig = Annotated[
     Union[
         OpenAILLMService,
         HopperLLMConfiguration,
+        AtlasCloudLLMService,
         GoogleVertexLLMConfiguration,
         GroqLLMService,
         AnthropicLLMConfiguration,
@@ -2367,6 +2398,40 @@ class XAITTSConfiguration(BaseServiceConfiguration):
         return "xai-tts"
 
 
+LMNT_TTS_MODELS = ["aurora", "blizzard"]
+LMNT_TTS_VOICES = ["lily", "daniel", "ava", "caleb", "leah", "zeke"]
+
+
+@register_tts
+class LmntTTSConfiguration(BaseTTSConfiguration):
+    model_config = LMNT_PROVIDER_MODEL_CONFIG
+    provider: Literal[ServiceProviders.LMNT] = ServiceProviders.LMNT
+    model: str = Field(
+        default="aurora",
+        description=(
+            "LMNT TTS model. 'aurora' is the general-purpose model; 'blizzard' "
+            "targets more expressive, conversational speech."
+        ),
+        json_schema_extra={"examples": LMNT_TTS_MODELS},
+    )
+    voice: str = Field(
+        default="lily",
+        description=(
+            "LMNT voice ID. Use a stock voice name or a custom voice ID from "
+            "your LMNT account."
+        ),
+        json_schema_extra={"examples": LMNT_TTS_VOICES, "allow_custom_input": True},
+    )
+    language: str = Field(
+        default="en",
+        description=(
+            "Language code for synthesis (e.g. 'en', 'es', 'fr', 'de', 'pt', "
+            "'zh', 'ko', 'hi')."
+        ),
+        json_schema_extra={"allow_custom_input": True},
+    )
+
+
 TTSConfig = Annotated[
     Union[
         DeepgramTTSConfiguration,
@@ -2388,6 +2453,7 @@ TTSConfig = Annotated[
         SmallestAITTSConfiguration,
         XAITTSConfiguration,
         VartalaapTTSConfiguration,
+        LmntTTSConfiguration,
     ],
     Field(discriminator="provider"),
 ]
@@ -2402,7 +2468,7 @@ class DeepgramSTTConfiguration(BaseSTTConfiguration):
     model: str = Field(
         default="nova-3-general",
         description="Deepgram STT model.",
-        json_schema_extra={"examples": DEEPGRAM_STT_MODELS},
+        json_schema_extra={"examples": DEEPGRAM_STT_MODELS, "allow_custom_input": True},
     )
     language: str = Field(
         default="multi",
@@ -2412,8 +2478,10 @@ class DeepgramSTTConfiguration(BaseSTTConfiguration):
         ),
         json_schema_extra={
             "examples": DEEPGRAM_LANGUAGES,
+            "allow_custom_input": True,
             "model_options": {
                 "nova-3-general": DEEPGRAM_LANGUAGES,
+                "nova-3-medical": DEEPGRAM_LANGUAGES,
                 "flux-general-en": ("en",),
                 "flux-general-multi": DEEPGRAM_FLUX_MULTILINGUAL_LANGUAGE_OPTIONS,
             },

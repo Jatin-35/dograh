@@ -10,12 +10,14 @@ import asyncio
 import pytest
 from pipecat.extensions.voicemail.voicemail_detector import VoicemailDetector
 from pipecat.frames.frames import (
+    CancelFrame,
     EndWorkerFrame,
     Frame,
     FunctionCallFromLLM,
     FunctionCallInProgressFrame,
     FunctionCallResultFrame,
     FunctionCallsStartedFrame,
+    LLMContextFrame,
     TranscriptionFrame,
     UserStartedSpeakingFrame,
     UserStoppedSpeakingFrame,
@@ -31,10 +33,7 @@ from pipecat.processors.aggregators.llm_response_universal import (
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.services.llm_service import FunctionCallParams
 from pipecat.tests.utils import SleepFrame, run_test
-from pipecat.turns.user_start import (
-    TranscriptionUserTurnStartStrategy,
-    VADUserTurnStartStrategy,
-)
+from pipecat.turns.user_start import ExternalUserTurnStartStrategy
 from pipecat.turns.user_stop import (
     ExternalUserTurnStopStrategy,
 )
@@ -103,12 +102,12 @@ class TestVoicemailDetectorWithUserAggregator:
         """
         context = LLMContext()
 
-        # Create user turn strategies
+        # The injector supplies explicit user-turn boundary frames, matching an
+        # STT service that owns turn detection. Use external strategies here so
+        # the main aggregator does not broadcast a duplicate upstream
+        # UserStartedSpeakingFrame into the voicemail classifier branch.
         user_turn_strategies = UserTurnStrategies(
-            start=[
-                VADUserTurnStartStrategy(),
-                TranscriptionUserTurnStartStrategy(),
-            ],
+            start=[ExternalUserTurnStartStrategy()],
             stop=[ExternalUserTurnStopStrategy()],
         )
 
@@ -184,8 +183,14 @@ class TestVoicemailDetectorWithUserAggregator:
             await asyncio.sleep(0.05)
             await injector.inject_frame(UserStoppedSpeakingFrame())
 
-            # Wait for voicemail classification and main LLM response
-            await asyncio.sleep(0.2)
+            # Wait for voicemail classification and the first main-LLM response
+            # before starting another externally controlled turn.
+            async with asyncio.timeout(1.0):
+                while (
+                    voicemail_llm.get_current_step() < 1
+                    or main_llm.get_current_step() < 1
+                ):
+                    await asyncio.sleep(0.01)
 
             # === Second user turn ===
             await injector.inject_frame(UserStartedSpeakingFrame())
@@ -202,7 +207,9 @@ class TestVoicemailDetectorWithUserAggregator:
             await asyncio.sleep(0.05)
             await injector.inject_frame(UserStoppedSpeakingFrame())
 
-            await asyncio.sleep(0.05)
+            async with asyncio.timeout(1.0):
+                while main_llm.get_current_step() < 2:
+                    await asyncio.sleep(0.01)
             await injector.inject_frame(
                 EndWorkerFrame(), direction=FrameDirection.UPSTREAM
             )
@@ -223,10 +230,10 @@ class TestVoicemailDetectorWithUserAggregator:
             f"but saw it {frame_counter.user_stopped_speaking_count} times"
         )
 
-        # We should see no more than 2 user started speaking frame. One from downstream FrameInjector
-        # and one from upstream main pipeline's LLMUserAggregator
-        assert frame_counter.user_started_speaking_count <= 2, (
-            f"Expected voicemail detector's user aggregator to see UserStartedSpeakingFrame at most twice, "
+        # The externally controlled main aggregator does not echo another start
+        # frame upstream, and the classifier gate blocks the second turn.
+        assert frame_counter.user_started_speaking_count == 1, (
+            f"Expected voicemail detector's user aggregator to see UserStartedSpeakingFrame once, "
             f"but saw it {frame_counter.user_started_speaking_count} times"
         )
 
@@ -241,6 +248,69 @@ class TestVoicemailDetectorWithUserAggregator:
         )
 
     @pytest.mark.asyncio
+    async def test_voicemail_drops_context_frames_created_during_teardown(self):
+        """A late context flush after voicemail detection must not run the main LLM."""
+        main_context = LLMContext()
+        main_context.add_message({"role": "user", "content": "Please leave a message"})
+        main_llm = MockLLMService(
+            mock_steps=[
+                MockLLMService.create_text_chunks("This must not be generated.")
+            ],
+            chunk_delay=0.001,
+        )
+        voicemail_llm = MockLLMService(
+            mock_steps=[MockLLMService.create_text_chunks("VOICEMAIL")],
+            chunk_delay=0.001,
+        )
+        voicemail_detector = VoicemailDetector(llm=voicemail_llm)
+
+        injector = FrameInjector()
+        teardown_context_injector = FrameInjector()
+        pipeline = Pipeline(
+            [
+                injector,
+                voicemail_detector.detector(),
+                teardown_context_injector,
+                voicemail_detector.llm_gate(),
+                main_llm,
+            ]
+        )
+        task = PipelineWorker(pipeline, params=PipelineParams(), enable_rtvi=False)
+        teardown_context_injected = asyncio.Event()
+
+        @voicemail_detector.event_handler("on_voicemail_detected")
+        async def on_voicemail_detected(_processor):
+            # CancelFrame handling can flush pending user text into an
+            # LLMContextFrame after the voicemail decision has already been made.
+            async with asyncio.timeout(1.0):
+                while voicemail_detector._llm_gate._gating_active:
+                    await asyncio.sleep(0)
+            await teardown_context_injector.inject_frame(LLMContextFrame(main_context))
+            teardown_context_injected.set()
+
+        async def inject_frames():
+            await asyncio.sleep(0.05)
+            await injector.inject_frame(UserStartedSpeakingFrame())
+            await injector.inject_frame(
+                TranscriptionFrame(
+                    "Your service is not available right now.",
+                    "user-123",
+                    time_now_iso8601(),
+                )
+            )
+            await injector.inject_frame(UserStoppedSpeakingFrame())
+
+            async with asyncio.timeout(1.0):
+                await teardown_context_injected.wait()
+            await asyncio.sleep(0.05)
+            await task.queue_frame(CancelFrame(reason="voicemail_detected"))
+
+        await asyncio.gather(run_pipeline_worker(task), inject_frames())
+
+        assert voicemail_llm.get_current_step() == 1
+        assert main_llm.get_current_step() == 0
+
+    @pytest.mark.asyncio
     async def test_function_result_after_conversation_does_not_retrigger_classifier(
         self,
     ):
@@ -250,7 +320,7 @@ class TestVoicemailDetectorWithUserAggregator:
             context,
             user_params=LLMUserAggregatorParams(
                 user_turn_strategies=UserTurnStrategies(
-                    start=[TranscriptionUserTurnStartStrategy()],
+                    start=[ExternalUserTurnStartStrategy()],
                     stop=[ExternalUserTurnStopStrategy()],
                 )
             ),

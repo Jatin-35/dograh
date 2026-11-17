@@ -15,6 +15,7 @@ from api.schemas.ai_model_configuration import (
     EffectiveAIModelConfiguration,
 )
 from api.services.configuration.registry import (
+    ATLASCLOUD_API_BASE_URL,
     HOPPER_API_BASE_URL,
     INCEPTION_API_BASE_URL,
     ServiceConfig,
@@ -44,11 +45,13 @@ class APIKeyStatusResponse(TypedDict):
 _OPENAI_COMPATIBLE_PROVIDER_NAMES = {
     ServiceProviders.HOPPER.value: "Hopper",
     ServiceProviders.INCEPTION.value: "Inception",
+    ServiceProviders.ATLASCLOUD.value: "Atlas Cloud",
 }
 
 _OPENAI_COMPATIBLE_PROVIDER_BASE_URLS = {
     ServiceProviders.HOPPER.value: HOPPER_API_BASE_URL,
     ServiceProviders.INCEPTION.value: INCEPTION_API_BASE_URL,
+    ServiceProviders.ATLASCLOUD.value: ATLASCLOUD_API_BASE_URL,
 }
 
 
@@ -69,6 +72,7 @@ class UserConfigurationValidator:
             ServiceProviders.OPENAI.value: self._check_openai_api_key,
             ServiceProviders.HOPPER.value: self._check_openai_api_key,
             ServiceProviders.INCEPTION.value: self._check_openai_api_key,
+            ServiceProviders.ATLASCLOUD.value: self._check_openai_api_key,
             ServiceProviders.DEEPGRAM.value: self._check_deepgram_api_key,
             ServiceProviders.GROQ.value: self._check_groq_api_key,
             ServiceProviders.ANTHROPIC.value: self._check_anthropic_api_key,
@@ -108,6 +112,7 @@ class UserConfigurationValidator:
             ServiceProviders.MURF.value: self._check_murf_api_key,
             ServiceProviders.VARTALAAP.value: self._check_vartalaap_api_key,
             ServiceProviders.SIXTYDB.value: self._check_sixtydb_api_key,
+            ServiceProviders.LMNT.value: self._check_lmnt_api_key,
         }
 
     async def validate(
@@ -273,6 +278,7 @@ class UserConfigurationValidator:
             ServiceProviders.OPENAI.value,
             ServiceProviders.HOPPER.value,
             ServiceProviders.INCEPTION.value,
+            ServiceProviders.ATLASCLOUD.value,
             ServiceProviders.OPENAI_REALTIME.value,
         ):
             return validator(provider, api_key, service_config)
@@ -357,7 +363,7 @@ class UserConfigurationValidator:
                     "API key is valid."
                 )
             raise ValueError(
-                "Failed to validate the OpenAI API key. Please try again later."
+                f"Failed to validate the {provider_name} API key. Please try again later."
             )
 
     @staticmethod
@@ -676,6 +682,29 @@ class UserConfigurationValidator:
                 "Invalid 60db API key. The key was rejected by the 60db API. "
                 "Please check that your API key is correct and active. "
                 "You can manage keys in your 60db dashboard."
+            )
+        return True
+
+    def _check_lmnt_api_key(self, model: str, api_key: str) -> bool:
+        # Best-effort smoke test against LMNT's voice-list endpoint. Only a clear
+        # auth failure rejects the save; other statuses are treated as
+        # inconclusive so transient errors or API changes don't block valid keys.
+        try:
+            response = httpx.get(
+                "https://api.lmnt.com/v1/ai/voice/list",
+                headers={"X-API-Key": api_key, "lmnt-version": "1.1"},
+                timeout=10.0,
+            )
+        except httpx.RequestError:
+            raise ValueError(
+                "Could not connect to the LMNT API. Please check your network "
+                "connection and try again."
+            )
+        if response.status_code == 401:
+            raise ValueError(
+                "Invalid LMNT API key. The key was rejected by the LMNT API. "
+                "Please check that your API key is correct and active. "
+                "You can find your key at https://app.lmnt.com."
             )
         return True
 

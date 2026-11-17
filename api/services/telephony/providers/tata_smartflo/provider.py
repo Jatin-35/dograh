@@ -27,6 +27,7 @@ from api.enums import WorkflowRunMode
 from api.services.telephony.base import (
     CallInitiationResult,
     NormalizedInboundData,
+    ProviderSyncResult,
     TelephonyProvider,
 )
 
@@ -465,6 +466,15 @@ class TataSmartfloProvider(TelephonyProvider):
         return bool(presented) and hmac.compare_digest(
             str(presented), str(self.connect_secret)
         )
+
+    async def validate_phone_number(self, address: str) -> ProviderSyncResult:
+        """Accept numbers without an ownership lookup.
+
+        Tata SmartFlo's number inventory is not wired here, so ownership stays
+        with the SmartFlo account and its DID routing, as it was before this
+        check existed. Explicit opt-out, like the ARI provider.
+        """
+        return ProviderSyncResult(ok=True)
 
     async def verify_webhook_signature(
         self, url: str, params: Dict[str, Any], signature: str

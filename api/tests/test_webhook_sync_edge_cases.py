@@ -24,7 +24,7 @@ from api.db import db_client
 from api.db.models import WorkflowModel
 from api.db.webhook_sync_models import WebhookLeadModel
 from api.schemas.webhook_sync import CallSettings
-from api.services.campaign.rate_limiter import rate_limiter
+from api.services.call_concurrency.rate_limiter import rate_limiter
 from api.schemas.organization_preferences import OrganizationPreferences
 from api.services.organization_preferences import upsert_organization_preferences
 from api.services.telephony import status_processor

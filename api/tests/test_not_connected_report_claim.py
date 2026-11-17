@@ -3,7 +3,7 @@ schedule a campaign retry (see status_processor._process_status_update)."""
 
 import pytest
 
-from api.services.campaign.rate_limiter import RateLimiter
+from api.services.call_concurrency.rate_limiter import RateLimiter
 
 
 class _FakeRedis:

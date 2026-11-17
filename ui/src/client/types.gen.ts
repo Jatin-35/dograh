@@ -189,6 +189,14 @@ export type ActiveCallsResponse = {
      * Active Calls
      */
     active_calls: number;
+    /**
+     * Loop Lag P95 Ms
+     */
+    loop_lag_p95_ms?: number;
+    /**
+     * Loop Lag Max Ms
+     */
+    loop_lag_max_ms?: number;
 };
 
 /**
@@ -389,6 +397,34 @@ export type AssemblyAisttConfiguration = {
 };
 
 /**
+ * Atlas Cloud
+ *
+ * Atlas Cloud OpenAI-compatible LLM API.
+ */
+export type AtlasCloudLlmService = {
+    /**
+     * Provider
+     */
+    provider?: 'atlascloud';
+    /**
+     * Api Key
+     */
+    api_key: string | Array<string>;
+    /**
+     * Model
+     *
+     * Atlas Cloud OpenAI-compatible chat model identifier.
+     */
+    model?: string;
+    /**
+     * Base Url
+     *
+     * Atlas Cloud OpenAI-compatible API endpoint.
+     */
+    base_url?: string;
+};
+
+/**
  * AuthResponse
  */
 export type AuthResponse = {
@@ -411,6 +447,16 @@ export type AuthUserResponse = {
      * Is Superuser
      */
     is_superuser: boolean;
+};
+
+/**
+ * AutoscaleMetricResponse
+ */
+export type AutoscaleMetricResponse = {
+    /**
+     * Value
+     */
+    value: number;
 };
 
 /**
@@ -615,6 +661,8 @@ export type ByokPipelineAiModelConfiguration = {
     } & OpenAillmService) | ({
         provider: 'hopper';
     } & HopperLlmConfiguration) | ({
+        provider: 'atlascloud';
+    } & AtlasCloudLlmService) | ({
         provider: 'google_vertex';
     } & GoogleVertexLlmConfiguration) | ({
         provider: 'groq';
@@ -682,7 +730,9 @@ export type ByokPipelineAiModelConfiguration = {
         provider: 'xai';
     } & XaittsConfiguration) | ({
         provider: 'vartalaap';
-    } & VartalaapTtsConfiguration);
+    } & VartalaapTtsConfiguration) | ({
+        provider: 'lmnt';
+    } & LmntTtsConfiguration);
     /**
      * Stt
      */
@@ -767,6 +817,8 @@ export type ByokRealtimeAiModelConfiguration = {
     } & OpenAillmService) | ({
         provider: 'hopper';
     } & HopperLlmConfiguration) | ({
+        provider: 'atlascloud';
+    } & AtlasCloudLlmService) | ({
         provider: 'google_vertex';
     } & GoogleVertexLlmConfiguration) | ({
         provider: 'groq';
@@ -882,7 +934,9 @@ export type ByokRealtimeAiModelConfiguration = {
         provider: 'xai';
     } & XaittsConfiguration) | ({
         provider: 'vartalaap';
-    } & VartalaapTtsConfiguration) | null;
+    } & VartalaapTtsConfiguration) | ({
+        provider: 'lmnt';
+    } & LmntTtsConfiguration) | null;
 };
 
 /**
@@ -4544,6 +4598,38 @@ export type LeadResponse = {
      * Delivered
      */
     delivered: boolean;
+};
+
+/**
+ * LMNT
+ */
+export type LmntTtsConfiguration = {
+    /**
+     * Provider
+     */
+    provider?: 'lmnt';
+    /**
+     * Api Key
+     */
+    api_key: string | Array<string>;
+    /**
+     * Model
+     *
+     * LMNT TTS model. 'aurora' is the general-purpose model; 'blizzard' targets more expressive, conversational speech.
+     */
+    model?: string;
+    /**
+     * Voice
+     *
+     * LMNT voice ID. Use a stock voice name or a custom voice ID from your LMNT account.
+     */
+    voice?: string;
+    /**
+     * Language
+     *
+     * Language code for synthesis (e.g. 'en', 'es', 'fr', 'de', 'pt', 'zh', 'ko', 'hi').
+     */
+    language?: string;
 };
 
 /**
@@ -21194,7 +21280,7 @@ export type ListRequestLogsApiV1WebhookSyncEndpointsEndpointIdLogsGetResponses =
 
 export type ListRequestLogsApiV1WebhookSyncEndpointsEndpointIdLogsGetResponse = ListRequestLogsApiV1WebhookSyncEndpointsEndpointIdLogsGetResponses[keyof ListRequestLogsApiV1WebhookSyncEndpointsEndpointIdLogsGetResponses];
 
-export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidHeadData = {
+export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidGetData = {
     body?: never;
     path: {
         /**
@@ -21206,7 +21292,7 @@ export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidHeadData = {
     url: '/api/v1/webhooks/inbound/{endpoint_uuid}';
 };
 
-export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidHeadErrors = {
+export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidGetErrors = {
     /**
      * Not found
      */
@@ -21217,16 +21303,16 @@ export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidHeadErrors = {
     422: HttpValidationError;
 };
 
-export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidHeadError = WebhookHandshakeApiV1WebhooksInboundEndpointUuidHeadErrors[keyof WebhookHandshakeApiV1WebhooksInboundEndpointUuidHeadErrors];
+export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidGetError = WebhookHandshakeApiV1WebhooksInboundEndpointUuidGetErrors[keyof WebhookHandshakeApiV1WebhooksInboundEndpointUuidGetErrors];
 
-export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidHeadResponses = {
+export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidGetResponses = {
     /**
      * Successful Response
      */
     200: unknown;
 };
 
-export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidHead2Data = {
+export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidGet2Data = {
     body?: never;
     path: {
         /**
@@ -21238,7 +21324,7 @@ export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidHead2Data = {
     url: '/api/v1/webhooks/inbound/{endpoint_uuid}';
 };
 
-export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidHead2Errors = {
+export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidGet2Errors = {
     /**
      * Not found
      */
@@ -21249,9 +21335,9 @@ export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidHead2Errors = {
     422: HttpValidationError;
 };
 
-export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidHead2Error = WebhookHandshakeApiV1WebhooksInboundEndpointUuidHead2Errors[keyof WebhookHandshakeApiV1WebhooksInboundEndpointUuidHead2Errors];
+export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidGet2Error = WebhookHandshakeApiV1WebhooksInboundEndpointUuidGet2Errors[keyof WebhookHandshakeApiV1WebhooksInboundEndpointUuidGet2Errors];
 
-export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidHead2Responses = {
+export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidGet2Responses = {
     /**
      * Successful Response
      */
@@ -21347,3 +21433,43 @@ export type ActiveCallsApiV1HealthActiveCallsGetResponses = {
 };
 
 export type ActiveCallsApiV1HealthActiveCallsGetResponse = ActiveCallsApiV1HealthActiveCallsGetResponses[keyof ActiveCallsApiV1HealthActiveCallsGetResponses];
+
+export type AutoscaleMetricApiV1HealthAutoscaleMetricGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * X-Dograh-Devops-Secret
+         */
+        'X-Dograh-Devops-Secret'?: string | null;
+    };
+    path?: never;
+    query?: {
+        /**
+         * Buffer
+         */
+        buffer?: number;
+    };
+    url: '/api/v1/health/autoscale-metric';
+};
+
+export type AutoscaleMetricApiV1HealthAutoscaleMetricGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AutoscaleMetricApiV1HealthAutoscaleMetricGetError = AutoscaleMetricApiV1HealthAutoscaleMetricGetErrors[keyof AutoscaleMetricApiV1HealthAutoscaleMetricGetErrors];
+
+export type AutoscaleMetricApiV1HealthAutoscaleMetricGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AutoscaleMetricResponse;
+};
+
+export type AutoscaleMetricApiV1HealthAutoscaleMetricGetResponse = AutoscaleMetricApiV1HealthAutoscaleMetricGetResponses[keyof AutoscaleMetricApiV1HealthAutoscaleMetricGetResponses];

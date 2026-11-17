@@ -91,6 +91,7 @@ from pipecat.services.huggingface.stt import (
     HuggingFaceSTTSettings,
 )
 from pipecat.services.inworld.tts import InworldTTSService, InworldTTSSettings
+from pipecat.services.lmnt.tts import LmntTTSService, LmntTTSSettings
 from pipecat.services.minimax.llm import MiniMaxLLMService
 from pipecat.services.minimax.tts import MiniMaxTTSSettings
 from pipecat.services.openai._constants import OPENAI_SAMPLE_RATE
@@ -1015,6 +1016,30 @@ def create_tts_service(
             skip_aggregator_types=["recording_router", "recording"],
             silence_time_s=1.0,
         )
+    elif user_config.tts.provider == ServiceProviders.LMNT.value:
+        voice = getattr(user_config.tts, "voice", None) or "lily"
+        model = getattr(user_config.tts, "model", None) or "aurora"
+        language_code = getattr(user_config.tts, "language", None) or "en"
+        try:
+            pipecat_language = Language(language_code)
+        except ValueError:
+            pipecat_language = Language.EN
+        return LmntTTSService(
+            api_key=user_config.tts.api_key,
+            sample_rate=audio_config.transport_out_sample_rate,
+            # LMNT's streaming `format` field expects "raw" for signed 16-bit PCM
+            # at the requested sample rate, which is what the output transport
+            # consumes; "pcm_s16le" is not a valid LMNT format value.
+            output_format="raw",
+            settings=LmntTTSSettings(
+                voice=voice,
+                language=pipecat_language,
+                model=model,
+            ),
+            text_filters=[xml_function_tag_filter],
+            skip_aggregator_types=["recording_router", "recording"],
+            silence_time_s=1.0,
+        )
     elif user_config.tts.provider == ServiceProviders.VARTALAAP.value:
         # Vartalaap always returns 24 kHz; the output transport resamples it
         # to the call's rate.
@@ -1108,13 +1133,22 @@ def create_llm_service_from_provider(
     temperature: float | None = None,
     bill_to: str | None = None,
     reasoning_effort: str | None = None,
+    usage_context: str | None = None,
 ):
     """Create an LLM service from explicit provider/model/api_key.
 
     Also used by create_llm_service which extracts these from user_config.
+
+    Args:
+        usage_context: Optional tag describing what the LLM instance is used for
+            (e.g. "voicemail_detection"). Sent as request metadata by the Dograh
+            provider; ignored by other providers.
     """
     logger.info(f"Creating LLM service: provider={provider}, model={model}")
-    if provider == ServiceProviders.OPENAI.value:
+    if provider in (
+        ServiceProviders.OPENAI.value,
+        ServiceProviders.ATLASCLOUD.value,
+    ):
         kwargs = {}
         if base_url:
             _validate_runtime_service_url(base_url, "base_url")
@@ -1224,6 +1258,7 @@ def create_llm_service_from_provider(
             base_url=f"{MPS_API_URL}/api/v1/llm",
             api_key=api_key,
             correlation_id=correlation_id,
+            usage_context=usage_context,
             settings=OpenAILLMSettings(model=model),
         )
     elif provider == ServiceProviders.AWS_BEDROCK.value:
@@ -1674,6 +1709,8 @@ def llm_provider_kwargs(provider: str, get) -> dict:
         kwargs["base_url"] = get("base_url")
     elif provider == ServiceProviders.HOPPER.value:
         kwargs["base_url"] = get("base_url")
+    elif provider == ServiceProviders.ATLASCLOUD.value:
+        kwargs["base_url"] = get("base_url")
     elif provider == ServiceProviders.OPENROUTER.value:
         kwargs["base_url"] = get("base_url")
     elif provider == ServiceProviders.INCEPTION.value:
@@ -1703,7 +1740,11 @@ def llm_provider_kwargs(provider: str, get) -> dict:
     return kwargs
 
 
-def create_llm_service(user_config, correlation_id: str | None = None):
+def create_llm_service(
+    user_config,
+    correlation_id: str | None = None,
+    usage_context: str | None = None,
+):
     """Create and return appropriate LLM service based on user configuration."""
     provider = user_config.llm.provider
     model = user_config.llm.model
@@ -1718,5 +1759,6 @@ def create_llm_service(user_config, correlation_id: str | None = None):
         model,
         api_key,
         correlation_id=correlation_id,
+        usage_context=usage_context,
         **kwargs,
     )

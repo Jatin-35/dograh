@@ -19,10 +19,10 @@ from api.services.integrations import (
     IntegrationRuntimeContext,
     create_runtime_sessions,
 )
-from api.services.pipecat.active_calls import (
+from api.services.observability.active_calls import (
     register_active_call as register_worker_active_call,
 )
-from api.services.pipecat.active_calls import (
+from api.services.observability.active_calls import (
     unregister_active_call as unregister_worker_active_call,
 )
 from api.services.pipecat.audio_config import AudioConfig, create_audio_config
@@ -85,6 +85,7 @@ from api.services.pipecat.worker_runner import run_pipeline_worker
 from api.services.pipecat.ws_sender_registry import get_ws_sender
 from api.services.telephony import registry as telephony_registry
 from api.services.workflow.dto import ReactFlowDTO
+from api.services.workflow.initial_context import merge_external_initial_context
 from api.services.workflow.pipecat_engine import PipecatEngine
 from api.services.workflow.workflow_graph import WorkflowGraph
 from pipecat.audio.turn.smart_turn.base_smart_turn import SmartTurnParams
@@ -678,7 +679,9 @@ async def _run_pipeline_impl(
     # If there is some extra call_context_vars, fold them in. Persistence
     # happens once below, after runtime_configuration is also resolved.
     if call_context_vars:
-        merged_call_context_vars = {**merged_call_context_vars, **call_context_vars}
+        merged_call_context_vars = merge_external_initial_context(
+            merged_call_context_vars, call_context_vars
+        )
 
     # Get workflow for metadata (name, organization_id, call_disposition_codes)
     workflow = await db_client.get_workflow(workflow_id, **workflow_scope)
@@ -726,6 +729,12 @@ async def _run_pipeline_impl(
         )
     else:
         user_config = resolved_user_config
+
+    workflow_graph = WorkflowGraph(
+        ReactFlowDTO.model_validate(run_workflow_json),
+        skip_instance_constraints_for={"trigger"},
+    )
+    uses_variable_extraction = workflow_graph.uses_variable_extraction()
 
     from api.services.managed_model_services import (
         MPS_CORRELATION_ID_CONTEXT_KEY,
@@ -825,6 +834,19 @@ async def _run_pipeline_impl(
                     workflow_run_id=workflow_run_id,
                     organization_id=workflow.organization_id,
                 )
+    # A shared LLM cannot carry an extraction usage_context without also tagging
+    # normal conversation or context-summarization requests. Create a dedicated
+    # client only for the managed provider; other providers ignore usage_context.
+    variable_extraction_llm = (
+        create_llm_service(
+            user_config,
+            correlation_id=mps_correlation_id,
+            usage_context="variable_extraction",
+        )
+        if uses_variable_extraction
+        and user_config.llm.provider == ServiceProviders.DOGRAH.value
+        else inference_llm or llm
+    )
 
     # Stamp the providers/models actually resolved for this run onto
     # initial_context so they're available for post-call analytics
@@ -860,11 +882,6 @@ async def _run_pipeline_impl(
     }
     await db_client.update_workflow_run(
         workflow_run_id, initial_context=merged_call_context_vars
-    )
-
-    workflow_graph = WorkflowGraph(
-        ReactFlowDTO.model_validate(run_workflow_json),
-        skip_instance_constraints_for={"trigger"},
     )
 
     # Pre-call fetch: fire early so it runs concurrently with remaining setup
@@ -966,6 +983,7 @@ async def _run_pipeline_impl(
     engine = PipecatEngine(
         llm=llm,
         inference_llm=inference_llm,
+        variable_extraction_llm=variable_extraction_llm,
         workflow=workflow_graph,
         call_context_vars=merged_call_context_vars,
         workflow_id=workflow_id,
@@ -1127,12 +1145,14 @@ async def _run_pipeline_impl(
             voicemail_llm = create_llm_service(
                 user_config,
                 correlation_id=mps_correlation_id,
+                usage_context="voicemail_detection",
             )
         else:
             voicemail_llm = create_llm_service_from_provider(
                 provider=voicemail_config.get("provider", "openai"),
                 model=voicemail_config.get("model", "gpt-4.1"),
                 api_key=voicemail_config.get("api_key", ""),
+                usage_context="voicemail_detection",
             )
 
         long_speech_timeout = voicemail_config.get("long_speech_timeout", 8.0)

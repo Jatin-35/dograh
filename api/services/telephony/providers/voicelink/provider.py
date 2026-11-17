@@ -22,6 +22,7 @@ from api.enums import WorkflowRunMode
 from api.services.telephony.base import (
     CallInitiationResult,
     NormalizedInboundData,
+    ProviderSyncResult,
     TelephonyProvider,
 )
 from api.utils.common import get_backend_endpoints
@@ -380,6 +381,15 @@ class VoiceLinkProvider(TelephonyProvider):
         """Validate VoiceLink configuration."""
         has_auth = bool(self.bearer_token or (self.username and self.password))
         return bool(self.api_base and self.did_number and has_auth)
+
+    async def validate_phone_number(self, address: str) -> ProviderSyncResult:
+        """Accept numbers without an ownership lookup.
+
+        VoiceLink exposes no number-inventory endpoint we can query, so number
+        ownership stays with the VoiceLink account and its DID routing, as it
+        was before this check existed. Explicit opt-out, like the ARI provider.
+        """
+        return ProviderSyncResult(ok=True)
 
     async def verify_webhook_signature(
         self, url: str, params: Dict[str, Any], signature: str

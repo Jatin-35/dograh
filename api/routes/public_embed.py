@@ -48,13 +48,13 @@ from api.services.workflow.embed_text_chat_service import (
     start_embed_text_chat,
     stream_embed_text_chat_turn,
 )
+from api.services.workflow.run_creation import prepare_workflow_run_inputs
 from api.services.workflow.text_chat_session_service import (
     TextChatPendingTurnLostError,
     TextChatSessionExecutionError,
     TextChatSessionRevisionConflictError,
 )
 from api.services.workflow.text_chat_stream import TextChatEventStreamResponse
-from api.services.workflow.run_creation import prepare_workflow_run_inputs
 
 router = APIRouter(prefix="/public/embed")
 

@@ -32,6 +32,7 @@ from pipecat.utils.run_context import set_current_org_id
 
 from api.db import db_client
 from api.enums import WorkflowRunMode, WorkflowRunState
+from api.services.configuration.registry import ServiceProviders
 from api.services.pipecat.audio_config import create_audio_config
 from api.services.pipecat.pipeline_builder import create_pipeline_task
 from api.services.pipecat.pipeline_metrics_aggregator import (
@@ -471,6 +472,12 @@ async def execute_text_chat_pending_turn(
     )
     if user_config.llm is None:
         raise ValueError("Text chat requires an LLM configuration")
+
+    workflow_graph = WorkflowGraph(
+        ReactFlowDTO.model_validate(run_definition.workflow_json),
+        skip_instance_constraints_for={"trigger"},
+    )
+
     from api.services.managed_model_services import (
         MPS_CORRELATION_ID_CONTEXT_KEY,
         ensure_mps_correlation_id,
@@ -485,6 +492,16 @@ async def execute_text_chat_pending_turn(
 
     llm = create_llm_service(user_config, correlation_id=mps_correlation_id)
     inference_llm = llm
+    variable_extraction_llm = (
+        create_llm_service(
+            user_config,
+            correlation_id=mps_correlation_id,
+            usage_context="variable_extraction",
+        )
+        if workflow_graph.uses_variable_extraction()
+        and user_config.llm.provider == ServiceProviders.DOGRAH.value
+        else llm
+    )
 
     runtime_configuration = {
         "llm_provider": user_config.llm.provider,
@@ -497,10 +514,6 @@ async def execute_text_chat_pending_turn(
     if mps_correlation_id:
         initial_context[MPS_CORRELATION_ID_CONTEXT_KEY] = mps_correlation_id
 
-    workflow_graph = WorkflowGraph(
-        ReactFlowDTO.model_validate(run_definition.workflow_json),
-        skip_instance_constraints_for={"trigger"},
-    )
     base_checkpoint = _resolve_checkpoint_for_pending_turn(session_data, checkpoint)
 
     # Text sessions create a fresh pipeline for every turn. Run the Start-node
@@ -592,6 +605,7 @@ async def execute_text_chat_pending_turn(
     engine = PipecatEngine(
         llm=llm,
         inference_llm=inference_llm,
+        variable_extraction_llm=variable_extraction_llm,
         context=context,
         workflow=workflow_graph,
         call_context_vars=initial_context,

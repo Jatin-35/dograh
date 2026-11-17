@@ -85,10 +85,12 @@ from api.services.organization_preferences import (
 )
 from api.services.posthog_client import capture_event
 from api.services.telephony import registry as telephony_registry
+from api.services.telephony.base import ProviderPhoneNumberLookupError
 from api.services.telephony.factory import get_telephony_provider_by_id
 from api.services.worker_sync.manager import get_worker_sync_manager
 from api.services.worker_sync.protocol import WorkerSyncEventType
 from api.utils.common import get_backend_endpoints
+from api.utils.telephony_address import normalize_telephony_address
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
 
@@ -597,8 +599,43 @@ def _phone_number_to_response(
     return response
 
 
+async def _ensure_provider_owns_phone_number(
+    config_id: int,
+    organization_id: int,
+    address: str,
+    country_hint: str | None = None,
+) -> None:
+    """Reject an address unless the provider can confirm account ownership.
+
+    Provider implementations use read-only inventory lookups. PBX-managed
+    providers that cannot prove carrier ownership explicitly opt out through
+    their ``validate_phone_number`` implementation.
+    """
+    try:
+        canonical_address = normalize_telephony_address(
+            address, country_hint=country_hint
+        ).canonical
+        provider = await get_telephony_provider_by_id(config_id, organization_id)
+        result = await provider.validate_phone_number(canonical_address)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except ProviderPhoneNumberLookupError as e:
+        logger.error(
+            f"Provider phone-number lookup failed for config {config_id} "
+            f"address {address}: {e}"
+        )
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+    if not result.ok:
+        raise HTTPException(
+            status_code=400,
+            detail=result.message
+            or "Phone number is not owned by this provider account",
+        )
+
+
 async def _sync_inbound_for_phone_number(
-    config_id: int, organization_id: int, address: str
+    config_id: int, organization_id: int, address: str, *, attach: bool = True
 ) -> ProviderSyncStatus:
     """Push inbound webhook configuration to the provider.
 
@@ -615,8 +652,10 @@ async def _sync_inbound_for_phone_number(
         logger.error(f"Failed to load telephony provider for config {config_id}: {e}")
         return ProviderSyncStatus(ok=False, message=f"Provider load failed: {e}")
 
-    backend_endpoint, _ = await get_backend_endpoints()
-    webhook_url = f"{backend_endpoint}/api/v1/telephony/inbound/run"
+    webhook_url = None
+    if attach:
+        backend_endpoint, _ = await get_backend_endpoints()
+        webhook_url = f"{backend_endpoint}/api/v1/telephony/inbound/run"
 
     try:
         result = await provider.configure_inbound(address, webhook_url)
@@ -867,6 +906,13 @@ async def create_phone_number(
             request.inbound_workflow_id, user.selected_organization_id
         )
 
+    await _ensure_provider_owns_phone_number(
+        config_id,
+        user.selected_organization_id,
+        request.address,
+        request.country_code,
+    )
+
     # Inbound dispatch (find_inbound_route_by_account) keys on (provider,
     # credentials[account_id_field], address_normalized) without the org, so
     # that tuple has to be globally unique. Reject up front if another config —
@@ -926,7 +972,10 @@ async def create_phone_number(
     response = _phone_number_to_response(row)
     if request.inbound_workflow_id is not None:
         response.provider_sync = await _sync_inbound_for_phone_number(
-            config_id, user.selected_organization_id, row.address
+            config_id,
+            user.selected_organization_id,
+            row.address,
+            attach=row.is_active,
         )
     return response
 
@@ -992,7 +1041,10 @@ async def update_phone_number(
     # Sync the provider application or address with the inbound
     # calling webhook address
     response.provider_sync = await _sync_inbound_for_phone_number(
-        config_id, user.selected_organization_id, row.address
+        config_id,
+        user.selected_organization_id,
+        row.address,
+        attach=row.inbound_workflow_id is not None and row.is_active,
     )
     return response
 
@@ -1030,11 +1082,29 @@ async def delete_phone_number(
     if not existing:
         raise HTTPException(status_code=404, detail="Phone number not found")
 
+    provider_sync = await _sync_inbound_for_phone_number(
+        config_id,
+        user.selected_organization_id,
+        existing.address,
+        attach=False,
+    )
+    if not provider_sync.ok:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                provider_sync.message
+                or "Provider rejected the phone-number detach request"
+            ),
+        )
+
     deleted = await db_client.delete_phone_number(phone_number_id, config_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Phone number not found")
 
-    return {"message": "Phone number deleted"}
+    return {
+        "message": "Phone number deleted",
+        "provider_sync": provider_sync.model_dump(),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -1108,6 +1178,11 @@ async def save_telephony_configuration(
     existing_numbers = await db_client.list_phone_numbers_for_config(row.id)
     existing_by_address = {n.address: n for n in existing_numbers}
     incoming_set = set(new_addresses)
+    for addr in new_addresses:
+        if addr not in existing_by_address:
+            await _ensure_provider_owns_phone_number(
+                row.id, user.selected_organization_id, addr
+            )
     for addr in new_addresses:
         if addr in existing_by_address:
             continue

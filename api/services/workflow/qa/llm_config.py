@@ -6,6 +6,8 @@ from api.db.models import WorkflowRunModel
 from api.services.pipecat.service_factory import llm_provider_kwargs
 from api.services.workflow.dto import QANodeData
 
+QA_USAGE_CONTEXT = "qa_analysis"
+
 
 async def resolve_llm_config(
     qa_data: QANodeData, workflow_run: WorkflowRunModel

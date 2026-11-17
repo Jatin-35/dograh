@@ -35,7 +35,7 @@ from api.services.campaign import campaign_event_publisher as publisher_module
 from api.services.campaign.campaign_event_protocol import RetryNeededEvent
 from api.services.campaign.campaign_orchestrator import CampaignOrchestrator
 from api.services.campaign.circuit_breaker import circuit_breaker
-from api.services.campaign.rate_limiter import rate_limiter
+from api.services.call_concurrency.rate_limiter import rate_limiter
 from api.services.quota_service import authorize_workflow_run_start
 from api.services.telephony import status_processor
 from api.services.webhook_sync import calling, callback
