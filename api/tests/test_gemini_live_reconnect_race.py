@@ -233,7 +233,7 @@ async def test_compaction_waits_for_the_outgoing_connection_before_reconnecting(
     service._connection_task = asyncio.ensure_future(_slow_shutdown())
     service._session_resumption_handle = "stale"
 
-    async def _disconnect():
+    async def _disconnect(**kwargs):
         order.append("disconnect")
 
     async def _connect(**kwargs):
@@ -249,3 +249,34 @@ async def test_compaction_waits_for_the_outgoing_connection_before_reconnecting(
     still_running.set()
     await asyncio.wait_for(run, timeout=1.0)
     assert order == ["disconnect", "connect"]
+
+
+@pytest.mark.asyncio
+async def test_compaction_does_not_reconnect_a_call_that_is_hanging_up():
+    """A compaction refresh during a pending hang-up releases the hang-up
+    instead of opening a new Gemini session."""
+    service = _make_service()
+    calls: list = []
+
+    async def _disconnect(**kwargs):
+        calls.append(("disconnect", kwargs))
+
+    async def _connect(**kwargs):
+        calls.append(("connect", kwargs))
+
+    async def _release_deferred_end_frame():
+        calls.append(("release_end_frame",))
+
+    service._disconnect = _disconnect
+    service._connect = _connect
+    service._release_deferred_end_frame = _release_deferred_end_frame
+    service._end_frame_pending_bot_turn_finished = object()
+    service._connection_task = None
+
+    await service._compact_context_via_reconnect()
+
+    assert calls == [
+        ("disconnect", {"preserve_pending_end_frame": True}),
+        ("release_end_frame",),
+    ]
+    assert service._awaiting_context_compaction_seed is False

@@ -22,6 +22,7 @@ const emptyPreferences: OrganizationPreferences = {
   test_phone_number: "",
   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
   show_custom_tools: false,
+  external_pbx_integrations_enabled: false,
 };
 
 const timezoneSelectStyles = {
@@ -133,6 +134,8 @@ export function OrganizationPreferencesSection() {
         test_phone_number: nextPreferences.test_phone_number || "",
         timezone: nextPreferences.timezone || emptyPreferences.timezone,
         show_custom_tools: nextPreferences.show_custom_tools === true,
+        external_pbx_integrations_enabled:
+          nextPreferences.external_pbx_integrations_enabled ?? false,
       });
       setTimezone(
         nextPreferences.timezone || emptyPreferences.timezone || "UTC",
@@ -155,6 +158,8 @@ export function OrganizationPreferencesSection() {
               test_phone_number: preferences.test_phone_number || null,
               timezone: getTimezoneValue(timezone),
               show_custom_tools: preferences.show_custom_tools === true,
+              external_pbx_integrations_enabled:
+                preferences.external_pbx_integrations_enabled ?? false,
             },
           },
         );
@@ -172,6 +177,8 @@ export function OrganizationPreferencesSection() {
         test_phone_number: result.data.test_phone_number || "",
         timezone: result.data.timezone || emptyPreferences.timezone,
         show_custom_tools: result.data.show_custom_tools === true,
+        external_pbx_integrations_enabled:
+          result.data.external_pbx_integrations_enabled ?? false,
       });
       setTimezone(result.data.timezone || emptyPreferences.timezone || "UTC");
       await refreshConfig();
@@ -230,6 +237,28 @@ export function OrganizationPreferencesSection() {
           checked={preferences.show_custom_tools === true}
           onCheckedChange={(checked) =>
             setPreferences({ ...preferences, show_custom_tools: checked })
+          }
+        />
+      </div>
+      <div className="flex items-start justify-between gap-4 rounded-lg border p-4">
+        <div className="space-y-1">
+          <Label htmlFor="settings-external-pbx-integrations">
+            External PBX integrations
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            Show and enable advanced external-PBX configuration for Asterisk,
+            transfer tools, and workflows. Existing configuration is preserved
+            when this is disabled.
+          </p>
+        </div>
+        <Switch
+          id="settings-external-pbx-integrations"
+          checked={preferences.external_pbx_integrations_enabled ?? false}
+          onCheckedChange={(checked) =>
+            setPreferences({
+              ...preferences,
+              external_pbx_integrations_enabled: checked,
+            })
           }
         />
       </div>

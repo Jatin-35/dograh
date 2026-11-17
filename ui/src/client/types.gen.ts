@@ -97,6 +97,10 @@ export type AriConfigurationRequest = {
      */
     ws_client_name?: string;
     /**
+     * Optional external PBX connected through this Asterisk instance
+     */
+    external_pbx?: VicidialExternalPbxConfiguration | null;
+    /**
      * From Numbers
      *
      * List of SIP extensions/numbers for outbound calls (optional)
@@ -130,6 +134,7 @@ export type AriConfigurationResponse = {
      * Ws Client Name
      */
     ws_client_name?: string;
+    external_pbx?: VicidialExternalPbxConfiguration | null;
     /**
      * From Numbers
      */
@@ -751,7 +756,9 @@ export type ByokRealtimeAiModelConfiguration = {
         provider: 'azure_realtime';
     } & AzureRealtimeLlmConfiguration) | ({
         provider: 'inworld_realtime';
-    } & InworldRealtimeLlmConfiguration);
+    } & InworldRealtimeLlmConfiguration) | ({
+        provider: 'boson_realtime';
+    } & BosonRealtimeLlmConfiguration);
     /**
      * Llm
      */
@@ -946,6 +953,76 @@ export type BodyTranscribeAudioApiV1WorkflowRecordingsTranscribePost = {
      * Language
      */
     language?: string;
+};
+
+/**
+ * Boson Higgs Realtime
+ *
+ * Boson AI's Higgs Realtime: one speech-to-speech model that hears the caller and speaks the reply, with tool calling. Phone audio and Hindi are supported; preset voices are American English, so use a cloned voice for an Indian accent.
+ */
+export type BosonRealtimeLlmConfiguration = {
+    /**
+     * Provider
+     */
+    provider?: 'boson_realtime';
+    /**
+     * Api Key
+     */
+    api_key: string | Array<string>;
+    /**
+     * Model
+     *
+     * Boson speech-to-speech model.
+     */
+    model?: string;
+    /**
+     * Voice
+     *
+     * Preset voices are American English. For an Indian voice, clone one in Boson and enter its ID (voice_...).
+     */
+    voice?: string;
+    /**
+     * Language
+     *
+     * Language hint for the caller's transcript (ISO 639-1, e.g. hi, en). The model understands mixed Hindi-English either way; the reply language follows the agent's prompt.
+     */
+    language?: string | null;
+    /**
+     * Temperature
+     *
+     * Reply randomness. Empty sends 0.3 (Boson's own default is 0.7).
+     */
+    temperature?: number | null;
+    /**
+     * Turn Detection
+     *
+     * server_vad ends the caller's turn after a set silence. semantic_vad also judges whether the caller has finished their thought.
+     */
+    turn_detection?: 'server_vad' | 'semantic_vad';
+    /**
+     * Vad Threshold
+     *
+     * How loud speech must be to count as the caller talking (and to interrupt the bot). Higher ignores more background noise. Empty uses Boson's default (0.85).
+     */
+    vad_threshold?: number | null;
+    /**
+     * Silence Duration Ms
+     *
+     * Silence (ms) that ends the caller's turn. Empty uses Boson's default (500).
+     */
+    silence_duration_ms?: number | null;
+    /**
+     * Prefix Padding Ms
+     *
+     * Audio (ms) kept from before speech starts. Empty uses Boson's default (300).
+     */
+    prefix_padding_ms?: number | null;
+    /**
+     * Noise Reduction
+     *
+     * Boson-side noise reduction. near_field suits a phone held to the ear; far_field a speakerphone or laptop microphone.
+     */
+    noise_reduction?: 'off' | 'near_field' | 'far_field';
 };
 
 /**
@@ -1770,6 +1847,46 @@ export type ConfirmWorkflowGenActionRequest = {
      * Approve
      */
     approve: boolean;
+};
+
+/**
+ * ContextDestinationMappingConfig
+ *
+ * Resolve an external-PBX destination from gathered context.
+ */
+export type ContextDestinationMappingConfig = {
+    /**
+     * Context Path
+     *
+     * Gathered-context path or extracted-variable name used for routing.
+     */
+    context_path: string;
+    /**
+     * Routes
+     */
+    routes: Array<ContextDestinationRoute>;
+    /**
+     * Fallback Destination
+     *
+     * Optional provider-native fallback destination.
+     */
+    fallback_destination?: string | null;
+};
+
+/**
+ * ContextDestinationRoute
+ *
+ * Map one gathered-context value to an external-PBX destination.
+ */
+export type ContextDestinationRoute = {
+    /**
+     * Context Value
+     */
+    context_value: string;
+    /**
+     * Destination
+     */
+    destination: string;
 };
 
 /**
@@ -3027,6 +3144,22 @@ export type EnvVarResponse = {
      * Length
      */
     length?: number | null;
+};
+
+/**
+ * ExternalPBXFieldMapping
+ *
+ * Map one gathered-context value to a provider-native field.
+ */
+export type ExternalPbxFieldMapping = {
+    /**
+     * Context Path
+     */
+    context_path: string;
+    /**
+     * Destination Field
+     */
+    destination_field: string;
 };
 
 /**
@@ -4388,6 +4521,32 @@ export type LeadCallbackResponse = {
 };
 
 /**
+ * LeadRequest
+ */
+export type LeadRequest = {
+    /**
+     * Fields
+     */
+    fields?: {
+        [key: string]: string;
+    };
+};
+
+/**
+ * LeadResponse
+ */
+export type LeadResponse = {
+    /**
+     * Ok
+     */
+    ok: boolean;
+    /**
+     * Delivered
+     */
+    delivered: boolean;
+};
+
+/**
  * LoginRequest
  */
 export type LoginRequest = {
@@ -5418,6 +5577,10 @@ export type OrganizationPreferences = {
      * Show Custom Tools
      */
     show_custom_tools?: boolean | null;
+    /**
+     * External Pbx Integrations Enabled
+     */
+    external_pbx_integrations_enabled?: boolean;
 };
 
 /**
@@ -7770,6 +7933,20 @@ export type TelephonyProviderMetadata = {
 };
 
 /**
+ * TelephonyProviderUICondition
+ */
+export type TelephonyProviderUiCondition = {
+    /**
+     * Field
+     */
+    field: string;
+    /**
+     * Equals
+     */
+    equals: unknown;
+};
+
+/**
  * TelephonyProviderUIField
  *
  * One form field on a telephony provider's configuration UI.
@@ -7803,6 +7980,29 @@ export type TelephonyProviderUiField = {
      * Placeholder
      */
     placeholder?: string | null;
+    /**
+     * Options
+     */
+    options?: Array<TelephonyProviderUiOption> | null;
+    visible_when?: TelephonyProviderUiCondition | null;
+    /**
+     * Section
+     */
+    section?: string | null;
+};
+
+/**
+ * TelephonyProviderUIOption
+ */
+export type TelephonyProviderUiOption = {
+    /**
+     * Value
+     */
+    value: string;
+    /**
+     * Label
+     */
+    label: string;
 };
 
 /**
@@ -8273,9 +8473,9 @@ export type TransferCallConfig = {
     /**
      * Destination Source
      *
-     * Whether transfer destination is static/template or resolved by HTTP.
+     * Whether the destination is static/template, resolved by HTTP, or mapped from gathered context to an external-PBX destination.
      */
-    destination_source?: 'static' | 'dynamic';
+    destination_source?: 'static' | 'dynamic' | 'context_mapping';
     /**
      * Destination
      *
@@ -8322,6 +8522,10 @@ export type TransferCallConfig = {
      * Optional resolver that determines transfer routing at call time.
      */
     resolver?: HttpTransferResolverConfig | null;
+    /**
+     * Optional gathered-context to external-PBX destination mapping.
+     */
+    context_mapping?: ContextDestinationMappingConfig | null;
 };
 
 /**
@@ -8965,6 +9169,88 @@ export type VersionResponse = {
      * File Count
      */
     file_count: number;
+};
+
+/**
+ * VicidialAgentAPIConfiguration
+ *
+ * VICIdial remote-agent call-control API configuration.
+ */
+export type VicidialAgentApiConfiguration = {
+    /**
+     * Url
+     *
+     * Full URL to agc/api.php
+     */
+    url: string;
+    /**
+     * Username
+     *
+     * VICIdial agent API user
+     */
+    username: string;
+    /**
+     * Password
+     *
+     * VICIdial agent API password
+     */
+    password: string;
+    /**
+     * Source
+     *
+     * VICIdial API source tag
+     */
+    source?: string;
+};
+
+/**
+ * VicidialExternalPBXConfiguration
+ *
+ * External-PBX configuration used by the VICIdial strategy adapter.
+ */
+export type VicidialExternalPbxConfiguration = {
+    /**
+     * Type
+     */
+    type?: 'vicidial';
+    agent_api: VicidialAgentApiConfiguration;
+    non_agent_api?: VicidialNonAgentApiConfiguration | null;
+    /**
+     * Timeout Seconds
+     */
+    timeout_seconds?: number;
+};
+
+/**
+ * VicidialNonAgentAPIConfiguration
+ *
+ * Optional VICIdial non-agent API configuration for lead updates.
+ */
+export type VicidialNonAgentApiConfiguration = {
+    /**
+     * Url
+     *
+     * Full non_agent_api.php URL
+     */
+    url?: string | null;
+    /**
+     * Username
+     *
+     * Non-agent API user
+     */
+    username?: string | null;
+    /**
+     * Password
+     *
+     * Non-agent API password
+     */
+    password?: string | null;
+    /**
+     * Source
+     *
+     * Non-agent API source tag
+     */
+    source?: string;
 };
 
 /**
@@ -10047,6 +10333,10 @@ export type WorkflowConfigurationDefaults = {
      * Text Chat Inactivity Timeout Seconds
      */
     text_chat_inactivity_timeout_seconds?: number;
+    /**
+     * External Pbx Field Mappings
+     */
+    external_pbx_field_mappings?: Array<ExternalPbxFieldMapping>;
     [key: string]: unknown;
 };
 
@@ -14457,6 +14747,50 @@ export type GetVoicesApiV1UserConfigurationsVoicesProviderGetResponses = {
 };
 
 export type GetVoicesApiV1UserConfigurationsVoicesProviderGetResponse = GetVoicesApiV1UserConfigurationsVoicesProviderGetResponses[keyof GetVoicesApiV1UserConfigurationsVoicesProviderGetResponses];
+
+export type SubmitLeadApiV1LeadsKindPostData = {
+    body: LeadRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Kind
+         */
+        kind: 'hire_expert' | 'enterprise';
+    };
+    query?: never;
+    url: '/api/v1/leads/{kind}';
+};
+
+export type SubmitLeadApiV1LeadsKindPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SubmitLeadApiV1LeadsKindPostError = SubmitLeadApiV1LeadsKindPostErrors[keyof SubmitLeadApiV1LeadsKindPostErrors];
+
+export type SubmitLeadApiV1LeadsKindPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: LeadResponse;
+};
+
+export type SubmitLeadApiV1LeadsKindPostResponse = SubmitLeadApiV1LeadsKindPostResponses[keyof SubmitLeadApiV1LeadsKindPostResponses];
 
 export type CreateCampaignApiV1CampaignCreatePostData = {
     body: CreateCampaignRequest;
@@ -20860,7 +21194,7 @@ export type ListRequestLogsApiV1WebhookSyncEndpointsEndpointIdLogsGetResponses =
 
 export type ListRequestLogsApiV1WebhookSyncEndpointsEndpointIdLogsGetResponse = ListRequestLogsApiV1WebhookSyncEndpointsEndpointIdLogsGetResponses[keyof ListRequestLogsApiV1WebhookSyncEndpointsEndpointIdLogsGetResponses];
 
-export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidGetData = {
+export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidHeadData = {
     body?: never;
     path: {
         /**
@@ -20872,7 +21206,7 @@ export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidGetData = {
     url: '/api/v1/webhooks/inbound/{endpoint_uuid}';
 };
 
-export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidGetErrors = {
+export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidHeadErrors = {
     /**
      * Not found
      */
@@ -20883,16 +21217,16 @@ export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidGetErrors = {
     422: HttpValidationError;
 };
 
-export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidGetError = WebhookHandshakeApiV1WebhooksInboundEndpointUuidGetErrors[keyof WebhookHandshakeApiV1WebhooksInboundEndpointUuidGetErrors];
+export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidHeadError = WebhookHandshakeApiV1WebhooksInboundEndpointUuidHeadErrors[keyof WebhookHandshakeApiV1WebhooksInboundEndpointUuidHeadErrors];
 
-export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidGetResponses = {
+export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidHeadResponses = {
     /**
      * Successful Response
      */
     200: unknown;
 };
 
-export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidGet2Data = {
+export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidHead2Data = {
     body?: never;
     path: {
         /**
@@ -20904,7 +21238,7 @@ export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidGet2Data = {
     url: '/api/v1/webhooks/inbound/{endpoint_uuid}';
 };
 
-export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidGet2Errors = {
+export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidHead2Errors = {
     /**
      * Not found
      */
@@ -20915,9 +21249,9 @@ export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidGet2Errors = {
     422: HttpValidationError;
 };
 
-export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidGet2Error = WebhookHandshakeApiV1WebhooksInboundEndpointUuidGet2Errors[keyof WebhookHandshakeApiV1WebhooksInboundEndpointUuidGet2Errors];
+export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidHead2Error = WebhookHandshakeApiV1WebhooksInboundEndpointUuidHead2Errors[keyof WebhookHandshakeApiV1WebhooksInboundEndpointUuidHead2Errors];
 
-export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidGet2Responses = {
+export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidHead2Responses = {
     /**
      * Successful Response
      */

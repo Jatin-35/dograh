@@ -24,6 +24,23 @@ DEFAULT_CONTEXT_COMPACTION_ENABLED = False
 DEFAULT_NOISE_REDUCTION = "off"
 
 
+class ExternalPBXFieldMapping(BaseModel):
+    """Map one gathered-context value to a provider-native field."""
+
+    context_path: str = Field(min_length=1, max_length=255)
+    destination_field: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
+
+    @field_validator("context_path", mode="before")
+    @classmethod
+    def strip_context_path(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("destination_field", mode="before")
+    @classmethod
+    def strip_destination_field(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+
 class AmbientNoiseConfigurationDefaults(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -87,6 +104,10 @@ class WorkflowConfigurationDefaults(BaseModel):
         default=TEXT_CHAT_INACTIVITY_TIMEOUT_SECONDS,
         ge=MIN_TEXT_CHAT_INACTIVITY_TIMEOUT_SECONDS,
         le=MAX_TEXT_CHAT_INACTIVITY_TIMEOUT_SECONDS,
+    )
+    external_pbx_field_mappings: list[ExternalPBXFieldMapping] = Field(
+        default_factory=list,
+        max_length=100,
     )
 
     @field_validator("turn_start_strategy", mode="before")

@@ -29,6 +29,7 @@ import {
 import { useSidebar } from "@/components/ui/sidebar";
 import { AssistantWave } from "@/components/workflow-gen-chat/AssistantWave";
 import { useScoutEnabled } from "@/components/workflow-gen-chat/useScoutEnabled";
+import { copyTextToClipboard } from "@/lib/clipboard";
 
 interface WorkflowEditorHeaderProps {
     workflowName: string;
@@ -151,7 +152,7 @@ export const WorkflowEditorHeader = ({
             return;
         }
         try {
-            await navigator.clipboard.writeText(workflowUuid);
+            await copyTextToClipboard(workflowUuid);
             toast.success("Agent UUID copied");
         } catch {
             toast.error("Failed to copy Agent UUID");

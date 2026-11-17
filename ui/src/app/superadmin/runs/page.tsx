@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from '@/lib/auth';
+import { formatDateTime } from '@/lib/dateTime';
 import{ superadminFilterAttributes } from "@/lib/filterAttributes";
 import { decodeFiltersFromURL, encodeFiltersToURL } from '@/lib/filters';
 import { impersonateAsSuperadmin } from '@/lib/utils';
@@ -248,8 +249,6 @@ export default function RunsPage() {
      * Helpers
      * ----------------------------------------------------------------------------------
      */
-
-    const formatDate = (dateString: string) => new Date(dateString).toLocaleString();
 
     const calculateDuration = (isCompleted: boolean, usageInfo?: Record<string, unknown>) => {
         if (isCompleted && typeof usageInfo?.call_duration_seconds === 'number') {
@@ -480,7 +479,7 @@ export default function RunsPage() {
                                                         </div>
                                                     </TableCell>
                                                     <TableCell className="text-sm">
-                                                        {formatDate(run.created_at)}
+                                                        {formatDateTime(run.created_at)}
                                                     </TableCell>
                                                     <TableCell>
                                                         <div className="flex space-x-2">

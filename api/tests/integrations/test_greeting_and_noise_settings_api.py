@@ -21,9 +21,10 @@ from pipecat.transports.base_transport import TransportParams
 
 from api.enums import WorkflowRunMode
 from api.routes.workflow import router as workflow_router
-from api.services.pipecat.native_rnnoise_filter import NativeRNNoiseFilter
 from api.services.auth.depends import get_user
+from api.services.pipecat.native_rnnoise_filter import NativeRNNoiseFilter
 from api.services.workflow.dto import ReactFlowDTO
+from api.services.workflow.run_creation import prepare_workflow_run_inputs
 from api.services.workflow.workflow_graph import WorkflowGraph
 from api.tests.integrations._run_pipeline_helpers import create_workflow_run_rows
 
@@ -54,12 +55,24 @@ def _start_flag(definition_json) -> bool:
 
 
 async def _run(db_session, workflow, user, *, use_draft):
+    loaded = await db_session.get_workflow(
+        workflow.id, organization_id=workflow.organization_id
+    )
+    # Tests share one session, so the version links loaded before a publish
+    # stay cached; production loads the agent in a fresh session.
+    async with db_session.async_session() as session:
+        await session.refresh(
+            loaded, attribute_names=["released_definition", "current_definition"]
+        )
+    run_inputs = await prepare_workflow_run_inputs(
+        db_session, loaded, use_draft=use_draft
+    )
     run = await db_session.create_workflow_run(
         name="settings check",
         workflow_id=workflow.id,
         mode=WorkflowRunMode.SMALLWEBRTC.value,
         user_id=user.id,
-        use_draft=use_draft,
+        definition_id=run_inputs.definition_id,
         organization_id=workflow.organization_id,
     )
     # Re-read the way the call path does, with the bound version loaded.

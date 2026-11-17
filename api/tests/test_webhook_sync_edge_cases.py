@@ -79,7 +79,7 @@ async def _run_batch(
             patch.dict(globs, overrides),
             patch.object(
                 globs["db_client"],
-                "get_workflow_by_id",
+                "get_workflow",
                 AsyncMock(return_value=None),
             )
             if workflow_missing

@@ -408,7 +408,7 @@ async def _dial_and_fail(exception):
     )
     breaker = SimpleNamespace(pause_on_provider_error=AsyncMock(), record_and_evaluate=AsyncMock())
     db = MagicMock()
-    db.get_workflow_by_id = AsyncMock(return_value=SimpleNamespace(id=7))
+    db.get_workflow = AsyncMock(return_value=SimpleNamespace(id=7))
     db.create_workflow_run = AsyncMock(return_value=run)
     db.update_workflow_run = AsyncMock()
     dispatcher = dispatcher_module.CampaignCallDispatcher()

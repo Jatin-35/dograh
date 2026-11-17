@@ -288,7 +288,7 @@ async def test_dispatch_dials_the_number_and_records_the_slot():
     ):
         rl.pool_slot_address = RateLimiter.pool_slot_address
         rl.store_workflow_from_number_mapping = AsyncMock()
-        db.get_workflow_by_id = AsyncMock(return_value=SimpleNamespace(id=10))
+        db.get_workflow = AsyncMock(return_value=SimpleNamespace(id=10))
         db.create_workflow_run = AsyncMock(return_value=run)
         db.update_workflow_run = AsyncMock()
         cc.bind_workflow_run = AsyncMock()
@@ -341,7 +341,7 @@ async def test_failed_dispatch_releases_the_slot_it_took():
     ):
         rl.pool_slot_address = RateLimiter.pool_slot_address
         rl.release_from_number = AsyncMock()
-        db.get_workflow_by_id = AsyncMock(return_value=SimpleNamespace(id=10))
+        db.get_workflow = AsyncMock(return_value=SimpleNamespace(id=10))
         db.create_workflow_run = AsyncMock(side_effect=RuntimeError("db down"))
         cc.release_slot = AsyncMock()
 

@@ -115,7 +115,7 @@ from pipecat.services.speechmatics.stt import (
     SpeechmaticsSTTService,
     SpeechmaticsSTTSettings,
 )
-from pipecat.services.xai.tts import XAIHttpTTSService, XAITTSSettings
+from pipecat.services.xai.tts import XAITTSService, XAIWebsocketTTSSettings
 from pipecat.transcriptions.language import Language
 from pipecat.utils.text.xml_function_tag_filter import XMLFunctionTagFilter
 from pipecat_rumik import RumikTTSService, RumikTTSSettings
@@ -978,11 +978,9 @@ def create_tts_service(
                 pipecat_language = Language(language_code)
             except ValueError:
                 pipecat_language = Language.EN
-        return XAIHttpTTSService(
+        return XAITTSService(
             api_key=user_config.tts.api_key,
-            sample_rate=audio_config.transport_out_sample_rate,
-            encoding="pcm",
-            settings=XAITTSSettings(
+            settings=XAIWebsocketTTSSettings(
                 voice=voice,
                 language=pipecat_language,
             ),

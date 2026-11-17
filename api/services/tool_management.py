@@ -22,6 +22,7 @@ from api.schemas.tool import (
     ToolResponse,
     ToolTestResponse,
 )
+from api.services.organization_preferences import external_pbx_integrations_enabled
 from api.services.posthog_client import capture_event
 from api.services.workflow.mcp_tool_session import discover_mcp_tools
 from api.services.workflow.tools.custom_tool import (
@@ -125,6 +126,41 @@ async def validate_tool_credential_references(
             )
 
 
+async def validate_external_pbx_tool_definition(
+    definition: dict[str, Any],
+    *,
+    organization_id: int,
+    existing_definition: Optional[dict[str, Any]] = None,
+) -> None:
+    """Enforce the org feature gate for context-to-in-group routing."""
+
+    config = definition.get("config")
+    existing_config = (existing_definition or {}).get("config")
+    uses_external_pbx = (
+        isinstance(config, dict)
+        and config.get("destination_source") == "context_mapping"
+    )
+    existing_uses_external_pbx = (
+        isinstance(existing_config, dict)
+        and existing_config.get("destination_source") == "context_mapping"
+    )
+    if not uses_external_pbx and not existing_uses_external_pbx:
+        return
+    if await external_pbx_integrations_enabled(organization_id):
+        return
+    if isinstance(existing_config, dict) and existing_config == config:
+        # Preserve a hidden existing mapping while the feature is disabled.
+        return
+    raise ToolManagementError(
+        "external_pbx_feature_disabled",
+        (
+            "External PBX integrations are disabled for this organization. "
+            "Enable them in Platform Settings before configuring in-group routing."
+        ),
+        status_code=403,
+    )
+
+
 async def populate_discovered_tools(
     definition: dict[str, Any], *, organization_id: int
 ) -> dict[str, Any]:
@@ -174,6 +210,9 @@ async def create_tool_for_user(
         )
 
     definition = request.definition.model_dump()
+    await validate_external_pbx_tool_definition(
+        definition, organization_id=user.selected_organization_id
+    )
     await validate_tool_credential_references(
         definition, organization_id=user.selected_organization_id
     )
@@ -381,6 +420,16 @@ async def update_tool_for_user(
         )
 
     if definition is not None:
+        existing_tool = await db_client.get_tool_by_uuid(
+            tool_uuid,
+            user.selected_organization_id,
+            include_archived=True,
+        )
+        await validate_external_pbx_tool_definition(
+            definition,
+            organization_id=user.selected_organization_id,
+            existing_definition=existing_tool.definition if existing_tool else None,
+        )
         await validate_tool_credential_references(
             definition, organization_id=user.selected_organization_id
         )

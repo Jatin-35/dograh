@@ -117,6 +117,7 @@
               "integrations/telephony/vobiz",
               "integrations/telephony/voicelink",
               "integrations/telephony/asterisk-ari",
+              "integrations/telephony/vicidial",
               "integrations/telephony/webhooks",
               "integrations/telephony/agent-stream",
               "integrations/telephony/custom"

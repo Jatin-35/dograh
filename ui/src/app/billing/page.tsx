@@ -29,7 +29,9 @@ import {
 } from "@/components/ui/table";
 import { WalletLedgerSection } from "@/components/wallet/WalletLedgerSection";
 import { useAppConfig } from "@/context/AppConfigContext";
+import { useOrganizationTimezone } from "@/hooks/useOrganizationTimezone";
 import { useAuth } from "@/lib/auth";
+import { formatDateTime } from "@/lib/dateTime";
 
 const LEDGER_PAGE_SIZE = 50;
 
@@ -50,16 +52,6 @@ const formatAmount = (amountMinor?: number | null, currency?: string | null) => 
         currency: currency || "USD",
     }).format(amountMinor / 100);
 };
-
-const formatDate = (value: string) => (
-    new Date(value).toLocaleString(undefined, {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-    })
-);
 
 const metricLabels: Record<string, string> = {
     voice_minutes: "Voice usage",
@@ -116,6 +108,7 @@ export default function BillingPage() {
     const searchParams = useSearchParams();
     const auth = useAuth();
     const { config, loading: configLoading } = useAppConfig();
+    const organizationTimezone = useOrganizationTimezone();
     const [credits, setCredits] = useState<MpsBillingCreditsResponse | null>(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -324,7 +317,9 @@ export default function BillingPage() {
                                             const billableQuantity = formatBillableQuantity(entry);
                                             return (
                                                 <TableRow key={entry.id}>
-                                                    <TableCell>{formatDate(entry.created_at)}</TableCell>
+                                                    <TableCell>
+                                                        {formatDateTime(entry.created_at, organizationTimezone)}
+                                                    </TableCell>
                                                     <TableCell>
                                                         <div className="flex flex-col gap-1">
                                                             <span className="font-medium">{getLedgerEntryLabel(entry)}</span>

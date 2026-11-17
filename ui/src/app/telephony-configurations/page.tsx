@@ -49,6 +49,8 @@ import { TELEPHONY_OVERVIEW_DOC_URL } from "@/constants/documentation";
 import { useTelephonyConfigWarnings } from "@/context/TelephonyConfigWarningsContext";
 import { detailFromError } from "@/lib/apiError";
 import { useAuth } from "@/lib/auth";
+import { copyTextToClipboard } from "@/lib/clipboard";
+
 export default function TelephonyConfigurationsPage() {
   const { user, getAccessToken, loading: authLoading } = useAuth();
   const {
@@ -263,8 +265,7 @@ export default function TelephonyConfigurationsPage() {
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
-                          navigator.clipboard
-                            .writeText(String(item.id))
+                          copyTextToClipboard(String(item.id))
                             .then(() => toast.success("Configuration ID copied"))
                             .catch(() => toast.error("Failed to copy ID"));
                         }}

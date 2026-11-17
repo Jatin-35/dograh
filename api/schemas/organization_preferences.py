@@ -8,3 +8,4 @@ class OrganizationPreferences(BaseModel):
     # navigation. Unset means hidden. Hiding it only removes it from view:
     # tools already built with it keep running on calls.
     show_custom_tools: bool | None = None
+    external_pbx_integrations_enabled: bool = False

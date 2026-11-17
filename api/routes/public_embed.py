@@ -54,6 +54,7 @@ from api.services.workflow.text_chat_session_service import (
     TextChatSessionRevisionConflictError,
 )
 from api.services.workflow.text_chat_stream import TextChatEventStreamResponse
+from api.services.workflow.run_creation import prepare_workflow_run_inputs
 
 router = APIRouter(prefix="/public/embed")
 
@@ -386,6 +387,12 @@ async def _initialize_embed_session(
                 # Embed visitors initiate the voice call into the workflow.
                 "direction": CallType.INBOUND.value,
             }
+        workflow = await db_client.get_workflow(
+            embed_token.workflow_id, organization_id=embed_token.organization_id
+        )
+        if not workflow:
+            raise ValueError("Workflow not found")
+        run_inputs = await prepare_workflow_run_inputs(db_client, workflow)
         workflow_run = await db_client.create_workflow_run(
             name=name,
             workflow_id=embed_token.workflow_id,
@@ -394,6 +401,7 @@ async def _initialize_embed_session(
             organization_id=embed_token.organization_id,
             call_type=CallType.INBOUND,
             initial_context=initial_context,
+            definition_id=run_inputs.definition_id,
         )
         if is_chat:
             workflow_run = await db_client.update_workflow_run(

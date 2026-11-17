@@ -16,7 +16,6 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from pipecat.frames.frames import InputAudioRawFrame
-from pipecat.tests import ContextCapturingMockLLM, MockLLMService, MockTTSService
 from pipecat.tests.mock_transport import MockTransport
 from pipecat.transports.base_transport import TransportParams
 from sqlalchemy import select, update
@@ -32,8 +31,13 @@ from api.services.pipecat.audio_config import create_audio_config
 from api.services.pipecat.run_pipeline import _run_pipeline
 from api.services.pipecat.soniox_stt import DograhSonioxSTTService
 from api.services.pipecat.worker_runner import wait_for_pipeline_worker_started
+from api.services.workflow.run_creation import prepare_workflow_run_inputs
 from api.tests.integrations import _run_pipeline_helpers as helpers
-from api.tests.integrations.test_run_pipeline_turn_taking import _definition, _speech_frames
+from api.tests.integrations.test_run_pipeline_turn_taking import (
+    _definition,
+    _speech_frames,
+)
+from pipecat.tests import ContextCapturingMockLLM, MockLLMService, MockTTSService
 
 HARD_TIMEOUT_SECONDS = 45.0
 
@@ -139,12 +143,18 @@ async def _soniox_agent(db_session, async_session, suffix, **stt_settings):
             json={"workflow_configurations": {"dictionary": "Think Gas, BP number, PNG"}},
         )
     assert resp.status_code == 200, resp.text
+    loaded = await db_session.get_workflow(
+        workflow.id, organization_id=workflow.organization_id
+    )
+    run_inputs = await prepare_workflow_run_inputs(
+        db_session, loaded, use_draft=True
+    )
     run = await db_session.create_workflow_run(
         name=f"Soniox E2E {suffix} run",
         workflow_id=workflow.id,
         mode=WorkflowRunMode.SMALLWEBRTC.value,
         user_id=user.id,
-        use_draft=True,
+        definition_id=run_inputs.definition_id,
         organization_id=workflow.organization_id,
     )
     return run, user, workflow

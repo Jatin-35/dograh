@@ -24,6 +24,7 @@ from api.services.configuration.ai_model_configuration import (
 )
 from api.services.configuration.check_validity import UserConfigurationValidator
 from api.services.pipecat.service_factory import create_realtime_llm_service
+from api.services.workflow.run_creation import prepare_workflow_run_inputs
 from api.tests.integrations._run_pipeline_helpers import create_workflow_run_rows
 
 from .test_run_pipeline_greeting_interrupt import _definition
@@ -120,12 +121,18 @@ async def _rows(db_session, async_session, suffix):
 
 
 async def _draft_configs(db_session, workflow, user):
+    loaded = await db_session.get_workflow(
+        workflow.id, organization_id=workflow.organization_id
+    )
+    run_inputs = await prepare_workflow_run_inputs(
+        db_session, loaded, use_draft=True
+    )
     run = await db_session.create_workflow_run(
         name="interrupt settings check",
         workflow_id=workflow.id,
         mode="smallwebrtc",
         user_id=user.id,
-        use_draft=True,
+        definition_id=run_inputs.definition_id,
         organization_id=workflow.organization_id,
     )
     run = await db_session.get_workflow_run(

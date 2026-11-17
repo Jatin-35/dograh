@@ -19,7 +19,22 @@ import type { TransferNumberFormat } from "@/lib/transferNumberFormat";
 export type ToolCategory = "http_api" | "end_call" | "transfer_call" | "calculator" | "native" | "integration" | "mcp";
 
 export type EndCallMessageType = "none" | "custom" | "audio";
-export type TransferDestinationSource = "static" | "dynamic";
+export type TransferDestinationSource = "static" | "dynamic" | "context_mapping";
+
+export interface ContextDestinationRoute {
+    context_value: string;
+    destination: string;
+}
+
+export interface ContextDestinationRouteRow extends ContextDestinationRoute {
+    id: string;
+}
+
+export interface ContextDestinationMappingConfig {
+    context_path: string;
+    routes: ContextDestinationRoute[];
+    fallback_destination?: string | null;
+}
 
 export interface TransferResolverConfig {
     type: "http";
@@ -37,6 +52,7 @@ export interface ExtendedTransferCallConfig extends TransferCallConfig {
     resolver?: TransferResolverConfig | null;
     /** How the number is sent to the provider (see lib/transferNumberFormat). */
     number_format?: TransferNumberFormat;
+    context_mapping?: ContextDestinationMappingConfig | null;
 }
 
 export interface ToolCategoryConfig {
