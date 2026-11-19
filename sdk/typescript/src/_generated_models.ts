@@ -330,6 +330,22 @@ export interface components {
             disposition_codes: string[];
         };
         /**
+         * CallDispositionOption
+         * @description One business outcome the terminal classifier may select.
+         */
+        CallDispositionOption: {
+            /**
+             * Code
+             * @description Stable code recorded when this outcome is selected.
+             */
+            code: string;
+            /**
+             * Description
+             * @description Business criteria for selecting this disposition.
+             */
+            description: string;
+        };
+        /**
          * ContextDestinationMappingConfig
          * @description Resolve a transfer destination from gathered or initial context.
          *
@@ -1227,6 +1243,11 @@ export interface components {
              */
             timeout: number;
             /**
+             * Call Disposition
+             * @description Optional disposition to record after a successful transfer. When omitted, Dograh records its provider-specific transfer default.
+             */
+            call_disposition?: string | null;
+            /**
              * Parameters
              * @description Parameters the model may provide when calling this transfer tool, for example state, department, or transfer reason.
              */
@@ -1334,6 +1355,11 @@ export interface components {
              */
             noise_reduction: "off" | "rnnoise";
             /**
+             * Call Dispositions
+             * @description Allowed business outcomes for terminal call classification. Each entry defines the exact stored code and the criteria for selecting it.
+             */
+            call_dispositions?: components["schemas"]["CallDispositionOption"][];
+            /**
              * Text Chat Inactivity Timeout Seconds
              * @default 1800
              */
@@ -1415,6 +1441,7 @@ export interface components {
 export type AmbientNoiseConfigurationDefaults = components['schemas']['AmbientNoiseConfigurationDefaults'];
 export type CalculatorToolDefinition = components['schemas']['CalculatorToolDefinition'];
 export type CallDispositionCodes = components['schemas']['CallDispositionCodes'];
+export type CallDispositionOption = components['schemas']['CallDispositionOption'];
 export type ContextDestinationMappingConfig = components['schemas']['ContextDestinationMappingConfig'];
 export type ContextDestinationRoute = components['schemas']['ContextDestinationRoute'];
 export type ContextDestinationRule = components['schemas']['ContextDestinationRule'];

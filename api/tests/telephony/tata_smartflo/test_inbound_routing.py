@@ -41,8 +41,10 @@ def _request(payload: dict):
 
 
 def _route(org_id: int = 5, config_id: int = 11, workflow_id: int = 7):
-    config = SimpleNamespace(id=config_id, organization_id=org_id)
-    phone = SimpleNamespace(id=21, inbound_workflow_id=workflow_id)
+    config = SimpleNamespace(
+        id=config_id, organization_id=org_id, name="SmartFlo", credentials={}
+    )
+    phone = SimpleNamespace(id=21, inbound_workflow_id=workflow_id, address=DID)
     return config, phone
 
 

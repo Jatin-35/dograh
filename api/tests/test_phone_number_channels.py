@@ -380,11 +380,15 @@ async def test_campaign_concurrency_limit_counts_channels_not_numbers():
     from api.routes import campaign as campaign_routes
 
     with patch.object(campaign_routes, "db_client") as db:
-        db.get_default_telephony_configuration = AsyncMock(
+        # The campaign's own telephony configuration (upstream v1.46 trunks).
+        db.get_telephony_configuration_for_org = AsyncMock(
             return_value=SimpleNamespace(id=42)
         )
         db.get_active_channel_capacity_for_config = AsyncMock(return_value={"+911": 10})
-        assert await campaign_routes._get_from_numbers_count(5) == 10
+        assert await campaign_routes._get_from_numbers_count(5, 42) == 10
+        db.get_active_channel_capacity_for_config.assert_awaited_once_with(42)
+        # No configuration selected: no caller-ID cap to apply.
+        assert await campaign_routes._get_from_numbers_count(5, None) == 0
 
 
 # ---------------------------------------------------------------------------

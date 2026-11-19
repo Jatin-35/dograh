@@ -146,7 +146,6 @@ SPEC = ProviderSpec(
     # SmartFlo streams 8 kHz mu-law; see SMARTFLO_WIRE_SAMPLE_RATE.
     transport_sample_rate=8000,
     config_request_cls=TataSmartfloConfigurationRequest,
-    config_response_cls=TataSmartfloConfigurationResponse,
     ui_metadata=_UI_METADATA,
     # Inbound webhooks are matched to a stored config by login id; SmartFlo has
     # no separate account-id concept exposed on the webhook payload.

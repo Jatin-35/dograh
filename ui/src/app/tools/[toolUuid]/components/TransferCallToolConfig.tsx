@@ -55,6 +55,8 @@ export interface TransferCallToolConfigProps {
     recordings?: RecordingResponseSchema[];
     timeout?: number;
     onTimeoutChange: (timeout: number) => void;
+    callDisposition: string;
+    onCallDispositionChange: (disposition: string) => void;
     resolverUrl: string;
     onResolverUrlChange: (url: string) => void;
     resolverCredentialUuid: string;
@@ -95,6 +97,8 @@ export function TransferCallToolConfig({
     recordings = [],
     timeout,
     onTimeoutChange,
+    callDisposition,
+    onCallDispositionChange,
     resolverUrl,
     onResolverUrlChange,
     resolverCredentialUuid,
@@ -252,6 +256,22 @@ export function TransferCallToolConfig({
                     <Label className="text-xs text-muted-foreground">
                         Default: 30 seconds
                     </Label>
+                </div>
+
+                <div className="grid gap-2 pt-4 border-t">
+                    <Label htmlFor="transfer-call-disposition">
+                        Call Disposition After Successful Transfer
+                    </Label>
+                    <Label className="text-xs text-muted-foreground">
+                        Optional. This value is recorded only when the transfer succeeds. Leave blank to use the default transfer disposition.
+                    </Label>
+                    <Input
+                        id="transfer-call-disposition"
+                        value={callDisposition}
+                        onChange={(e) => onCallDispositionChange(e.target.value)}
+                        placeholder="e.g., transferred_to_sales"
+                        maxLength={64}
+                    />
                 </div>
 
                 <div className="grid gap-4 pt-4 border-t">

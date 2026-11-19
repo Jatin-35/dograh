@@ -1,5 +1,6 @@
 import "./globals.css";
 
+import { GoogleTagManager } from "@next/third-parties/google";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Suspense } from "react";
@@ -7,6 +8,7 @@ import { Suspense } from "react";
 import ChatwootWidget from "@/components/ChatwootWidget";
 import AppLayout from "@/components/layout/AppLayout";
 import { ClientDomainGuard } from "@/components/layout/ClientDomainGuard";
+import MetaPixel from "@/components/MetaPixel";
 import PostHogIdentify from "@/components/PostHogIdentify";
 import { SentryErrorBoundary } from "@/components/SentryErrorBoundary";
 import SpinLoader from "@/components/SpinLoader";
@@ -40,6 +42,8 @@ export default function RootLayout({
 }: {
   children: React.ReactNode
 }) {
+  const gtmId = process.env.NEXT_PUBLIC_GTM_ID?.trim();
+  const metaPixelId = process.env.NEXT_PUBLIC_META_PIXEL_ID?.trim();
 
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
@@ -67,6 +71,8 @@ export default function RootLayout({
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        {gtmId ? <GoogleTagManager gtmId={gtmId} /> : null}
+        {metaPixelId ? <MetaPixel pixelId={metaPixelId} /> : null}
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
           <SentryErrorBoundary>
             <AuthProvider>

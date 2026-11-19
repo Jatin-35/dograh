@@ -105,7 +105,6 @@ SPEC = ProviderSpec(
     transport_sample_rate=8000,
     config_request_cls=VoiceLinkConfigurationRequest,
     ui_metadata=_UI_METADATA,
-    config_response_cls=VoiceLinkConfigurationResponse,
     account_id_credential_field="username",
 )
 

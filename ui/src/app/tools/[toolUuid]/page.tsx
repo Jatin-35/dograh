@@ -14,6 +14,7 @@ import type {
     HttpApiToolDefinition,
     RecordingResponseSchema,
     ToolResponse,
+    TransferCallConfig,
     UpdateToolRequest,
 } from "@/client/types.gen";
 import {
@@ -51,7 +52,6 @@ import {
     createMcpDefinition,
     DEFAULT_END_CALL_REASON_DESCRIPTION,
     type EndCallMessageType,
-    type ExtendedTransferCallConfig,
     getCategoryConfig,
     getToolTypeLabel,
     MCP_URL_PATTERN,
@@ -140,6 +140,7 @@ export default function ToolDetailPage() {
     const [transferMessageType, setTransferMessageType] = useState<EndCallMessageType>("none");
     const [transferTimeout, setTransferTimeout] = useState(30);
     const [transferNumberFormat, setTransferNumberFormat] = useState<TransferNumberFormat>("auto");
+    const [transferCallDisposition, setTransferCallDisposition] = useState("");
     const [transferAudioRecordingId, setTransferAudioRecordingId] = useState("");
     const [transferResolverUrl, setTransferResolverUrl] = useState("");
     const [transferResolverCredentialUuid, setTransferResolverCredentialUuid] = useState("");
@@ -228,7 +229,7 @@ export default function ToolDetailPage() {
             }
         } else if (tool.category === "transfer_call") {
             // Populate transfer call specific fields
-            const config = tool.definition?.config as ExtendedTransferCallConfig | undefined;
+            const config = tool.definition?.config as TransferCallConfig | undefined;
             if (config) {
                 const resolver = config.resolver || undefined;
                 setTransferDestinationSource(config.destination_source || (resolver ? "dynamic" : "static"));
@@ -238,6 +239,7 @@ export default function ToolDetailPage() {
                 setTransferAudioRecordingId(config.audioRecordingId || "");
                 setTransferTimeout(config.timeout ?? 30);
                 setTransferNumberFormat((config.number_format as TransferNumberFormat | undefined) ?? "auto");
+                setTransferCallDisposition(config.call_disposition || "");
                 setTransferResolverUrl(resolver?.url || "");
                 setTransferResolverCredentialUuid(resolver?.credential_uuid || "");
                 setTransferResolverHeaders(headersToRows(resolver?.headers));
@@ -273,6 +275,7 @@ export default function ToolDetailPage() {
                 setTransferAudioRecordingId("");
                 setTransferTimeout(30);
                 setTransferNumberFormat("auto");
+                setTransferCallDisposition("");
                 setTransferResolverUrl("");
                 setTransferResolverCredentialUuid("");
                 setTransferResolverHeaders([]);
@@ -574,7 +577,7 @@ export default function ToolDetailPage() {
                     (p) => p.name.trim() && p.valueTemplate.trim()
                 );
 
-                const transferConfig: ExtendedTransferCallConfig = {
+                const transferConfig: TransferCallConfig = {
                     destination_source: transferDestinationSource,
                     destination: transferDestinationSource === "static" ? normalizedTransferDestination : "",
                     messageType: transferMessageType,
@@ -582,6 +585,7 @@ export default function ToolDetailPage() {
                     audioRecordingId: transferMessageType === "audio" ? transferAudioRecordingId || undefined : undefined,
                     timeout: transferTimeout,
                     number_format: transferNumberFormat,
+                    call_disposition: transferCallDisposition.trim() || undefined,
                     resolver: transferDestinationSource === "dynamic"
                         ? {
                             type: "http",
@@ -952,6 +956,8 @@ const data = await response.json();`;
                             onTimeoutChange={setTransferTimeout}
                             numberFormat={transferNumberFormat}
                             onNumberFormatChange={setTransferNumberFormat}
+                            callDisposition={transferCallDisposition}
+                            onCallDispositionChange={setTransferCallDisposition}
                             resolverUrl={transferResolverUrl}
                             onResolverUrlChange={setTransferResolverUrl}
                             resolverCredentialUuid={transferResolverCredentialUuid}

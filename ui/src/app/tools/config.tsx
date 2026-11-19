@@ -12,12 +12,9 @@ import type {
     EndCallToolDefinition,
     HttpApiToolDefinition,
     McpToolDefinition,
-    PresetToolParameter,
-    ToolParameter,
     TransferCallConfig,
     TransferCallToolDefinition,
 } from "@/client/types.gen";
-import type { TransferNumberFormat } from "@/lib/transferNumberFormat";
 import { createUuid } from "@/lib/uuid";
 
 export type ToolCategory = "http_api" | "end_call" | "transfer_call" | "calculator" | "native" | "integration" | "mcp";
@@ -78,25 +75,6 @@ export function ruleRowsToContextMappingRules(
             destination: route.destination.trim(),
         })),
     }));
-}
-
-export interface TransferResolverConfig {
-    type: "http";
-    url: string;
-    headers?: Record<string, string> | null;
-    credential_uuid?: string | null;
-    timeout_ms: number;
-    wait_message?: string | null;
-    parameters?: ToolParameter[] | null;
-    preset_parameters?: PresetToolParameter[] | null;
-}
-
-export interface ExtendedTransferCallConfig extends Omit<TransferCallConfig, "context_mapping"> {
-    destination_source?: TransferDestinationSource;
-    resolver?: TransferResolverConfig | null;
-    /** How the number is sent to the provider (see lib/transferNumberFormat). */
-    number_format?: TransferNumberFormat;
-    context_mapping?: ContextDestinationMappingConfig | null;
 }
 
 export interface ToolCategoryConfig {

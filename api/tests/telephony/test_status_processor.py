@@ -13,7 +13,9 @@ from api.tasks.function_names import FunctionNames
 
 
 @pytest.mark.asyncio
-async def test_initialized_no_answer_enqueues_workflow_completion():
+async def test_initialized_no_answer_enqueues_workflow_completion(
+    no_disposition_mapping,
+):
     workflow_run = SimpleNamespace(
         id=123,
         campaign_id=None,
@@ -22,6 +24,7 @@ async def test_initialized_no_answer_enqueues_workflow_completion():
         is_completed=False,
         logs={"telephony_status_callbacks": []},
         gathered_context={"call_tags": ["existing"]},
+        workflow=SimpleNamespace(organization_id=7),
     )
     status = StatusCallbackRequest(
         call_id="call-123",
@@ -58,6 +61,10 @@ async def test_initialized_no_answer_enqueues_workflow_completion():
         "call_tags": ["existing", "not_connected", "telephony_no-answer"],
         "call_disposition": "no-answer",
         "mapped_call_disposition": "no-answer",
+        # No conversation happened, so how the call ended is also the whole
+        # outcome. Recorded so `call_status` covers every run, not just the
+        # ones that reached the engine.
+        "call_status": "no-answer",
         "call_id": "call-123",
     }
     mock_enqueue.assert_awaited_once_with(
@@ -67,7 +74,9 @@ async def test_initialized_no_answer_enqueues_workflow_completion():
 
 
 @pytest.mark.asyncio
-async def test_running_terminal_status_does_not_enqueue_workflow_completion():
+async def test_running_terminal_status_does_not_enqueue_workflow_completion(
+    no_disposition_mapping,
+):
     workflow_run = SimpleNamespace(
         id=456,
         campaign_id=None,
@@ -76,6 +85,7 @@ async def test_running_terminal_status_does_not_enqueue_workflow_completion():
         is_completed=False,
         logs={"telephony_status_callbacks": []},
         gathered_context={"call_tags": ["not_connected"]},
+        workflow=SimpleNamespace(organization_id=7),
     )
     status = StatusCallbackRequest(
         call_id="call-456",
@@ -118,6 +128,7 @@ def _campaign_run(gathered_context):
         is_completed=False,
         logs={"telephony_status_callbacks": []},
         gathered_context=gathered_context,
+        workflow=SimpleNamespace(organization_id=7),
     )
 
 
@@ -161,7 +172,7 @@ async def _process_campaign_no_answer(workflow_run, *, wins_claim=True):
 
 
 @pytest.mark.asyncio
-async def test_first_campaign_no_answer_schedules_one_retry():
+async def test_first_campaign_no_answer_schedules_one_retry(no_disposition_mapping):
     publisher, breaker, dispatcher, claim = await _process_campaign_no_answer(
         _campaign_run({})
     )
@@ -178,7 +189,7 @@ async def test_first_campaign_no_answer_schedules_one_retry():
 
 
 @pytest.mark.asyncio
-async def test_repeated_not_connected_report_schedules_no_second_retry():
+async def test_repeated_not_connected_report_schedules_no_second_retry(no_disposition_mapping):
     # VoiceLink reports one unanswered call twice (call.failed or call.ended,
     # then call.completed); the second must not queue a duplicate retry.
     already_reported = _campaign_run(
@@ -198,7 +209,7 @@ async def test_repeated_not_connected_report_schedules_no_second_retry():
 
 
 @pytest.mark.asyncio
-async def test_concurrent_report_that_loses_the_claim_schedules_no_retry():
+async def test_concurrent_report_that_loses_the_claim_schedules_no_retry(no_disposition_mapping):
     # Both reports read the run before either tagged it; the atomic claim
     # lets only one of them act.
     publisher, breaker, dispatcher, claim = await _process_campaign_no_answer(

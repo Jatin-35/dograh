@@ -81,7 +81,7 @@ export type AriConfigurationRequest = {
     /**
      * App Name
      *
-     * Stasis application name registered in Asterisk
+     * ARI username, matching the ari.conf section name
      */
     app_name: string;
     /**
@@ -100,45 +100,6 @@ export type AriConfigurationRequest = {
      * Optional external PBX connected through this Asterisk instance
      */
     external_pbx?: VicidialExternalPbxConfiguration | null;
-    /**
-     * From Numbers
-     *
-     * List of SIP extensions/numbers for outbound calls (optional)
-     */
-    from_numbers?: Array<string>;
-};
-
-/**
- * ARIConfigurationResponse
- *
- * Response schema for ARI configuration with masked sensitive fields.
- */
-export type AriConfigurationResponse = {
-    /**
-     * Provider
-     */
-    provider?: 'ari';
-    /**
-     * Ari Endpoint
-     */
-    ari_endpoint: string;
-    /**
-     * App Name
-     */
-    app_name: string;
-    /**
-     * App Password
-     */
-    app_password: string;
-    /**
-     * Ws Client Name
-     */
-    ws_client_name?: string;
-    external_pbx?: VicidialExternalPbxConfiguration | null;
-    /**
-     * From Numbers
-     */
-    from_numbers: Array<string>;
 };
 
 /**
@@ -1145,6 +1106,26 @@ export type CallDispositionCodes = {
 };
 
 /**
+ * CallDispositionOption
+ *
+ * One business outcome the terminal classifier may select.
+ */
+export type CallDispositionOption = {
+    /**
+     * Code
+     *
+     * Stable code recorded when this outcome is selected.
+     */
+    code: string;
+    /**
+     * Description
+     *
+     * Business criteria for selecting this disposition.
+     */
+    description: string;
+};
+
+/**
  * CallReportResponse
  */
 export type CallReportResponse = {
@@ -1853,96 +1834,6 @@ export type CloudonixConfigurationRequest = {
      * Cloudonix Voice Application name. The application's url is updated when inbound workflows are attached to numbers on this domain. If omitted, an application is auto-created on save and its name is stored on the configuration.
      */
     application_name?: string | null;
-    /**
-     * Outbound Trunks
-     *
-     * Outbound SIP trunks Dograh creates and keeps in sync on this Cloudonix domain. Trunks dropped from the list are deactivated. The UI manages a single trunk today; the list is the storage shape so more can be added without a schema change.
-     */
-    outbound_trunks?: Array<CloudonixOutboundTrunkConfiguration>;
-    /**
-     * From Numbers
-     *
-     * List of Cloudonix phone numbers (optional)
-     */
-    from_numbers?: Array<string>;
-};
-
-/**
- * CloudonixConfigurationResponse
- *
- * Response schema for Cloudonix configuration with masked sensitive fields.
- *
- * Server-managed credential fields (``domain_uuid``, ``provisioning_id``,
- * ``managed_by``, the application and trunk UUIDs) are stripped before this
- * is built — they are Dograh's bookkeeping, not something a client sends
- * back or renders.
- */
-export type CloudonixConfigurationResponse = {
-    /**
-     * Provider
-     */
-    provider?: 'cloudonix';
-    /**
-     * Bearer Token
-     */
-    bearer_token: string;
-    /**
-     * Domain Id
-     */
-    domain_id: string;
-    /**
-     * Application Name
-     */
-    application_name?: string | null;
-    /**
-     * Outbound Trunks
-     */
-    outbound_trunks?: Array<CloudonixOutboundTrunkConfiguration>;
-    /**
-     * From Numbers
-     */
-    from_numbers: Array<string>;
-};
-
-/**
- * CloudonixOutboundTrunkConfiguration
- *
- * Dograh-managed Cloudonix outbound SIP trunk.
- *
- * Only the trunk name and the SIP domain are operator-supplied. The remote
- * peer (IP, port, transport) is derived from ``region`` when the Cloudonix
- * payload is built, so the trunk always terminates on the same regional edge
- * the customer sees under SIP connectivity.
- */
-export type CloudonixOutboundTrunkConfiguration = {
-    /**
-     * Id
-     *
-     * Dograh-owned identifier for this trunk, minted on first save. Stable across renames, and the key the Cloudonix trunk UUID is stored under. Clients round-trip it; they never invent it.
-     */
-    id?: string | null;
-    /**
-     * Enabled
-     */
-    enabled?: boolean;
-    /**
-     * Name
-     *
-     * Unique name for the Cloudonix voice trunk. Letters, digits and hyphens only — Cloudonix trunk names cannot contain spaces.
-     */
-    name?: string | null;
-    /**
-     * Region
-     *
-     * Cloudonix region whose SIP edge terminates this trunk; sets the remote IP, port and transport.
-     */
-    region?: string | null;
-    /**
-     * Sip Domain
-     *
-     * Domain Cloudonix puts in both the SIP To header and the SIP Request-URI for calls on this trunk.
-     */
-    sip_domain?: string | null;
 };
 
 /**
@@ -2659,6 +2550,12 @@ export type DefaultConfigurationsResponse = {
         [key: string]: string;
     };
     workflow_configurations: WorkflowConfigurationDefaults;
+    /**
+     * Default Call Dispositions
+     *
+     * Built-in suggestions for call-disposition extraction. They do not enable extraction until saved in workflow_configurations.call_dispositions.
+     */
+    default_call_dispositions: Array<CallDispositionOption>;
     text_chat_inactivity_timeout_constraints: TextChatInactivityTimeoutConstraints;
     widget_text_defaults: WidgetTexts;
 };
@@ -2709,6 +2606,32 @@ export type DisplayOptions = {
     hide?: {
         [key: string]: Array<unknown>;
     } | null;
+};
+
+/**
+ * DispositionCodesResponse
+ *
+ * Disposition codes selectable in org-wide run filters.
+ */
+export type DispositionCodesResponse = {
+    /**
+     * Codes
+     *
+     * Every code that can appear in `gathered_context.mapped_call_disposition`: the platform's built-in dispositions plus any custom mapped codes this organization's runs have produced.
+     */
+    codes: Array<string>;
+    /**
+     * End Task Reason Codes
+     *
+     * Disposition codes defined by Pipecat's EndTaskReason enum.
+     */
+    end_task_reason_codes: Array<string>;
+    /**
+     * System Codes
+     *
+     * Only the platform's built-in dispositions, without the custom codes this organization's runs have produced. This is the set a disposition mapping translates *from*, so the mapping editor seeds its rows here: `codes` also contains mapped codes, which are the targets of a mapping rather than its sources.
+     */
+    system_codes: Array<string>;
 };
 
 /**
@@ -5777,6 +5700,18 @@ export type OrganizationPreferences = {
      * External Pbx Integrations Enabled
      */
     external_pbx_integrations_enabled?: boolean;
+    /**
+     * Disposition Mapping Enabled
+     */
+    disposition_mapping_enabled?: boolean;
+    /**
+     * Disposition Mapping
+     *
+     * Dograh disposition -> the code this organization uses for it. Applied when writing `gathered_context.mapped_call_disposition`, so webhooks, run filters, reports and external-PBX write-backs all read the organization's own vocabulary. Dispositions absent from the mapping pass through unchanged.
+     */
+    disposition_mapping?: {
+        [key: string]: string;
+    };
 };
 
 /**
@@ -5837,6 +5772,10 @@ export type PhoneNumberCreateRequest = {
      * Inbound Workflow Id
      */
     inbound_workflow_id?: number | null;
+    /**
+     * Telephony Trunk Id
+     */
+    telephony_trunk_id?: number | null;
     /**
      * Is Active
      */
@@ -5904,6 +5843,10 @@ export type PhoneNumberResponse = {
      */
     inbound_workflow_name?: string | null;
     /**
+     * Telephony Trunk Id
+     */
+    telephony_trunk_id?: number | null;
+    /**
      * Is Active
      */
     is_active: boolean;
@@ -5952,6 +5895,14 @@ export type PhoneNumberUpdateRequest = {
      */
     clear_inbound_workflow?: boolean;
     /**
+     * Telephony Trunk Id
+     */
+    telephony_trunk_id?: number | null;
+    /**
+     * Clear Trunk
+     */
+    clear_trunk?: boolean;
+    /**
      * Is Active
      */
     is_active?: boolean | null;
@@ -5999,40 +5950,6 @@ export type PlivoConfigurationRequest = {
      * Plivo Application ID. The application's answer_url is updated when inbound workflows are attached to numbers on this account. If omitted, an application is auto-created on save and its id is stored on the configuration.
      */
     application_id?: string | null;
-    /**
-     * From Numbers
-     *
-     * List of Plivo phone numbers
-     */
-    from_numbers?: Array<string>;
-};
-
-/**
- * PlivoConfigurationResponse
- *
- * Response schema for Plivo configuration with masked sensitive fields.
- */
-export type PlivoConfigurationResponse = {
-    /**
-     * Provider
-     */
-    provider?: 'plivo';
-    /**
-     * Auth Id
-     */
-    auth_id: string;
-    /**
-     * Auth Token
-     */
-    auth_token: string;
-    /**
-     * Application Id
-     */
-    application_id?: string | null;
-    /**
-     * From Numbers
-     */
-    from_numbers: Array<string>;
 };
 
 /**
@@ -6274,6 +6191,33 @@ export type PropertySpec = {
  * `<PropertyInput>` switch and (where relevant) the SDK codegen template.
  */
 export type PropertyType = 'string' | 'number' | 'boolean' | 'options' | 'multi_options' | 'fixed_collection' | 'json' | 'tool_refs' | 'document_refs' | 'recording_ref' | 'credential_ref' | 'mention_textarea' | 'url';
+
+/**
+ * ProviderSetupChecklist
+ *
+ * A configuration's setup progress, as computed by its provider.
+ *
+ * ``ready_for_outbound`` is derived rather than reported independently so a
+ * provider cannot claim readiness while leaving a blocking step incomplete.
+ */
+export type ProviderSetupChecklist = {
+    /**
+     * Ready For Outbound
+     */
+    ready_for_outbound: boolean;
+    /**
+     * Outbound Blocked Reason
+     */
+    outbound_blocked_reason: string | null;
+    /**
+     * Steps
+     */
+    steps: Array<SetupStep>;
+    /**
+     * Docs Url
+     */
+    docs_url?: string | null;
+};
 
 /**
  * ProviderSyncStatus
@@ -7139,6 +7083,38 @@ export type SetEnvVarRequest = {
 };
 
 /**
+ * SetupStep
+ *
+ * One thing the customer must do before a configuration can carry calls.
+ *
+ * ``blocks_outbound`` separates "not done yet" from "outbound calls will
+ * fail". Inbound-only steps are reported so the checklist is complete
+ * without making them gate the Phone Call button.
+ */
+export type SetupStep = {
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Complete
+     */
+    complete: boolean;
+    /**
+     * Blocks Outbound
+     */
+    blocks_outbound?: boolean;
+};
+
+/**
  * SignupRequest
  */
 export type SignupRequest = {
@@ -7919,50 +7895,6 @@ export type TataSmartfloConfigurationRequest = {
 };
 
 /**
- * TataSmartfloConfigurationResponse
- *
- * Response schema for SmartFlo configuration with masked sensitive fields.
- */
-export type TataSmartfloConfigurationResponse = {
-    /**
-     * Provider
-     */
-    provider?: 'tata_smartflo';
-    /**
-     * Api Base
-     */
-    api_base?: string;
-    /**
-     * Email
-     */
-    email?: string | null;
-    /**
-     * Password
-     */
-    password?: string | null;
-    /**
-     * Api Token
-     */
-    api_token?: string | null;
-    /**
-     * Api Key
-     */
-    api_key?: string | null;
-    /**
-     * Connect Secret
-     */
-    connect_secret?: string | null;
-    /**
-     * Caller Id
-     */
-    caller_id?: string | null;
-    /**
-     * From Numbers
-     */
-    from_numbers?: Array<string>;
-};
-
-/**
  * TelephonyConfigWarningsResponse
  *
  * Aggregated telephony-configuration warning counts for the user's org.
@@ -8044,6 +7976,10 @@ export type TelephonyConfigurationDetail = {
      */
     provider: string;
     /**
+     * Connectivity
+     */
+    connectivity?: 'api' | 'sip';
+    /**
      * Is Default Outbound
      */
     is_default_outbound: boolean;
@@ -8066,6 +8002,15 @@ export type TelephonyConfigurationDetail = {
         [key: string]: unknown;
     };
     sip_connectivity?: SipConnectivityDetails | null;
+    setup_checklist?: ProviderSetupChecklist | null;
+    /**
+     * Supports Trunks
+     */
+    supports_trunks?: boolean;
+    /**
+     * Trunks
+     */
+    trunks?: Array<TrunkResponse>;
     /**
      * Created At
      */
@@ -8095,6 +8040,10 @@ export type TelephonyConfigurationListItem = {
      */
     provider: string;
     /**
+     * Connectivity
+     */
+    connectivity?: 'api' | 'sip';
+    /**
      * Is Default Outbound
      */
     is_default_outbound: boolean;
@@ -8115,6 +8064,14 @@ export type TelephonyConfigurationListItem = {
      */
     phone_number_count?: number;
     /**
+     * Is Ready For Outbound
+     */
+    is_ready_for_outbound?: boolean;
+    /**
+     * Outbound Blocked Reason
+     */
+    outbound_blocked_reason?: string | null;
+    /**
      * Created At
      */
     created_at: string;
@@ -8132,27 +8089,6 @@ export type TelephonyConfigurationListResponse = {
      * Configurations
      */
     configurations: Array<TelephonyConfigurationListItem>;
-};
-
-/**
- * TelephonyConfigurationResponse
- *
- * Top-level telephony configuration response.
- *
- * Keeps the per-provider field shape that the UI client depends on. When
- * the UI moves to metadata-driven forms, this can be replaced with a
- * flat discriminated union.
- */
-export type TelephonyConfigurationResponse = {
-    twilio?: TwilioConfigurationResponse | null;
-    plivo?: PlivoConfigurationResponse | null;
-    vonage?: VonageConfigurationResponse | null;
-    vobiz?: VobizConfigurationResponse | null;
-    voicelink?: VoiceLinkConfigurationResponse | null;
-    cloudonix?: CloudonixConfigurationResponse | null;
-    ari?: AriConfigurationResponse | null;
-    tata_smartflo?: TataSmartfloConfigurationResponse | null;
-    telnyx?: TelnyxConfigurationResponse | null;
 };
 
 /**
@@ -8203,6 +8139,10 @@ export type TelephonyProviderMetadata = {
      * Display Name
      */
     display_name: string;
+    /**
+     * Connectivity
+     */
+    connectivity?: 'api' | 'sip';
     /**
      * Fields
      */
@@ -8326,40 +8266,6 @@ export type TelnyxConfigurationRequest = {
      * Webhook public key from Mission Control Portal → Keys & Credentials → Public Key. Used to verify Telnyx webhook signatures.
      */
     webhook_public_key?: string | null;
-    /**
-     * From Numbers
-     *
-     * List of Telnyx phone numbers
-     */
-    from_numbers?: Array<string>;
-};
-
-/**
- * TelnyxConfigurationResponse
- *
- * Response schema for Telnyx configuration with masked sensitive fields.
- */
-export type TelnyxConfigurationResponse = {
-    /**
-     * Provider
-     */
-    provider?: 'telnyx';
-    /**
-     * Api Key
-     */
-    api_key: string;
-    /**
-     * Connection Id
-     */
-    connection_id?: string | null;
-    /**
-     * Webhook Public Key
-     */
-    webhook_public_key?: string | null;
-    /**
-     * From Numbers
-     */
-    from_numbers: Array<string>;
 };
 
 /**
@@ -8794,6 +8700,12 @@ export type TransferCallConfig = {
      */
     timeout?: number;
     /**
+     * Call Disposition
+     *
+     * Optional disposition to record after a successful transfer. When omitted, Dograh records its provider-specific transfer default.
+     */
+    call_disposition?: string | null;
+    /**
      * Parameters
      *
      * Parameters the model may provide when calling this transfer tool, for example state, department, or transfer reason.
@@ -8880,6 +8792,100 @@ export type TriggerCallResponse = {
 };
 
 /**
+ * TrunkCreateRequest
+ */
+export type TrunkCreateRequest = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Enabled
+     */
+    enabled?: boolean;
+    /**
+     * Settings
+     */
+    settings?: {
+        [key: string]: unknown;
+    };
+};
+
+/**
+ * TrunkListResponse
+ */
+export type TrunkListResponse = {
+    /**
+     * Trunks
+     */
+    trunks: Array<TrunkResponse>;
+};
+
+/**
+ * TrunkResponse
+ *
+ * One carrier path on a configuration.
+ *
+ * ``settings`` is the provider's own trunk schema (validated on write against
+ * ``ProviderSpec.trunk_settings_cls``). The provider-side identifier is
+ * Dograh's bookkeeping and is not exposed.
+ */
+export type TrunkResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Enabled
+     */
+    enabled: boolean;
+    /**
+     * Settings
+     */
+    settings: {
+        [key: string]: unknown;
+    };
+    /**
+     * Phone Number Count
+     */
+    phone_number_count?: number;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+};
+
+/**
+ * TrunkUpdateRequest
+ *
+ * Partial update — omitted fields keep their stored value.
+ */
+export type TrunkUpdateRequest = {
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Enabled
+     */
+    enabled?: boolean | null;
+    /**
+     * Settings
+     */
+    settings?: {
+        [key: string]: unknown;
+    } | null;
+};
+
+/**
  * TurnCredentialsResponse
  *
  * Response model for TURN credentials.
@@ -8926,43 +8932,9 @@ export type TwilioConfigurationRequest = {
      */
     auth_token: string;
     /**
-     * From Numbers
-     *
-     * List of Twilio phone numbers
-     */
-    from_numbers?: Array<string>;
-    /**
      * Amd Enabled
      *
      * Detect whether outbound calls are answered by a person or machine. Twilio may bill AMD as an additional per-call feature.
-     */
-    amd_enabled?: boolean;
-};
-
-/**
- * TwilioConfigurationResponse
- *
- * Response schema for Twilio configuration with masked sensitive fields.
- */
-export type TwilioConfigurationResponse = {
-    /**
-     * Provider
-     */
-    provider?: 'twilio';
-    /**
-     * Account Sid
-     */
-    account_sid: string;
-    /**
-     * Auth Token
-     */
-    auth_token: string;
-    /**
-     * From Numbers
-     */
-    from_numbers: Array<string>;
-    /**
-     * Amd Enabled
      */
     amd_enabled?: boolean;
 };
@@ -9566,40 +9538,6 @@ export type VobizConfigurationRequest = {
      * Vobiz Application ID. The application's answer_url is updated when inbound workflows are attached to numbers on this account. If omitted, an application is auto-created on save and its id is stored on the configuration.
      */
     application_id?: string | null;
-    /**
-     * From Numbers
-     *
-     * List of Vobiz phone numbers (E.164 without + prefix)
-     */
-    from_numbers?: Array<string>;
-};
-
-/**
- * VobizConfigurationResponse
- *
- * Response schema for Vobiz configuration with masked sensitive fields.
- */
-export type VobizConfigurationResponse = {
-    /**
-     * Provider
-     */
-    provider?: 'vobiz';
-    /**
-     * Auth Id
-     */
-    auth_id: string;
-    /**
-     * Auth Token
-     */
-    auth_token: string;
-    /**
-     * Application Id
-     */
-    application_id?: string | null;
-    /**
-     * From Numbers
-     */
-    from_numbers: Array<string>;
 };
 
 /**
@@ -9711,46 +9649,6 @@ export type VoiceLinkConfigurationRequest = {
 };
 
 /**
- * VoiceLinkConfigurationResponse
- *
- * Response schema for VoiceLink configuration with masked sensitive fields.
- */
-export type VoiceLinkConfigurationResponse = {
-    /**
-     * Provider
-     */
-    provider?: 'voicelink';
-    /**
-     * Api Base
-     */
-    api_base?: string;
-    /**
-     * Username
-     */
-    username?: string | null;
-    /**
-     * Password
-     */
-    password?: string | null;
-    /**
-     * Bearer Token
-     */
-    bearer_token?: string | null;
-    /**
-     * Did Number
-     */
-    did_number: string;
-    /**
-     * From Numbers
-     */
-    from_numbers: Array<string>;
-    /**
-     * Client Id
-     */
-    client_id?: string | null;
-};
-
-/**
  * VoicesResponse
  */
 export type VoicesResponse = {
@@ -9805,48 +9703,6 @@ export type VonageConfigurationRequest = {
      * Vonage signature secret used to verify signed webhooks
      */
     signature_secret?: string | null;
-    /**
-     * From Numbers
-     *
-     * List of Vonage phone numbers (without + prefix)
-     */
-    from_numbers?: Array<string>;
-};
-
-/**
- * VonageConfigurationResponse
- *
- * Response schema for Vonage configuration with masked sensitive fields.
- */
-export type VonageConfigurationResponse = {
-    /**
-     * Provider
-     */
-    provider?: 'vonage';
-    /**
-     * Application Id
-     */
-    application_id: string;
-    /**
-     * Api Key
-     */
-    api_key: string;
-    /**
-     * Api Secret
-     */
-    api_secret: string;
-    /**
-     * Private Key
-     */
-    private_key: string;
-    /**
-     * Signature Secret
-     */
-    signature_secret?: string | null;
-    /**
-     * From Numbers
-     */
-    from_numbers: Array<string>;
 };
 
 /**
@@ -10614,6 +10470,12 @@ export type WorkflowConfigurationDefaults = {
      * Noise Reduction
      */
     noise_reduction?: 'off' | 'rnnoise';
+    /**
+     * Call Dispositions
+     *
+     * Allowed business outcomes for terminal call classification. Each entry defines the exact stored code and the criteria for selecting it.
+     */
+    call_dispositions?: Array<CallDispositionOption>;
     /**
      * Text Chat Inactivity Timeout Seconds
      */
@@ -16610,6 +16472,45 @@ export type MigrateModelConfigurationV2ApiV1OrganizationsModelConfigurationsV2Mi
 
 export type MigrateModelConfigurationV2ApiV1OrganizationsModelConfigurationsV2MigratePostResponse = MigrateModelConfigurationV2ApiV1OrganizationsModelConfigurationsV2MigratePostResponses[keyof MigrateModelConfigurationV2ApiV1OrganizationsModelConfigurationsV2MigratePostResponses];
 
+export type GetDispositionCodesApiV1OrganizationsDispositionCodesGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/organizations/disposition-codes';
+};
+
+export type GetDispositionCodesApiV1OrganizationsDispositionCodesGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetDispositionCodesApiV1OrganizationsDispositionCodesGetError = GetDispositionCodesApiV1OrganizationsDispositionCodesGetErrors[keyof GetDispositionCodesApiV1OrganizationsDispositionCodesGetErrors];
+
+export type GetDispositionCodesApiV1OrganizationsDispositionCodesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: DispositionCodesResponse;
+};
+
+export type GetDispositionCodesApiV1OrganizationsDispositionCodesGetResponse = GetDispositionCodesApiV1OrganizationsDispositionCodesGetResponses[keyof GetDispositionCodesApiV1OrganizationsDispositionCodesGetResponses];
+
 export type GetPreferencesApiV1OrganizationsPreferencesGetData = {
     body?: never;
     headers?: {
@@ -16984,6 +16885,188 @@ export type ReactivateTelephonyConfigurationApiV1OrganizationsTelephonyConfigsCo
 
 export type ReactivateTelephonyConfigurationApiV1OrganizationsTelephonyConfigsConfigIdReactivatePostResponse = ReactivateTelephonyConfigurationApiV1OrganizationsTelephonyConfigsConfigIdReactivatePostResponses[keyof ReactivateTelephonyConfigurationApiV1OrganizationsTelephonyConfigsConfigIdReactivatePostResponses];
 
+export type ListTelephonyTrunksApiV1OrganizationsTelephonyConfigsConfigIdTrunksGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Config Id
+         */
+        config_id: number;
+    };
+    query?: never;
+    url: '/api/v1/organizations/telephony-configs/{config_id}/trunks';
+};
+
+export type ListTelephonyTrunksApiV1OrganizationsTelephonyConfigsConfigIdTrunksGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListTelephonyTrunksApiV1OrganizationsTelephonyConfigsConfigIdTrunksGetError = ListTelephonyTrunksApiV1OrganizationsTelephonyConfigsConfigIdTrunksGetErrors[keyof ListTelephonyTrunksApiV1OrganizationsTelephonyConfigsConfigIdTrunksGetErrors];
+
+export type ListTelephonyTrunksApiV1OrganizationsTelephonyConfigsConfigIdTrunksGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: TrunkListResponse;
+};
+
+export type ListTelephonyTrunksApiV1OrganizationsTelephonyConfigsConfigIdTrunksGetResponse = ListTelephonyTrunksApiV1OrganizationsTelephonyConfigsConfigIdTrunksGetResponses[keyof ListTelephonyTrunksApiV1OrganizationsTelephonyConfigsConfigIdTrunksGetResponses];
+
+export type CreateTelephonyTrunkApiV1OrganizationsTelephonyConfigsConfigIdTrunksPostData = {
+    body: TrunkCreateRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Config Id
+         */
+        config_id: number;
+    };
+    query?: never;
+    url: '/api/v1/organizations/telephony-configs/{config_id}/trunks';
+};
+
+export type CreateTelephonyTrunkApiV1OrganizationsTelephonyConfigsConfigIdTrunksPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateTelephonyTrunkApiV1OrganizationsTelephonyConfigsConfigIdTrunksPostError = CreateTelephonyTrunkApiV1OrganizationsTelephonyConfigsConfigIdTrunksPostErrors[keyof CreateTelephonyTrunkApiV1OrganizationsTelephonyConfigsConfigIdTrunksPostErrors];
+
+export type CreateTelephonyTrunkApiV1OrganizationsTelephonyConfigsConfigIdTrunksPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: TrunkResponse;
+};
+
+export type CreateTelephonyTrunkApiV1OrganizationsTelephonyConfigsConfigIdTrunksPostResponse = CreateTelephonyTrunkApiV1OrganizationsTelephonyConfigsConfigIdTrunksPostResponses[keyof CreateTelephonyTrunkApiV1OrganizationsTelephonyConfigsConfigIdTrunksPostResponses];
+
+export type DeleteTelephonyTrunkApiV1OrganizationsTelephonyConfigsConfigIdTrunksTrunkIdDeleteData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Config Id
+         */
+        config_id: number;
+        /**
+         * Trunk Id
+         */
+        trunk_id: number;
+    };
+    query?: never;
+    url: '/api/v1/organizations/telephony-configs/{config_id}/trunks/{trunk_id}';
+};
+
+export type DeleteTelephonyTrunkApiV1OrganizationsTelephonyConfigsConfigIdTrunksTrunkIdDeleteErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteTelephonyTrunkApiV1OrganizationsTelephonyConfigsConfigIdTrunksTrunkIdDeleteError = DeleteTelephonyTrunkApiV1OrganizationsTelephonyConfigsConfigIdTrunksTrunkIdDeleteErrors[keyof DeleteTelephonyTrunkApiV1OrganizationsTelephonyConfigsConfigIdTrunksTrunkIdDeleteErrors];
+
+export type DeleteTelephonyTrunkApiV1OrganizationsTelephonyConfigsConfigIdTrunksTrunkIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type UpdateTelephonyTrunkApiV1OrganizationsTelephonyConfigsConfigIdTrunksTrunkIdPutData = {
+    body: TrunkUpdateRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Config Id
+         */
+        config_id: number;
+        /**
+         * Trunk Id
+         */
+        trunk_id: number;
+    };
+    query?: never;
+    url: '/api/v1/organizations/telephony-configs/{config_id}/trunks/{trunk_id}';
+};
+
+export type UpdateTelephonyTrunkApiV1OrganizationsTelephonyConfigsConfigIdTrunksTrunkIdPutErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateTelephonyTrunkApiV1OrganizationsTelephonyConfigsConfigIdTrunksTrunkIdPutError = UpdateTelephonyTrunkApiV1OrganizationsTelephonyConfigsConfigIdTrunksTrunkIdPutErrors[keyof UpdateTelephonyTrunkApiV1OrganizationsTelephonyConfigsConfigIdTrunksTrunkIdPutErrors];
+
+export type UpdateTelephonyTrunkApiV1OrganizationsTelephonyConfigsConfigIdTrunksTrunkIdPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: TrunkResponse;
+};
+
+export type UpdateTelephonyTrunkApiV1OrganizationsTelephonyConfigsConfigIdTrunksTrunkIdPutResponse = UpdateTelephonyTrunkApiV1OrganizationsTelephonyConfigsConfigIdTrunksTrunkIdPutResponses[keyof UpdateTelephonyTrunkApiV1OrganizationsTelephonyConfigsConfigIdTrunksTrunkIdPutResponses];
+
 export type ListPhoneNumbersApiV1OrganizationsTelephonyConfigsConfigIdPhoneNumbersGetData = {
     body?: never;
     headers?: {
@@ -17261,103 +17344,6 @@ export type SetDefaultCallerIdApiV1OrganizationsTelephonyConfigsConfigIdPhoneNum
 };
 
 export type SetDefaultCallerIdApiV1OrganizationsTelephonyConfigsConfigIdPhoneNumbersPhoneNumberIdSetDefaultCallerPostResponse = SetDefaultCallerIdApiV1OrganizationsTelephonyConfigsConfigIdPhoneNumbersPhoneNumberIdSetDefaultCallerPostResponses[keyof SetDefaultCallerIdApiV1OrganizationsTelephonyConfigsConfigIdPhoneNumbersPhoneNumberIdSetDefaultCallerPostResponses];
-
-export type GetTelephonyConfigurationApiV1OrganizationsTelephonyConfigGetData = {
-    body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-        /**
-         * X-Api-Key
-         */
-        'X-API-Key'?: string | null;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/organizations/telephony-config';
-};
-
-export type GetTelephonyConfigurationApiV1OrganizationsTelephonyConfigGetErrors = {
-    /**
-     * Not found
-     */
-    404: unknown;
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type GetTelephonyConfigurationApiV1OrganizationsTelephonyConfigGetError = GetTelephonyConfigurationApiV1OrganizationsTelephonyConfigGetErrors[keyof GetTelephonyConfigurationApiV1OrganizationsTelephonyConfigGetErrors];
-
-export type GetTelephonyConfigurationApiV1OrganizationsTelephonyConfigGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: TelephonyConfigurationResponse;
-};
-
-export type GetTelephonyConfigurationApiV1OrganizationsTelephonyConfigGetResponse = GetTelephonyConfigurationApiV1OrganizationsTelephonyConfigGetResponses[keyof GetTelephonyConfigurationApiV1OrganizationsTelephonyConfigGetResponses];
-
-export type SaveTelephonyConfigurationApiV1OrganizationsTelephonyConfigPostData = {
-    /**
-     * Request
-     */
-    body: ({
-        provider: 'ari';
-    } & AriConfigurationRequest) | ({
-        provider: 'cloudonix';
-    } & CloudonixConfigurationRequest) | ({
-        provider: 'plivo';
-    } & PlivoConfigurationRequest) | ({
-        provider: 'tata_smartflo';
-    } & TataSmartfloConfigurationRequest) | ({
-        provider: 'telnyx';
-    } & TelnyxConfigurationRequest) | ({
-        provider: 'twilio';
-    } & TwilioConfigurationRequest) | ({
-        provider: 'vobiz';
-    } & VobizConfigurationRequest) | ({
-        provider: 'voicelink';
-    } & VoiceLinkConfigurationRequest) | ({
-        provider: 'vonage';
-    } & VonageConfigurationRequest);
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-        /**
-         * X-Api-Key
-         */
-        'X-API-Key'?: string | null;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/organizations/telephony-config';
-};
-
-export type SaveTelephonyConfigurationApiV1OrganizationsTelephonyConfigPostErrors = {
-    /**
-     * Not found
-     */
-    404: unknown;
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type SaveTelephonyConfigurationApiV1OrganizationsTelephonyConfigPostError = SaveTelephonyConfigurationApiV1OrganizationsTelephonyConfigPostErrors[keyof SaveTelephonyConfigurationApiV1OrganizationsTelephonyConfigPostErrors];
-
-export type SaveTelephonyConfigurationApiV1OrganizationsTelephonyConfigPostResponses = {
-    /**
-     * Successful Response
-     */
-    200: unknown;
-};
 
 export type DeleteLangfuseCredentialsApiV1OrganizationsLangfuseCredentialsDeleteData = {
     body?: never;
@@ -18005,6 +17991,8 @@ export type GetUsageHistoryApiV1OrganizationsUsageRunsGetData = {
          * | `calledNumber`  | `text`        | `{ "value": "9911848" }`                     | substring match on `initial_context.called_number`   |
          * | `dispositionCode` | `multiSelect` | `{ "codes": ["XFER", "DNC"] }`             | any of the codes in `gathered_context.mapped_call_disposition` |
          * | `duration`      | `numberRange` | `{ "min": 60, "max": 300 }`                  | call duration (seconds), inclusive bounds            |
+         * | `callDirection` | `radio`       | `{ "status": "inbound" }`                    | `inbound` or `outbound`; any other value matches all |
+         * | `callChannel`   | `radio`       | `{ "status": "telephony" }`                  | `telephony`, `web`, or `chat` — the group of run modes for that channel |
          *
          * Unknown attributes and unsupported `type` values are silently ignored.
          *
@@ -18012,6 +18000,18 @@ export type GetUsageHistoryApiV1OrganizationsUsageRunsGetData = {
          *
          */
         filters?: string | null;
+        /**
+         * Sort By
+         *
+         * Field to sort by ('duration'). Defaults to `created_at`.
+         */
+        sort_by?: string | null;
+        /**
+         * Sort Order
+         *
+         * Sort order ('asc' or 'desc').
+         */
+        sort_order?: string;
     };
     url: '/api/v1/organizations/usage/runs';
 };
@@ -18084,6 +18084,8 @@ export type DownloadUsageRunsReportApiV1OrganizationsUsageRunsReportGetData = {
          * | `calledNumber`  | `text`        | `{ "value": "9911848" }`                     | substring match on `initial_context.called_number`   |
          * | `dispositionCode` | `multiSelect` | `{ "codes": ["XFER", "DNC"] }`             | any of the codes in `gathered_context.mapped_call_disposition` |
          * | `duration`      | `numberRange` | `{ "min": 60, "max": 300 }`                  | call duration (seconds), inclusive bounds            |
+         * | `callDirection` | `radio`       | `{ "status": "inbound" }`                    | `inbound` or `outbound`; any other value matches all |
+         * | `callChannel`   | `radio`       | `{ "status": "telephony" }`                  | `telephony`, `web`, or `chat` — the group of run modes for that channel |
          *
          * Unknown attributes and unsupported `type` values are silently ignored.
          *
