@@ -72,8 +72,8 @@ class DograhSonioxSTTService(SonioxSTTService):
                 return
 
             logger.debug("Connecting to Soniox STT")
-            # Looked up on the module so tests can stand in for Soniox.
-            self._websocket = await _pipecat_soniox.websocket_connect(
+            # The base class's connect, which bounds the closing handshake.
+            self._websocket = await self._websocket_connect(
                 self._url,
                 additional_headers={"Authorization": f"Bearer {self._api_key}"},
             )

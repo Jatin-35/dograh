@@ -65,13 +65,14 @@ def _audio_frame(audio: bytes) -> SimpleNamespace:
 
 
 def _usage_message(prompt_tokens: int) -> SimpleNamespace:
+    # Google's real type, so every field pipecat reads exists as it does live.
+    from google.genai.types import UsageMetadata
+
     return SimpleNamespace(
-        usage_metadata=SimpleNamespace(
+        usage_metadata=UsageMetadata(
             prompt_token_count=prompt_tokens,
             response_token_count=10,
             total_token_count=prompt_tokens + 10,
-            cached_content_token_count=None,
-            thoughts_token_count=None,
         )
     )
 

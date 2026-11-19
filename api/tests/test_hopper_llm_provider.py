@@ -185,17 +185,14 @@ def test_qa_and_voicemail_build_hopper_from_the_provider_name():
 
 @pytest.mark.asyncio
 async def test_qa_using_the_workflow_llm_resolves_hopper():
+    """Post-call QA builds Hopper through the live-call factory, keys rotating."""
+    from unittest.mock import Mock
+
     from api.services.workflow.qa import llm_config
 
     async def fake_effective(**kwargs):
         return SimpleNamespace(
-            model_dump=lambda exclude_none: {
-                "llm": {
-                    "provider": "hopper",
-                    "api_key": ["sk_a", "sk_b"],  # key rotation
-                    "model": "gemma-4-31b",
-                }
-            }
+            llm=HopperLLMConfiguration(api_key=["sk_a", "sk_b"], model="gemma-4-31b")
         )
 
     run = SimpleNamespace(
@@ -203,15 +200,18 @@ async def test_qa_using_the_workflow_llm_resolves_hopper():
         definition=None,
         workflow=SimpleNamespace(organization_id=1, workflow_configurations={}),
     )
-    with patch(
-        "api.services.configuration.ai_model_configuration."
-        "get_effective_ai_model_configuration_for_workflow",
-        fake_effective,
+    build = Mock(return_value=object())
+    with (
+        patch.object(llm_config, "get_effective_ai_model_configuration_for_workflow", fake_effective),
+        patch("api.services.pipecat.service_factory.create_llm_service_from_provider", build),
     ):
-        provider, model, api_key, kwargs = await llm_config.resolve_user_llm_config(run)
-    # no base_url saved: None, which the factory turns into Hopper's endpoint
-    assert (provider, model, kwargs) == ("hopper", "gemma-4-31b", {"base_url": None})
+        _, model = await llm_config.create_qa_llm_service(
+            SimpleNamespace(qa_use_workflow_llm=True, qa_model="default"), run
+        )
+    provider, built_model, api_key = build.call_args.args
+    assert (provider, model, built_model) == ("hopper", "gemma-4-31b", "gemma-4-31b")
     assert api_key in ("sk_a", "sk_b")
+    assert build.call_args.kwargs["base_url"] == HOPPER_API_BASE_URL
 
 
 def test_several_keys_are_accepted_for_rotation():

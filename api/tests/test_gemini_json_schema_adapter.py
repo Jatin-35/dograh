@@ -3,6 +3,7 @@ from unittest.mock import patch
 from google.genai.types import GenerateContentConfig, LiveConnectConfig
 from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
+from pipecat.adapters.services.gemini_live_adapter import GeminiLiveLLMAdapter
 
 from api.services.configuration.registry import ServiceProviders
 from api.services.pipecat.gemini_json_schema_adapter import (
@@ -99,13 +100,13 @@ def test_google_llm_service_factory_uses_dograh_service_class():
     ) as mock_service:
         result = create_llm_service_from_provider(
             provider=ServiceProviders.GOOGLE.value,
-            model="gemini-2.5-flash",
+            model="gemini-3.5-flash",
             api_key="test-api-key",
         )
 
     assert result is mock_service.return_value
     assert mock_service.call_args.kwargs["api_key"] == "test-api-key"
-    assert mock_service.call_args.kwargs["settings"].model == "gemini-2.5-flash"
+    assert mock_service.call_args.kwargs["settings"].model == "gemini-3.5-flash"
 
 
 def test_google_vertex_llm_service_factory_uses_dograh_service_class():
@@ -128,13 +129,19 @@ def test_google_vertex_llm_service_factory_uses_dograh_service_class():
 
 
 def test_gemini_live_service_classes_use_dograh_gemini_adapter_class():
-    # The Live adapter is the JSON Schema adapter plus tool history as text.
-    assert issubclass(DograhGeminiLiveJSONSchemaAdapter, DograhGeminiJSONSchemaAdapter)
     assert DograhGeminiLiveLLMService.adapter_class is DograhGeminiLiveJSONSchemaAdapter
     # Vertex Live inherits adapter_class from DograhGeminiLiveLLMService via MRO.
     assert (
         DograhGeminiLiveVertexLLMService.adapter_class
         is DograhGeminiLiveJSONSchemaAdapter
+    )
+    # The Live adapter must keep upstream's tool-call-to-text conversion for
+    # seeded contexts (GeminiLiveLLMAdapter) alongside the JSON Schema fix.
+    assert issubclass(DograhGeminiLiveJSONSchemaAdapter, GeminiLiveLLMAdapter)
+    assert issubclass(DograhGeminiLiveJSONSchemaAdapter, DograhGeminiJSONSchemaAdapter)
+    assert (
+        DograhGeminiLiveJSONSchemaAdapter.to_provider_tools_format
+        is DograhGeminiJSONSchemaAdapter.to_provider_tools_format
     )
 
 

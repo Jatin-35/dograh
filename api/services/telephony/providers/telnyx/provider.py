@@ -25,6 +25,7 @@ TELNYX_PUBLIC_KEY_BYTES = 32
 TELNYX_SIGNATURE_BYTES = 64
 
 from api.enums import TelephonyCallStatus, WorkflowRunMode
+from api.services.telephony import ws_auth
 from api.services.telephony.base import (
     CallInitiationResult,
     NormalizedInboundData,
@@ -102,9 +103,8 @@ class TelnyxProvider(TelephonyProvider):
         # Build the WebSocket stream URL for inline audio streaming
         workflow_id = kwargs.get("workflow_id")
         organization_id = kwargs.get("organization_id")
-        stream_url = (
-            f"{wss_backend_endpoint}/api/v1/telephony/ws"
-            f"/{workflow_id}/{organization_id}/{workflow_run_id}"
+        stream_url = ws_auth.build_media_ws_url(
+            wss_backend_endpoint, workflow_id, organization_id, workflow_run_id
         )
 
         # Build the webhook URL for status callbacks
@@ -127,8 +127,12 @@ class TelnyxProvider(TelephonyProvider):
             "webhook_url_method": "POST",
         }
 
+        # Redacted: stream_url carries a bearer capability token.
         logger.info(
-            f"Telnyx dial payload: {json.dumps({k: v for k, v in payload.items() if k != 'connection_id'})}"
+            "Telnyx dial payload: "
+            + ws_auth.redact_token(
+                json.dumps({k: v for k, v in payload.items() if k != "connection_id"})
+            )
         )
 
         endpoint = f"{self.TELNYX_API_BASE}/calls"
@@ -139,7 +143,6 @@ class TelnyxProvider(TelephonyProvider):
             ) as response:
                 if response.status != 200:
                     error_data = await response.json()
-                    logger.error(f"Telnyx API error: {error_data}")
                     raise HTTPException(
                         status_code=response.status, detail=json.dumps(error_data)
                     )

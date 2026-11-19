@@ -4,7 +4,7 @@ from loguru import logger
 
 from api.db import db_client
 from api.enums import PostHogEvent, WorkflowRunState
-from api.services.campaign.circuit_breaker import circuit_breaker
+from api.services.campaign.circuit_breaker import TOOL_ERROR_PREFIX, circuit_breaker
 from api.services.integrations import IntegrationRuntimeSession
 from api.services.pipecat.audio_config import AudioConfig
 from api.services.pipecat.audio_playback import play_audio_loop
@@ -13,6 +13,10 @@ from api.services.pipecat.in_memory_buffers import (
     InMemoryRecordingBuffers,
 )
 from api.services.pipecat.pipeline_metrics_aggregator import PipelineMetricsAggregator
+from api.services.pipecat.provider_rejection import (
+    PROVIDER_PAUSE_STATUSES,
+    provider_http_status,
+)
 from api.services.pipecat.tracing_config import get_trace_url
 from api.services.pipecat.transcript_log_coordinator import TranscriptLogCoordinator
 from api.services.posthog_client import capture_event
@@ -22,11 +26,20 @@ from api.services.workflow_run_artifacts import upload_workflow_run_artifacts
 from api.tasks.arq import enqueue_job
 from api.tasks.function_names import FunctionNames
 from pipecat.frames.frames import (
+    ErrorFrame,
     Frame,
 )
 from pipecat.pipeline.worker import PipelineWorker
 from pipecat.processors.audio.audio_buffer_processor import AudioBufferProcessor
 from pipecat.utils.enums import EndTaskReason
+
+
+def _is_provider_account_rejection(frame: ErrorFrame) -> bool:
+    """A model/voice provider refusing the account: HTTP 401/402/403 or the
+    bad-key / no-credit wording, but not a custom tool's own HTTP failure."""
+    if (frame.error or "").startswith(TOOL_ERROR_PREFIX):
+        return False
+    return provider_http_status(frame.exception, frame.error) in PROVIDER_PAUSE_STATUSES
 
 
 async def _capture_call_event(
@@ -245,6 +258,17 @@ def register_event_handlers(
 
     @task.event_handler("on_pipeline_error")
     async def on_pipeline_error(_task: PipelineWorker, frame: Frame):
+        # Pipecat emits recoverable ErrorFrames for reconnect/retry paths, which
+        # must not end the call. A provider rejecting the account (bad key, no
+        # credit) is non-fatal too but never recovers, so it still ends the call
+        # rather than leaving the caller in silence; a tool's own HTTP error
+        # does not count as one.
+        if (
+            isinstance(frame, ErrorFrame)
+            and not frame.fatal
+            and not _is_provider_account_rejection(frame)
+        ):
+            return
         logger.warning(f"Pipeline error for workflow run {workflow_run_id}: {frame}")
         # The call's outcome (and campaign health) is counted once when the
         # pipeline finishes; a call can push several errors before it ends.

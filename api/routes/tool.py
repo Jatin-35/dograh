@@ -1,6 +1,5 @@
 """API routes for managing tools."""
 
-from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -37,7 +36,6 @@ from api.services.tool_management import (
     refresh_mcp_tool_for_user,
     test_http_tool_for_user,
     update_tool_for_user,
-    validate_tool_credential_references,
 )
 from api.services.tool_management import (
     populate_discovered_tools as _populate_discovered_tools,
@@ -99,10 +97,10 @@ def validate_status(status: str) -> None:
     ),
 )
 async def list_tools(
-    status: Optional[str] = None,
-    category: Optional[str] = None,
+    status: str | None = None,
+    category: str | None = None,
     user: UserModel = Depends(get_user),
-) -> List[ToolResponse]:
+) -> list[ToolResponse]:
     """
     List all tools for the user's organization.
 

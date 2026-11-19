@@ -585,7 +585,7 @@ async def test_tool_test_request_body_includes_resolved_preset_parameters(
     resp = await call_test_tool_route(
         "tu-http",
         request=ToolTestRequest(
-            llm_params={"name": "Ada"},
+            llm_params={"name": "Ada", "source": "llm"},
             preset_params={"source": "web_widget"},
         ),
         user=_fake_user(),

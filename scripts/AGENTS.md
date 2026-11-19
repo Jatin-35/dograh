@@ -22,6 +22,7 @@ Bash-only (deployment / CI / OSS-user setup — not intended for Windows contrib
 - `setup_admin_domain.sh` — attaches a second, admin-only hostname (`ADMIN_HOST`) to an existing install, sharing PUBLIC_HOST's nginx server block and a SAN cert
 - `format.sh` / `lint.sh` / `pre_commit.sh`
 - `generate_sdk.sh` / `release_sdks.sh` / `dump_docs_openapi.py`
+- `setup-worktree.sh` / `worktree-sync-env.sh` — VS Code git-worktree dev flow (`.vscode/tasks.json`)
 
 ## Deployment Memory — current OSS Docker state
 

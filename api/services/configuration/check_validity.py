@@ -68,6 +68,7 @@ def _error_message(error: Exception) -> str:
 
 class UserConfigurationValidator:
     def __init__(self):
+        self._dograh_service_key_validation_cache: dict[str, bool] = {}
         self._validator_map = {
             ServiceProviders.OPENAI.value: self._check_openai_api_key,
             ServiceProviders.HOPPER.value: self._check_openai_api_key,
@@ -121,6 +122,9 @@ class UserConfigurationValidator:
         organization_id: Optional[int] = None,
         created_by: Optional[str] = None,
     ) -> APIKeyStatusResponse:
+        # A managed configuration commonly repeats one service key across LLM,
+        # STT, TTS, and embeddings. Validate that credential once per request.
+        self._dograh_service_key_validation_cache.clear()
         self._auth_context: AuthContext = {
             "organization_id": organization_id,
             "created_by": created_by,
@@ -476,11 +480,16 @@ class UserConfigurationValidator:
                 "Please use a service key (mps...)."
             )
         auth = getattr(self, "_auth_context", {})
-        return mps_service_key_client.validate_service_key(
+        if api_key in self._dograh_service_key_validation_cache:
+            return self._dograh_service_key_validation_cache[api_key]
+
+        is_valid = mps_service_key_client.validate_service_key(
             api_key,
             organization_id=auth.get("organization_id"),
             created_by=auth.get("created_by"),
         )
+        self._dograh_service_key_validation_cache[api_key] = is_valid
+        return is_valid
 
     def _check_sarvam_api_key(self, model: str, api_key: str) -> bool:
         return True

@@ -101,7 +101,7 @@ async def voicelink_inbound_ws(websocket: WebSocket) -> None:
     VoiceLink uses ONE media WebSocket for both directions. Outbound calls
     connect to ``/ws/{workflow_id}/{organization_id}/{workflow_run_id}`` (the run is
     pre-created by add_lead). INBOUND calls connect here to the bare bot URL
-    (``/api/v1/telephony/ws``) with NO run id, so we read the ``start`` event,
+    (the shared telephony media-WS path) with NO run id, so we read the ``start`` event,
     route by the called DID, create an inbound run, and run the pipeline.
 
     NOTE: the exact location of the called/caller number in VoiceLink's inbound
@@ -111,12 +111,6 @@ async def voicelink_inbound_ws(websocket: WebSocket) -> None:
     """
     # Lazy imports: this module is imported BY api.routes.telephony, so importing
     # its helpers at module load would be circular.
-    from sqlalchemy.future import select
-
-    from api.db.models import (
-        TelephonyConfigurationModel,
-        TelephonyPhoneNumberModel,
-    )
     from api.enums import WorkflowRunState
     from api.routes.telephony import _create_inbound_workflow_run
     from api.services.pipecat.run_pipeline import run_pipeline_telephony
@@ -206,24 +200,16 @@ async def voicelink_inbound_ws(websocket: WebSocket) -> None:
         # NO reseller/account id, so the account-keyed lookup
         # (find_inbound_route_by_account) can't be used — its empty account_id
         # trips an early `return None` guard. The DID is the authorization
-        # boundary; it is globally unique in telephony_phone_numbers. This inline
-        # join avoids overlaying the baked db client.
-        async with db_client.async_session() as session:
-            result = await session.execute(
-                select(TelephonyConfigurationModel, TelephonyPhoneNumberModel)
-                .join(
-                    TelephonyPhoneNumberModel,
-                    TelephonyPhoneNumberModel.telephony_configuration_id
-                    == TelephonyConfigurationModel.id,
-                )
-                .where(
-                    TelephonyConfigurationModel.provider == "voicelink",
-                    TelephonyPhoneNumberModel.address_normalized == to_norm,
-                    TelephonyPhoneNumberModel.is_active.is_(True),
-                )
+        # boundary; it is globally unique in telephony_phone_numbers.
+        routes = await db_client.find_inbound_routes_by_number(
+            "voicelink", to_raw, country_hint="IN"
+        )
+        if len(routes) > 1:
+            logger.warning(
+                f"VoiceLink INBOUND: DID {to_norm} is active on more than one "
+                "VoiceLink configuration; using the first"
             )
-            row = result.first()
-        match = (row[0], row[1]) if row else None
+        match = routes[0] if routes else None
         if not match:
             logger.error(f"VoiceLink INBOUND: no inbound route for DID {to_norm}")
             await websocket.close(code=4404, reason="DID not configured")

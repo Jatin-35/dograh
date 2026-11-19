@@ -17,6 +17,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.testclient import TestClient
 
+from api.enums import CallType
 from api.routes.public_embed import PublicEmbedCORSMiddleware
 from api.routes.public_embed import router as public_embed_router
 from api.routes.public_embed_chat import router as public_embed_chat_router
@@ -311,6 +312,7 @@ def test_init_chat_token_creates_textchat_run(_patch_db):
     assert len(_patch_db.created_runs) == 1
     kwargs = _patch_db.created_runs[0]
     assert kwargs["mode"] == "textchat"
+    assert kwargs["call_type"] == CallType.INBOUND
     # Text-chat runs must not carry a webrtc transport provider.
     assert "provider" not in kwargs["initial_context"]
     assert kwargs["initial_context"]["name"] == "Ada"
@@ -334,6 +336,7 @@ def test_init_voice_token_keeps_smallwebrtc(_patch_db):
 
     kwargs = _patch_db.created_runs[0]
     assert kwargs["mode"] == "smallwebrtc"
+    assert kwargs["call_type"] == CallType.INBOUND
     assert kwargs["initial_context"]["provider"] == "smallwebrtc"
     # The visitor calls the agent: reports and call history count it as inbound.
     assert kwargs["call_type"].value == "inbound"
@@ -353,6 +356,7 @@ def test_init_sanitizes_context_variables(_patch_db):
             "context_variables": {
                 "  customer_name  ": "Abhishek",
                 "provider": "twilio",
+                "direction": "outbound",
                 "bio": "a" * (MAX_VALUE_LENGTH + 500),
             },
         },
@@ -363,6 +367,8 @@ def test_init_sanitizes_context_variables(_patch_db):
     assert initial_context["customer_name"] == "Abhishek"
     # The host page can't rewrite the transport the backend picked.
     assert initial_context["provider"] == "smallwebrtc"
+    # Nor can visitor context reclassify an embedded voice call as outbound.
+    assert initial_context["direction"] == "inbound"
 
     assert len(initial_context["bio"]) == MAX_VALUE_LENGTH
 

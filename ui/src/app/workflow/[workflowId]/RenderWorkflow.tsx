@@ -9,9 +9,10 @@ import {
 import { BrushCleaning, Maximize2, Minus, Plus, Settings } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 import { createWorkflowDraftApiV1WorkflowWorkflowIdCreateDraftPost, getWorkflowVersionsApiV1WorkflowWorkflowIdVersionsGet, listDocumentsApiV1KnowledgeBaseDocumentsGet, listRecordingsApiV1WorkflowRecordingsGet, listToolsApiV1ToolsGet } from '@/client';
-import type { DocumentResponseSchema, RecordingResponseSchema, ToolResponse } from '@/client/types.gen';
+import type { DocumentResponseSchema, RecordingResponseSchema, ToolResponse, WorkflowVersionResponse } from '@/client/types.gen';
 import { useNodeSpecs } from "@/components/flow/renderer";
 import { FlowEdge, FlowNode, NodeType } from "@/components/flow/types";
 import { HireExpertNudge } from "@/components/lead-forms/HireExpertNudge";
@@ -20,16 +21,18 @@ import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { WorkflowGenChatPanel } from '@/components/workflow-gen-chat/WorkflowGenChatPanel';
 import { useOnboarding } from '@/context/OnboardingContext';
+import { detailFromError } from '@/lib/apiError';
 import { WorkflowConfigurations } from '@/types/workflow-configurations';
 
 import AddNodePanel from "../../../components/flow/AddNodePanel";
 import CustomEdge from "../../../components/flow/edges/CustomEdge";
 import { GenericNode } from "../../../components/flow/nodes/GenericNode";
 import { PhoneCallDialog } from './components/PhoneCallDialog';
-import { VersionHistoryPanel, WorkflowVersion } from './components/VersionHistoryPanel';
+import { VersionHistoryPanel } from './components/VersionHistoryPanel';
 import type { WorkflowRuntimeNodeTransition } from './components/workflow-tester/types';
 import { WorkflowEditorHeader } from "./components/WorkflowEditorHeader";
 import { WorkflowTesterPanel } from './components/WorkflowTesterPanel';
+import { WorkflowVersionDiffDialog } from './components/WorkflowVersionDiffDialog';
 import { WorkflowProvider } from "./contexts/WorkflowContext";
 import { useWorkflowState } from "./hooks/useWorkflowState";
 import { layoutNodes } from './utils/layoutNodes';
@@ -86,7 +89,7 @@ function RenderWorkflow({
     const [isAssistantBusy, setIsAssistantBusy] = useState(false);
     const [isAssistantSheetOpen, setIsAssistantSheetOpen] = useState(false);
     const [isDesktopViewport, setIsDesktopViewport] = useState(false);
-    const [versions, setVersions] = useState<WorkflowVersion[]>([]);
+    const [versions, setVersions] = useState<WorkflowVersionResponse[]>([]);
     const [versionsLoading, setVersionsLoading] = useState(false);
     const [versionsLoadingMore, setVersionsLoadingMore] = useState(false);
     const [versionsHasMore, setVersionsHasMore] = useState(false);
@@ -113,6 +116,11 @@ function RenderWorkflow({
     }, []);
 
     const [activeVersionId, setActiveVersionId] = useState<number | null>(null);
+    const [comparingVersionId, setComparingVersionId] = useState<number | null>(null);
+    const [versionDiffPair, setVersionDiffPair] = useState<{
+        previousVersion: WorkflowVersionResponse;
+        selectedVersion: WorkflowVersionResponse;
+    } | null>(null);
     const hasAutoOpenedTester = useRef(false);
     // Version info that updates immediately from the GET/save/publish responses.
     const [currentVersionNumber, setCurrentVersionNumber] = useState<number | null>(initialVersionNumber ?? null);
@@ -176,28 +184,42 @@ function RenderWorkflow({
     // Pagination keeps the panel snappy when a workflow has accumulated a long
     // history — `workflow_json` is shipped per row, so loading hundreds at once
     // is expensive on the wire.
-    const fetchVersions = useCallback(async (force = false) => {
+    const fetchVersions = useCallback(async (
+        force = false,
+        preserveActiveVersion = false,
+    ) => {
         if (versionsFetched.current && !force) return;
         setVersionsLoading(true);
         try {
             const response = await getWorkflowVersionsApiV1WorkflowWorkflowIdVersionsGet({
                 path: { workflow_id: workflowId },
-                query: { limit: VERSIONS_PAGE_SIZE, offset: 0 },
+                // Fetch one extra row so `hasMore` is exact. This also lets the
+                // history panel reliably hide Compare on v1.
+                query: { limit: VERSIONS_PAGE_SIZE + 1, offset: 0 },
             });
-            const data = response.data as WorkflowVersion[] | undefined;
+            if (response.error) {
+                toast.error(detailFromError(response.error, "Failed to load version history"));
+                return;
+            }
+            const data = response.data;
             if (data) {
-                setVersions(data);
-                setVersionsHasMore(data.length === VERSIONS_PAGE_SIZE);
+                const page = data.slice(0, VERSIONS_PAGE_SIZE);
+                setVersions(page);
+                setVersionsHasMore(data.length > VERSIONS_PAGE_SIZE);
                 // Set active version to draft if exists, else published.
                 // Both live on the newest page so the first fetch always sees them.
-                const current = data.find((v) => v.status === "draft") ?? data.find((v) => v.status === "published");
+                const current = page.find((v) => v.status === "draft") ?? page.find((v) => v.status === "published");
                 if (current) {
-                    setActiveVersionId(current.id);
+                    setActiveVersionId((existingActiveVersionId) => (
+                        preserveActiveVersion && existingActiveVersionId !== null
+                            ? existingActiveVersionId
+                            : current.id
+                    ));
                     setCurrentVersionNumber(current.version_number);
                     setCurrentVersionStatus(current.status);
                 }
+                versionsFetched.current = true;
             }
-            versionsFetched.current = true;
         } finally {
             setVersionsLoading(false);
         }
@@ -209,12 +231,16 @@ function RenderWorkflow({
         try {
             const response = await getWorkflowVersionsApiV1WorkflowWorkflowIdVersionsGet({
                 path: { workflow_id: workflowId },
-                query: { limit: VERSIONS_PAGE_SIZE, offset: versions.length },
+                query: { limit: VERSIONS_PAGE_SIZE + 1, offset: versions.length },
             });
-            const data = response.data as WorkflowVersion[] | undefined;
+            if (response.error) {
+                toast.error(detailFromError(response.error, "Failed to load more versions"));
+                return;
+            }
+            const data = response.data;
             if (data) {
-                setVersions((prev) => [...prev, ...data]);
-                setVersionsHasMore(data.length === VERSIONS_PAGE_SIZE);
+                setVersions((prev) => [...prev, ...data.slice(0, VERSIONS_PAGE_SIZE)]);
+                setVersionsHasMore(data.length > VERSIONS_PAGE_SIZE);
             }
         } finally {
             setVersionsLoadingMore(false);
@@ -223,10 +249,72 @@ function RenderWorkflow({
 
     const handleOpenVersionPanel = useCallback(() => {
         setIsVersionPanelOpen(true);
-        fetchVersions();
+        void fetchVersions();
     }, [fetchVersions]);
 
-    const handleSelectVersion = useCallback((version: WorkflowVersion) => {
+    const handleCompareVersion = useCallback(async (version: WorkflowVersionResponse) => {
+        if (comparingVersionId !== null) return;
+
+        const selectedIndex = versions.findIndex((candidate) => candidate.id === version.id);
+        if (selectedIndex < 0) {
+            toast.error("That workflow version is no longer in the history list");
+            return;
+        }
+
+        setComparingVersionId(version.id);
+        try {
+            // Fetch the selected row and the row immediately below it afresh.
+            // The offset also handles comparisons that cross a pagination boundary.
+            const response = await getWorkflowVersionsApiV1WorkflowWorkflowIdVersionsGet({
+                path: { workflow_id: workflowId },
+                query: { limit: 2, offset: selectedIndex },
+            });
+            if (response.error) {
+                toast.error(detailFromError(response.error, "Failed to compare workflow versions"));
+                return;
+            }
+
+            const pair = response.data;
+            const selectedVersion = pair?.[0];
+            const previousVersion = pair?.[1];
+
+            // A new draft may have been inserted since the panel opened, shifting
+            // every offset. Refresh instead of showing a mismatched comparison.
+            if (!selectedVersion || selectedVersion.id !== version.id) {
+                await fetchVersions(true, true);
+                toast.error("Version history changed. Please try the comparison again.");
+                return;
+            }
+            if (
+                !previousVersion ||
+                previousVersion.version_number >= selectedVersion.version_number
+            ) {
+                toast.error(`v${selectedVersion.version_number} has no previous version`);
+                return;
+            }
+
+            // Keep the panel's cached copies in sync with the fresh pair so they
+            // remain current when the dialog closes and history reopens.
+            setVersions((currentVersions) => currentVersions.map((currentVersion) => (
+                pair?.find((freshVersion) => freshVersion.id === currentVersion.id)
+                ?? currentVersion
+            )));
+            setVersionDiffPair({ previousVersion, selectedVersion });
+            setIsVersionPanelOpen(false);
+        } catch {
+            toast.error("Failed to compare workflow versions");
+        } finally {
+            setComparingVersionId(null);
+        }
+    }, [comparingVersionId, fetchVersions, versions, workflowId]);
+
+    const handleVersionDiffOpenChange = useCallback((open: boolean) => {
+        if (open) return;
+        setVersionDiffPair(null);
+        setIsVersionPanelOpen(true);
+    }, []);
+
+    const handleSelectVersion = useCallback((version: WorkflowVersionResponse) => {
         setActiveVersionId(version.id);
         const wfJson = version.workflow_json;
         const flowNodes = (wfJson.nodes ?? []) as FlowNode[];
@@ -757,10 +845,21 @@ function RenderWorkflow({
                     loading={versionsLoading}
                     activeVersionId={activeVersionId}
                     onSelectVersion={handleSelectVersion}
+                    onCompareVersion={handleCompareVersion}
+                    comparingVersionId={comparingVersionId}
                     hasMore={versionsHasMore}
                     loadingMore={versionsLoadingMore}
                     onLoadMore={handleLoadMoreVersions}
                 />
+
+                {versionDiffPair && (
+                    <WorkflowVersionDiffDialog
+                        open
+                        onOpenChange={handleVersionDiffOpenChange}
+                        previousVersion={versionDiffPair.previousVersion}
+                        selectedVersion={versionDiffPair.selectedVersion}
+                    />
+                )}
 
                 <PhoneCallDialog
                     open={isPhoneCallDialogOpen}

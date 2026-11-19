@@ -301,24 +301,39 @@ def test_real_openai_still_validates_by_listing_models(monkeypatch):
 
 
 async def _qa_resolve(llm):
-    from unittest.mock import patch
+    """What post-call QA builds its model from, through the real QA path.
+
+    QA reuses the live-call factory (create_llm_service), so this captures the
+    provider, model, key and provider settings at the point the model is built.
+    """
+    from unittest.mock import Mock, patch
 
     from api.services.workflow.qa import llm_config
 
     async def fake_effective(**kwargs):
-        return SimpleNamespace(model_dump=lambda exclude_none: {"llm": llm})
+        # Every real LLM configuration has api_key (Bedrock keeps it optional).
+        return SimpleNamespace(llm=SimpleNamespace(**{"api_key": None, **llm}))
 
     run = SimpleNamespace(
         initial_context={},
         definition=None,
         workflow=SimpleNamespace(organization_id=1, workflow_configurations={}),
     )
-    with patch(
-        "api.services.configuration.ai_model_configuration."
-        "get_effective_ai_model_configuration_for_workflow",
-        fake_effective,
+    build = Mock(return_value=object())
+    with (
+        patch.object(llm_config, "get_effective_ai_model_configuration_for_workflow", fake_effective),
+        patch("api.services.pipecat.service_factory.create_llm_service_from_provider", build),
     ):
-        return await llm_config.resolve_user_llm_config(run)
+        await llm_config.create_qa_llm_service(
+            SimpleNamespace(qa_use_workflow_llm=True, qa_model="default"), run
+        )
+    provider, model, api_key = build.call_args.args
+    kwargs = {
+        k: v
+        for k, v in build.call_args.kwargs.items()
+        if k not in ("correlation_id", "usage_context")
+    }
+    return provider, model, api_key, kwargs
 
 
 @pytest.mark.asyncio

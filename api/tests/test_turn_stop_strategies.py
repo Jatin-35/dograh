@@ -1,7 +1,9 @@
 """The pipecat 1.6/1.7 end-of-turn fixes carried by our turn-stop strategies.
 
-Each test drives the strategy with the frames that reproduce one bug; where it
-helps, the same sequence is run on pipecat's stock strategy to show the bug.
+Each test drives the strategy with the frames that reproduce one bug. The
+stock-strategy tests showed the bug on pipecat 1.5; from pipecat 1.7 (dograh
+v1.45) the stock strategies carry the same fixes, so they now pin that, and our
+backports can be retired in a later clean-up.
 """
 
 import asyncio
@@ -62,10 +64,9 @@ async def _mid_utterance_turn_boundary(cls):
 
 
 @pytest.mark.asyncio
-async def test_stock_strategy_ends_the_turn_while_the_caller_is_still_talking():
-    assert await _mid_utterance_turn_boundary(SpeechTimeoutUserTurnStopStrategy), (
-        "expected the bug: stock pipecat v1.5 forgets the caller is speaking"
-    )
+async def test_stock_strategy_keeps_the_turn_open_while_the_caller_is_still_talking():
+    # Fixed in pipecat 1.7; on 1.5 the stock strategy forgot the caller was speaking.
+    assert await _mid_utterance_turn_boundary(SpeechTimeoutUserTurnStopStrategy) == []
 
 
 @pytest.mark.asyncio
@@ -99,9 +100,10 @@ async def _finalized_then_more_speech(cls):
 
 
 @pytest.mark.asyncio
-async def test_stock_strategy_skips_the_stt_wait_after_an_early_finalized_transcript():
+async def test_stock_strategy_waits_for_the_tail_after_an_early_finalized_transcript():
+    # Fixed in pipecat 1.7; on 1.5 the tail of the sentence was not waited for.
     stopped, _, _ = await _finalized_then_more_speech(SpeechTimeoutUserTurnStopStrategy)
-    assert stopped, "expected the bug: the tail of the sentence is not waited for"
+    assert stopped == []
 
 
 @pytest.mark.asyncio
@@ -161,9 +163,11 @@ async def _transcript_during_inference(cls):
 
 
 @pytest.mark.asyncio
-async def test_stock_smart_turn_waits_out_the_safety_net():
-    stopped, _ = await _transcript_during_inference(TurnAnalyzerUserTurnStopStrategy)
-    assert stopped == [], "expected the bug: ~0.8 s extra wait before the turn ends"
+async def test_stock_smart_turn_acts_on_a_transcript_finalized_during_inference():
+    # Fixed in pipecat 1.7; on 1.5 it waited ~0.8 s extra for the safety net.
+    stopped, t0 = await _transcript_during_inference(TurnAnalyzerUserTurnStopStrategy)
+    assert len(stopped) == 1
+    assert stopped[0] - t0 < 0.4
 
 
 @pytest.mark.asyncio

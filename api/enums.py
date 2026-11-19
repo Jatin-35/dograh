@@ -128,6 +128,9 @@ class OrganizationConfigurationKey(Enum):
     # users (reports, run lists, exports). Absent means off, so masking only
     # ever changes what an org sees when a superadmin has turned it on.
     MASK_PHONE_NUMBERS = "MASK_PHONE_NUMBERS"
+    ORGANIZATION_BOOTSTRAP = (
+        "ORGANIZATION_BOOTSTRAP"  # Single-winner lease for post-signup provisioning
+    )
 
 
 class UserConfigurationKey(Enum):

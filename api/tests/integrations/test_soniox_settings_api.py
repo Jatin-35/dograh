@@ -134,7 +134,7 @@ async def _soniox_config_for(organization_id, workflow_configurations, *, keyter
 
     socket = _Socket()
     connect = AsyncMock(return_value=socket)
-    with patch("pipecat.services.soniox.stt.websocket_connect", connect):
+    with patch("pipecat.services.websocket_service.websocket_connect", connect):
         await svc._connect_websocket()
     config = json.loads(socket.sent[0])
     # The key goes in the header, as Soniox requires from January 2027.

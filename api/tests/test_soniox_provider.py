@@ -277,7 +277,7 @@ async def _connected(svc, fake):
     # What start() does: the call's input rate, unless the service pinned one.
     svc._sample_rate = svc._init_sample_rate or 16000
     connect = AsyncMock(return_value=fake)
-    with patch("pipecat.services.soniox.stt.websocket_connect", connect):
+    with patch("pipecat.services.websocket_service.websocket_connect", connect):
         await svc._connect_websocket()
     fake.connect_kwargs = connect.await_args.kwargs
     return fake.config
@@ -514,7 +514,7 @@ async def test_a_failed_first_connect_still_starts_the_receive_loop():
     svc = _service()
     svc._sample_rate = 8000
     with (
-        patch("pipecat.services.soniox.stt.websocket_connect", AsyncMock(side_effect=OSError("network blip"))),
+        patch("pipecat.services.websocket_service.websocket_connect", AsyncMock(side_effect=OSError("network blip"))),
         patch.object(svc, "push_error", AsyncMock()),
         patch.object(svc, "create_task", MagicMock(return_value="receive-task")) as create_task,
         patch.object(svc, "_create_keepalive_task", MagicMock()),
@@ -536,7 +536,7 @@ async def test_the_retry_after_a_failed_connect_reaches_soniox():
     fake.ping = AsyncMock()
     connect = AsyncMock(side_effect=[OSError("network blip"), fake])
     with (
-        patch("pipecat.services.soniox.stt.websocket_connect", connect),
+        patch("pipecat.services.websocket_service.websocket_connect", connect),
         patch.object(svc, "push_error", AsyncMock()),
         # Event handlers and the keepalive task need a running pipeline.
         patch.object(svc, "_call_event_handler", AsyncMock()),

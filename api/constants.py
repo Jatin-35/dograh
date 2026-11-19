@@ -64,6 +64,13 @@ CORS_ALLOWED_ORIGINS = [
     o.strip() for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()
 ]
 AUTH_PROVIDER = os.getenv("AUTH_PROVIDER", "local")
+# Upstream's organization bootstrap also provisions SIP calling on Dograh's own
+# Cloudonix domain (through Dograh's MPS) for every organization, existing ones
+# included, on their next request. BotrixAI brings its own telephony and keeps
+# organizations off Dograh's services, so this is off unless explicitly enabled.
+MANAGED_SIP_PROVISIONING_ENABLED = (
+    os.getenv("MANAGED_SIP_PROVISIONING_ENABLED", "false").lower() == "true"
+)
 ENABLE_SIGNUP = os.getenv("ENABLE_SIGNUP", "true").lower() == "true"
 # Stack Auth public client config. These are safe to expose to the browser (the
 # publishable client key is public by design, and the project id is non-sensitive),
@@ -116,6 +123,22 @@ POSTHOG_HOST = os.getenv("POSTHOG_HOST", "https://us.i.posthog.com")
 
 ENABLE_ARI_STASIS = os.getenv("ENABLE_ARI_STASIS", "false").lower() == "true"
 SERIALIZE_LOG_OUTPUT = os.getenv("SERIALIZE_LOG_OUTPUT", "false").lower() == "true"
+
+# Telephony media WebSocket authentication.
+# The carrier/connector dials back the media socket
+# /api/v1/telephony/ws/{workflow_id}/{organization_id}/{workflow_run_id}, whose
+# id triple is otherwise a guessable bearer capability. When a secret is set,
+# providers append an HMAC token to that URL as a trailing path segment (carriers
+# strip query strings; ARI is the exception and passes ?token=) and the handler
+# verifies it (see api/services/telephony/ws_auth.py).
+# Two-phase, backward-compatible rollout:
+#   * secret unset            -> feature off, URLs unchanged (default)
+#   * secret set, enforce off -> tokens minted + verified; invalid ones only logged
+#   * secret set, enforce on  -> invalid/missing tokens rejected (WS close 4401)
+TELEPHONY_WS_TOKEN_SECRET = os.getenv("TELEPHONY_WS_TOKEN_SECRET") or None
+TELEPHONY_WS_TOKEN_ENFORCE = (
+    os.getenv("TELEPHONY_WS_TOKEN_ENFORCE", "false").lower() == "true"
+)
 
 # Logging configuration
 LOG_FILE_PATH = os.getenv("LOG_FILE_PATH", None)

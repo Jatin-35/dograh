@@ -25,6 +25,7 @@ from api.services.telephony.base import (
     ProviderSyncResult,
     TelephonyProvider,
 )
+from api.services.telephony.ws_auth import build_media_ws_url
 from api.utils.common import get_backend_endpoints
 from api.utils.telephony_address import normalize_telephony_address
 
@@ -295,10 +296,11 @@ class VoiceLinkProvider(TelephonyProvider):
 
         # The middle path segment is the ORGANIZATION id — the shared outbound
         # route is /ws/{workflow_id}/{organization_id}/{workflow_run_id} and its
-        # handler scopes every lookup by it (see api/routes/telephony.py).
-        websocket_url = (
-            f"{wss_backend_endpoint}/api/v1/telephony/ws"
-            f"/{workflow_id}/{organization_id}/{workflow_run_id}"
+        # handler scopes every lookup by it (see api/routes/telephony.py). The
+        # helper adds the capability token when TELEPHONY_WS_TOKEN_SECRET is set
+        # and otherwise returns exactly that URL.
+        websocket_url = build_media_ws_url(
+            wss_backend_endpoint, workflow_id, organization_id, workflow_run_id
         )
         events_url = (
             f"{backend_endpoint}/api/v1/telephony/voicelink/events/{workflow_run_id}"

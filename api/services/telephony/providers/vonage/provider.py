@@ -13,6 +13,7 @@ from fastapi import HTTPException, Response
 from loguru import logger
 
 from api.enums import TelephonyCallStatus, WorkflowRunMode
+from api.services.telephony import ws_auth
 from api.services.telephony.base import (
     CallInitiationResult,
     NormalizedInboundData,
@@ -214,6 +215,9 @@ class VonageProvider(TelephonyProvider):
         NCCO (Nexmo Call Control Objects) is JSON-based, unlike TwiML which is XML.
         """
         _, wss_backend_endpoint = await get_backend_endpoints()
+        ws_url = ws_auth.build_media_ws_url(
+            wss_backend_endpoint, workflow_id, organization_id, workflow_run_id
+        )
 
         # NCCO for WebSocket connection
         ncco = [
@@ -222,7 +226,7 @@ class VonageProvider(TelephonyProvider):
                 "endpoint": [
                     {
                         "type": "websocket",
-                        "uri": f"{wss_backend_endpoint}/api/v1/telephony/ws/{workflow_id}/{organization_id}/{workflow_run_id}",
+                        "uri": ws_url,
                         "content-type": "audio/l16;rate=16000",  # 16kHz Linear PCM
                         "headers": {},
                     }

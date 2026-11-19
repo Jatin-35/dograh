@@ -1844,7 +1844,7 @@ export type CloudonixConfigurationRequest = {
     /**
      * Domain Id
      *
-     * Cloudonix Domain ID
+     * Cloudonix domain name
      */
     domain_id: string;
     /**
@@ -1853,6 +1853,12 @@ export type CloudonixConfigurationRequest = {
      * Cloudonix Voice Application name. The application's url is updated when inbound workflows are attached to numbers on this domain. If omitted, an application is auto-created on save and its name is stored on the configuration.
      */
     application_name?: string | null;
+    /**
+     * Outbound Trunks
+     *
+     * Outbound SIP trunks Dograh creates and keeps in sync on this Cloudonix domain. Trunks dropped from the list are deactivated. The UI manages a single trunk today; the list is the storage shape so more can be added without a schema change.
+     */
+    outbound_trunks?: Array<CloudonixOutboundTrunkConfiguration>;
     /**
      * From Numbers
      *
@@ -1865,6 +1871,11 @@ export type CloudonixConfigurationRequest = {
  * CloudonixConfigurationResponse
  *
  * Response schema for Cloudonix configuration with masked sensitive fields.
+ *
+ * Server-managed credential fields (``domain_uuid``, ``provisioning_id``,
+ * ``managed_by``, the application and trunk UUIDs) are stripped before this
+ * is built — they are Dograh's bookkeeping, not something a client sends
+ * back or renders.
  */
 export type CloudonixConfigurationResponse = {
     /**
@@ -1884,9 +1895,54 @@ export type CloudonixConfigurationResponse = {
      */
     application_name?: string | null;
     /**
+     * Outbound Trunks
+     */
+    outbound_trunks?: Array<CloudonixOutboundTrunkConfiguration>;
+    /**
      * From Numbers
      */
     from_numbers: Array<string>;
+};
+
+/**
+ * CloudonixOutboundTrunkConfiguration
+ *
+ * Dograh-managed Cloudonix outbound SIP trunk.
+ *
+ * Only the trunk name and the SIP domain are operator-supplied. The remote
+ * peer (IP, port, transport) is derived from ``region`` when the Cloudonix
+ * payload is built, so the trunk always terminates on the same regional edge
+ * the customer sees under SIP connectivity.
+ */
+export type CloudonixOutboundTrunkConfiguration = {
+    /**
+     * Id
+     *
+     * Dograh-owned identifier for this trunk, minted on first save. Stable across renames, and the key the Cloudonix trunk UUID is stored under. Clients round-trip it; they never invent it.
+     */
+    id?: string | null;
+    /**
+     * Enabled
+     */
+    enabled?: boolean;
+    /**
+     * Name
+     *
+     * Unique name for the Cloudonix voice trunk. Letters, digits and hyphens only — Cloudonix trunk names cannot contain spaces.
+     */
+    name?: string | null;
+    /**
+     * Region
+     *
+     * Cloudonix region whose SIP edge terminates this trunk; sets the remote IP, port and transport.
+     */
+    region?: string | null;
+    /**
+     * Sip Domain
+     *
+     * Domain Cloudonix puts in both the SIP To header and the SIP Request-URI for calls on this trunk.
+     */
+    sip_domain?: string | null;
 };
 
 /**
@@ -1906,23 +1962,35 @@ export type ConfirmWorkflowGenActionRequest = {
 /**
  * ContextDestinationMappingConfig
  *
- * Resolve an external-PBX destination from gathered context.
+ * Resolve a transfer destination from gathered or initial context.
+ *
+ * Rules are evaluated in order. The first rule whose context value matches
+ * one of its routes wins; ``fallback_destination`` applies only when no rule
+ * matched. Destinations may be provider-native values or context templates.
  */
 export type ContextDestinationMappingConfig = {
     /**
+     * Rules
+     *
+     * Ordered routing rules evaluated top to bottom; first match wins.
+     */
+    rules?: Array<ContextDestinationRule> | null;
+    /**
      * Context Path
      *
-     * Gathered-context path or extracted-variable name used for routing.
+     * Deprecated single-rule context path. Use rules instead; accepted for backward compatibility.
      */
-    context_path: string;
+    context_path?: string | null;
     /**
      * Routes
+     *
+     * Deprecated single-rule routes. Use rules instead; accepted for backward compatibility.
      */
-    routes: Array<ContextDestinationRoute>;
+    routes?: Array<ContextDestinationRoute> | null;
     /**
      * Fallback Destination
      *
-     * Optional provider-native fallback destination.
+     * Optional provider-native destination or context template used when no rule matched.
      */
     fallback_destination?: string | null;
 };
@@ -1930,17 +1998,39 @@ export type ContextDestinationMappingConfig = {
 /**
  * ContextDestinationRoute
  *
- * Map one gathered-context value to an external-PBX destination.
+ * Map one context value to a transfer destination.
  */
 export type ContextDestinationRoute = {
     /**
      * Context Value
+     *
+     * Context value that selects this destination.
      */
     context_value: string;
     /**
      * Destination
+     *
+     * VICIdial in-group, SIP endpoint, E.164 phone number, or context template used when this route matches.
      */
     destination: string;
+};
+
+/**
+ * ContextDestinationRule
+ *
+ * One context lookup with its value-to-destination routes.
+ */
+export type ContextDestinationRule = {
+    /**
+     * Context Path
+     *
+     * Context path used for routing. An unprefixed path checks gathered context first, then initial context; use initial_context.* or gathered_context.* to select one explicitly.
+     */
+    context_path: string;
+    /**
+     * Routes
+     */
+    routes: Array<ContextDestinationRoute>;
 };
 
 /**
@@ -3473,6 +3563,12 @@ export type GoogleRealtimeLlmConfiguration = {
      * ISO 639-1 language code.
      */
     language?: string;
+    /**
+     * Temperature
+     *
+     * Sampling temperature for Gemini Live (0.0 to 2.0).
+     */
+    temperature?: number | null;
 };
 
 /**
@@ -3639,6 +3735,12 @@ export type GoogleVertexRealtimeLlmConfiguration = {
      * BCP-47 language code (e.g. 'en-US').
      */
     language?: string;
+    /**
+     * Temperature
+     *
+     * Sampling temperature for Gemini Live (0.0 to 2.0).
+     */
+    temperature?: number | null;
     /**
      * Project Id
      *
@@ -3897,6 +3999,14 @@ export type HttpApiConfig = {
      * Recording ID for an audio custom message.
      */
     customMessageRecordingId?: string | null;
+    /**
+     * Body Template
+     *
+     * Optional JSON body template for POST, PUT, and PATCH requests.
+     */
+    body_template?: {
+        [key: string]: unknown;
+    } | null;
 };
 
 /**
@@ -6731,6 +6841,66 @@ export type S3SignedUrlResponse = {
 };
 
 /**
+ * SIPConnectivityDetails
+ *
+ * Provider-supplied SIP connection details displayed to customers.
+ */
+export type SipConnectivityDetails = {
+    /**
+     * Provider Display Name
+     */
+    provider_display_name: string;
+    /**
+     * Regions
+     */
+    regions: Array<SipRegionDetails>;
+};
+
+/**
+ * SIPRegionDetails
+ *
+ * Inbound and outbound SIP details for one provider region.
+ */
+export type SipRegionDetails = {
+    /**
+     * Region
+     */
+    region: string;
+    /**
+     * Inbound Transports
+     */
+    inbound_transports: Array<SipTransportDetails>;
+    /**
+     * Outbound Origin Ip
+     */
+    outbound_origin_ip: string;
+};
+
+/**
+ * SIPTransportDetails
+ *
+ * Connection details for one supported inbound SIP transport.
+ */
+export type SipTransportDetails = {
+    /**
+     * Transport
+     */
+    transport: string;
+    /**
+     * Hostname
+     */
+    hostname: string;
+    /**
+     * Port
+     */
+    port: number;
+    /**
+     * Uri
+     */
+    uri: string;
+};
+
+/**
  * Sarvam
  */
 export type SarvamLlmConfiguration = {
@@ -7878,11 +8048,24 @@ export type TelephonyConfigurationDetail = {
      */
     is_default_outbound: boolean;
     /**
+     * Inactive
+     */
+    inactive?: boolean;
+    /**
+     * Inactive Since
+     */
+    inactive_since?: string | null;
+    /**
+     * Inactive Reason
+     */
+    inactive_reason?: string | null;
+    /**
      * Credentials
      */
     credentials: {
         [key: string]: unknown;
     };
+    sip_connectivity?: SipConnectivityDetails | null;
     /**
      * Created At
      */
@@ -7915,6 +8098,18 @@ export type TelephonyConfigurationListItem = {
      * Is Default Outbound
      */
     is_default_outbound: boolean;
+    /**
+     * Inactive
+     */
+    inactive?: boolean;
+    /**
+     * Inactive Since
+     */
+    inactive_since?: string | null;
+    /**
+     * Inactive Reason
+     */
+    inactive_reason?: string | null;
     /**
      * Phone Number Count
      */
@@ -8559,7 +8754,7 @@ export type TransferCallConfig = {
     /**
      * Destination Source
      *
-     * Whether the destination is static/template, resolved by HTTP, or mapped from gathered context to an external-PBX destination.
+     * Whether the destination is static/template, resolved by HTTP, or selected by ordered gathered/initial-context mapping rules.
      */
     destination_source?: 'static' | 'dynamic' | 'context_mapping';
     /**
@@ -8609,7 +8804,7 @@ export type TransferCallConfig = {
      */
     resolver?: HttpTransferResolverConfig | null;
     /**
-     * Optional gathered-context to external-PBX destination mapping.
+     * Optional ordered context-to-destination routing rules.
      */
     context_mapping?: ContextDestinationMappingConfig | null;
 };
@@ -8658,6 +8853,10 @@ export type TriggerCallRequest = {
      * Telephony Configuration Id
      */
     telephony_configuration_id?: number | null;
+    /**
+     * From Phone Number Id
+     */
+    from_phone_number_id?: number | null;
 };
 
 /**
@@ -10423,6 +10622,10 @@ export type WorkflowConfigurationDefaults = {
      * External Pbx Field Mappings
      */
     external_pbx_field_mappings?: Array<ExternalPbxFieldMapping>;
+    /**
+     * External Pbx Lead Headers
+     */
+    external_pbx_lead_headers?: Array<string>;
     [key: string]: unknown;
 };
 
@@ -16737,6 +16940,50 @@ export type SetDefaultOutboundApiV1OrganizationsTelephonyConfigsConfigIdSetDefau
 
 export type SetDefaultOutboundApiV1OrganizationsTelephonyConfigsConfigIdSetDefaultOutboundPostResponse = SetDefaultOutboundApiV1OrganizationsTelephonyConfigsConfigIdSetDefaultOutboundPostResponses[keyof SetDefaultOutboundApiV1OrganizationsTelephonyConfigsConfigIdSetDefaultOutboundPostResponses];
 
+export type ReactivateTelephonyConfigurationApiV1OrganizationsTelephonyConfigsConfigIdReactivatePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Config Id
+         */
+        config_id: number;
+    };
+    query?: never;
+    url: '/api/v1/organizations/telephony-configs/{config_id}/reactivate';
+};
+
+export type ReactivateTelephonyConfigurationApiV1OrganizationsTelephonyConfigsConfigIdReactivatePostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReactivateTelephonyConfigurationApiV1OrganizationsTelephonyConfigsConfigIdReactivatePostError = ReactivateTelephonyConfigurationApiV1OrganizationsTelephonyConfigsConfigIdReactivatePostErrors[keyof ReactivateTelephonyConfigurationApiV1OrganizationsTelephonyConfigsConfigIdReactivatePostErrors];
+
+export type ReactivateTelephonyConfigurationApiV1OrganizationsTelephonyConfigsConfigIdReactivatePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: TelephonyConfigurationDetail;
+};
+
+export type ReactivateTelephonyConfigurationApiV1OrganizationsTelephonyConfigsConfigIdReactivatePostResponse = ReactivateTelephonyConfigurationApiV1OrganizationsTelephonyConfigsConfigIdReactivatePostResponses[keyof ReactivateTelephonyConfigurationApiV1OrganizationsTelephonyConfigsConfigIdReactivatePostResponses];
+
 export type ListPhoneNumbersApiV1OrganizationsTelephonyConfigsConfigIdPhoneNumbersGetData = {
     body?: never;
     headers?: {
@@ -21280,7 +21527,7 @@ export type ListRequestLogsApiV1WebhookSyncEndpointsEndpointIdLogsGetResponses =
 
 export type ListRequestLogsApiV1WebhookSyncEndpointsEndpointIdLogsGetResponse = ListRequestLogsApiV1WebhookSyncEndpointsEndpointIdLogsGetResponses[keyof ListRequestLogsApiV1WebhookSyncEndpointsEndpointIdLogsGetResponses];
 
-export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidGetData = {
+export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidHeadData = {
     body?: never;
     path: {
         /**
@@ -21292,7 +21539,7 @@ export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidGetData = {
     url: '/api/v1/webhooks/inbound/{endpoint_uuid}';
 };
 
-export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidGetErrors = {
+export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidHeadErrors = {
     /**
      * Not found
      */
@@ -21303,16 +21550,16 @@ export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidGetErrors = {
     422: HttpValidationError;
 };
 
-export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidGetError = WebhookHandshakeApiV1WebhooksInboundEndpointUuidGetErrors[keyof WebhookHandshakeApiV1WebhooksInboundEndpointUuidGetErrors];
+export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidHeadError = WebhookHandshakeApiV1WebhooksInboundEndpointUuidHeadErrors[keyof WebhookHandshakeApiV1WebhooksInboundEndpointUuidHeadErrors];
 
-export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidGetResponses = {
+export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidHeadResponses = {
     /**
      * Successful Response
      */
     200: unknown;
 };
 
-export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidGet2Data = {
+export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidHead2Data = {
     body?: never;
     path: {
         /**
@@ -21324,7 +21571,7 @@ export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidGet2Data = {
     url: '/api/v1/webhooks/inbound/{endpoint_uuid}';
 };
 
-export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidGet2Errors = {
+export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidHead2Errors = {
     /**
      * Not found
      */
@@ -21335,9 +21582,9 @@ export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidGet2Errors = {
     422: HttpValidationError;
 };
 
-export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidGet2Error = WebhookHandshakeApiV1WebhooksInboundEndpointUuidGet2Errors[keyof WebhookHandshakeApiV1WebhooksInboundEndpointUuidGet2Errors];
+export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidHead2Error = WebhookHandshakeApiV1WebhooksInboundEndpointUuidHead2Errors[keyof WebhookHandshakeApiV1WebhooksInboundEndpointUuidHead2Errors];
 
-export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidGet2Responses = {
+export type WebhookHandshakeApiV1WebhooksInboundEndpointUuidHead2Responses = {
     /**
      * Successful Response
      */

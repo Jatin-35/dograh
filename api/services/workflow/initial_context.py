@@ -20,6 +20,8 @@ RESERVED_INITIAL_CONTEXT_KEYS = frozenset(
     }
 )
 
+GREETING_OVERRIDE_CONTEXT_KEY = "greeting_override"
+
 
 def merge_external_initial_context(
     initial_context: Mapping[str, Any] | None,

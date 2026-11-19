@@ -22,7 +22,6 @@ from api.schemas.tool import (
     ToolResponse,
     ToolTestResponse,
 )
-from api.services.organization_preferences import external_pbx_integrations_enabled
 from api.services.posthog_client import capture_event
 from api.services.workflow.mcp_tool_session import discover_mcp_tools
 from api.services.workflow.tools.custom_tool import (
@@ -126,41 +125,6 @@ async def validate_tool_credential_references(
             )
 
 
-async def validate_external_pbx_tool_definition(
-    definition: dict[str, Any],
-    *,
-    organization_id: int,
-    existing_definition: Optional[dict[str, Any]] = None,
-) -> None:
-    """Enforce the org feature gate for context-to-in-group routing."""
-
-    config = definition.get("config")
-    existing_config = (existing_definition or {}).get("config")
-    uses_external_pbx = (
-        isinstance(config, dict)
-        and config.get("destination_source") == "context_mapping"
-    )
-    existing_uses_external_pbx = (
-        isinstance(existing_config, dict)
-        and existing_config.get("destination_source") == "context_mapping"
-    )
-    if not uses_external_pbx and not existing_uses_external_pbx:
-        return
-    if await external_pbx_integrations_enabled(organization_id):
-        return
-    if isinstance(existing_config, dict) and existing_config == config:
-        # Preserve a hidden existing mapping while the feature is disabled.
-        return
-    raise ToolManagementError(
-        "external_pbx_feature_disabled",
-        (
-            "External PBX integrations are disabled for this organization. "
-            "Enable them in Platform Settings before configuring in-group routing."
-        ),
-        status_code=403,
-    )
-
-
 async def populate_discovered_tools(
     definition: dict[str, Any], *, organization_id: int
 ) -> dict[str, Any]:
@@ -210,9 +174,6 @@ async def create_tool_for_user(
         )
 
     definition = request.definition.model_dump()
-    await validate_external_pbx_tool_definition(
-        definition, organization_id=user.selected_organization_id
-    )
     await validate_tool_credential_references(
         definition, organization_id=user.selected_organization_id
     )
@@ -349,7 +310,7 @@ async def test_http_tool_for_user(
         )
 
     tool_config = tool.definition.get("config", {}) if isinstance(tool.definition, dict) else {}
-    configured_method = tool_config.get("method", "?")
+    configured_method = tool_config.get("method", "?").upper()
     configured_url = tool_config.get("url", "?")
 
     started_at = time.perf_counter()
@@ -371,12 +332,13 @@ async def test_http_tool_for_user(
     # execution after configured preset templates have been resolved.
     resolved_arguments = {**llm_params, **preset_params}
 
-    # Mirror execute_http_tool's own branch: POST/PUT/PATCH send the resolved
-    # arguments as a JSON body; GET/DELETE send them as query params. Never both.
+    # Mirror execute_http_tool's own branch: POST/PUT/PATCH send a JSON body
+    # (the rendered body template when there is one); GET/DELETE send the
+    # resolved arguments as query params. Never both.
     request_body = None
     request_params = None
     if configured_method in ("POST", "PUT", "PATCH"):
-        request_body = resolved_arguments  # keep {} so preview matches wire request
+        request_body = result.get("request_body_preview", resolved_arguments)
     elif resolved_arguments:
         request_params = serialize_query_params(resolved_arguments)
 
@@ -388,7 +350,7 @@ async def test_http_tool_for_user(
         duration_ms=duration_ms,
         hint=hint_for_status_code(status_code, configured_method),
         request_method=configured_method,
-        request_url=configured_url,
+        request_url=result.get("rendered_url") or configured_url,
         request_headers=result.get("request_headers", {}),
         request_body=request_body,
         request_params=request_params,
@@ -420,16 +382,6 @@ async def update_tool_for_user(
         )
 
     if definition is not None:
-        existing_tool = await db_client.get_tool_by_uuid(
-            tool_uuid,
-            user.selected_organization_id,
-            include_archived=True,
-        )
-        await validate_external_pbx_tool_definition(
-            definition,
-            organization_id=user.selected_organization_id,
-            existing_definition=existing_tool.definition if existing_tool else None,
-        )
         await validate_tool_credential_references(
             definition, organization_id=user.selected_organization_id
         )

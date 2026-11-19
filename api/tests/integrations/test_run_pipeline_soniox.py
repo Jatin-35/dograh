@@ -189,7 +189,7 @@ async def _run_call(run, user, workflow, llm, fake, script, mode=WorkflowRunMode
             # The real Soniox service, built by the real factory...
             patch("api.services.pipecat.run_pipeline.create_stt_service", create_stt),
             # ...talking to the fake instead of Soniox.
-            patch("pipecat.services.soniox.stt.websocket_connect", connect),
+            patch("pipecat.services.websocket_service.websocket_connect", connect),
         ):
             run_task = asyncio.create_task(
                 _run_pipeline(

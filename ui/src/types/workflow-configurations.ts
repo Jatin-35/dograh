@@ -180,6 +180,7 @@ type WorkflowConfigurationBase = Omit<
     | "noise_reduction"
     | "text_chat_inactivity_timeout_seconds"
     | "external_pbx_field_mappings"
+    | "external_pbx_lead_headers"
 >;
 
 export type WorkflowConfigurations = WorkflowConfigurationBase & {
@@ -197,6 +198,7 @@ export type WorkflowConfigurations = WorkflowConfigurationBase & {
     noise_reduction: NoiseReduction;  // Caller-side noise suppression before STT / the realtime model
     text_chat_inactivity_timeout_seconds?: number;  // End inactive text chats after this many seconds
     external_pbx_field_mappings: ExternalPBXFieldMapping[];
+    external_pbx_lead_headers: string[];  // Extra lead fields to capture from the inbound INVITE
     model_overrides?: ModelOverrides;  // Per-workflow model configuration overrides
     model_configuration_v2_override?: OrganizationAiModelConfigurationV2;  // Full v2 model configuration override
     [key: string]: unknown;  // Allow additional properties for future configurations
@@ -221,6 +223,7 @@ const FALLBACK_WORKFLOW_CONFIGURATIONS: WorkflowConfigurations = {
     context_compaction_enabled: false,
     noise_reduction: 'off',
     external_pbx_field_mappings: [],
+    external_pbx_lead_headers: [],
 };
 
 export function resolveWorkflowConfigurations(
@@ -279,6 +282,12 @@ export function resolveWorkflowConfigurations(
             configurations?.external_pbx_field_mappings
             ?? defaults?.external_pbx_field_mappings
             ?? FALLBACK_WORKFLOW_CONFIGURATIONS.external_pbx_field_mappings,
+        external_pbx_lead_headers:
+            configurations?.external_pbx_lead_headers
+            // Cast until `npm run generate-client` runs against a backend
+            // carrying this field; the generated defaults type predates it.
+            ?? (defaults?.external_pbx_lead_headers as string[] | undefined)
+            ?? FALLBACK_WORKFLOW_CONFIGURATIONS.external_pbx_lead_headers,
         transcript_configuration: {
             ...DEFAULT_TRANSCRIPT_CONFIGURATION,
             ...(defaults?.transcript_configuration as Partial<TranscriptConfiguration> | undefined),

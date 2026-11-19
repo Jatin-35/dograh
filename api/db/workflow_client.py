@@ -303,6 +303,39 @@ class WorkflowClient(BaseDBClient):
             )
             return result.scalars().first()
 
+    async def get_definition_configurations(
+        self,
+        definition_id: int | None,
+        *,
+        organization_id: int,
+    ) -> dict:
+        """Load the configuration document for one workflow definition.
+
+        Callers that need configuration *before* a run row exists must read the
+        definition the run will bind to. ``WorkflowModel.workflow_configurations``
+        is a legacy column kept in sync with the draft, so reading it here would
+        let unpublished edits change live call behaviour.
+
+        Scoping is mandatory: the lookup joins through ``WorkflowModel`` so a
+        definition id belonging to another tenant returns ``{}`` rather than
+        that tenant's configuration.
+        """
+        if definition_id is None:
+            return {}
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(WorkflowDefinitionModel.workflow_configurations)
+                .join(
+                    WorkflowModel,
+                    WorkflowModel.id == WorkflowDefinitionModel.workflow_id,
+                )
+                .where(
+                    WorkflowDefinitionModel.id == definition_id,
+                    WorkflowModel.organization_id == organization_id,
+                )
+            )
+            return result.scalar_one_or_none() or {}
+
     async def get_workflow_versions(
         self,
         workflow_id: int,
@@ -355,6 +388,61 @@ class WorkflowClient(BaseDBClient):
 
             result = await session.execute(query)
             return result.scalars().all()
+
+    async def list_workflows_for_model_configuration_migration(
+        self, organization_id: int
+    ) -> list[WorkflowModel]:
+        """Load an organization's workflows and every version for migration."""
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(WorkflowModel)
+                .options(selectinload(WorkflowModel.definitions))
+                .where(WorkflowModel.organization_id == organization_id)
+            )
+            return list(result.scalars().unique().all())
+
+    async def bulk_update_workflow_model_configurations(
+        self,
+        *,
+        organization_id: int,
+        workflow_updates: list[tuple[int, dict]],
+        definition_updates: list[tuple[int, dict]],
+    ) -> None:
+        """Atomically update workflow and version configurations for one org."""
+        if not workflow_updates and not definition_updates:
+            return
+
+        async with self.async_session() as session:
+            try:
+                for workflow_id, workflow_configurations in workflow_updates:
+                    await session.execute(
+                        update(WorkflowModel)
+                        .where(
+                            WorkflowModel.id == workflow_id,
+                            WorkflowModel.organization_id == organization_id,
+                        )
+                        .values(workflow_configurations=workflow_configurations)
+                    )
+
+                organization_workflow_ids = select(WorkflowModel.id).where(
+                    WorkflowModel.organization_id == organization_id
+                )
+                for definition_id, workflow_configurations in definition_updates:
+                    await session.execute(
+                        update(WorkflowDefinitionModel)
+                        .where(
+                            WorkflowDefinitionModel.id == definition_id,
+                            WorkflowDefinitionModel.workflow_id.in_(
+                                organization_workflow_ids
+                            ),
+                        )
+                        .values(workflow_configurations=workflow_configurations)
+                    )
+
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
 
     async def get_all_workflows_for_listing(
         self, organization_id: int = None, status: str = None

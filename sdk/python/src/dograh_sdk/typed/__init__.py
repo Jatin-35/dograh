@@ -8,6 +8,7 @@ from dograh_sdk.typed.agent_node import AgentNode
 from dograh_sdk.typed.conditional_webhook import ConditionalWebhook
 from dograh_sdk.typed.end_call import EndCall
 from dograh_sdk.typed.global_node import GlobalNode
+from dograh_sdk.typed.noveum import Noveum
 from dograh_sdk.typed.paygent import Paygent
 from dograh_sdk.typed.qa import Qa
 from dograh_sdk.typed.start_call import StartCall
@@ -21,6 +22,7 @@ __all__ = [
     "ConditionalWebhook",
     "EndCall",
     "GlobalNode",
+    "Noveum",
     "Paygent",
     "Qa",
     "StartCall",

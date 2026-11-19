@@ -156,7 +156,10 @@ async def test_gemini_31_keeps_its_behaviour():
     service._session = session
     service._disconnecting = False
     await service._tool_result("id-4", "vectus_area_manager_lookup", {"status": "found"})
-    session.send_realtime_input.assert_awaited_once_with(text=" ")  # 3.1 still nudges
+    session.send_tool_response.assert_awaited_once()
+    # No " " nudge after a tool result: Gemini took it as the caller speaking
+    # and cut the bot off (removed in dograh's pipecat, 7a60a8d5e).
+    session.send_realtime_input.assert_not_awaited()
 
 
 # ─── provider wiring ───────────────────────────────────────────────────────

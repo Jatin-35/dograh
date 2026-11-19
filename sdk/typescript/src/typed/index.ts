@@ -7,6 +7,7 @@ export { type AgentNode, agentNode } from "./agent-node.js";
 export { type ConditionalWebhook, conditionalWebhook } from "./conditional-webhook.js";
 export { type EndCall, endCall } from "./end-call.js";
 export { type GlobalNode, globalNode } from "./global-node.js";
+export { type Noveum, noveum } from "./noveum.js";
 export { type Paygent, paygent } from "./paygent.js";
 export { type Qa, qa } from "./qa.js";
 export { type StartCall, startCall } from "./start-call.js";
@@ -19,6 +20,7 @@ import type {
     ConditionalWebhook,
     EndCall,
     GlobalNode,
+    Noveum,
     Paygent,
     Qa,
     StartCall,
@@ -28,4 +30,4 @@ import type {
 } from "./index.js";
 
 /** Discriminated union of every generated typed node. */
-export type TypedNode = AgentNode | ConditionalWebhook | EndCall | GlobalNode | Paygent | Qa | StartCall | Trigger | Tuner | Webhook;
+export type TypedNode = AgentNode | ConditionalWebhook | EndCall | GlobalNode | Noveum | Paygent | Qa | StartCall | Trigger | Tuner | Webhook;

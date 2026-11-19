@@ -11,6 +11,7 @@ from loguru import logger
 from twilio.request_validator import RequestValidator
 
 from api.enums import TelephonyCallStatus, WorkflowRunMode
+from api.services.telephony import ws_auth
 from api.services.telephony.base import (
     AnsweringMachineDetectionResult,
     CallInitiationResult,
@@ -171,15 +172,20 @@ class TwilioProvider(TelephonyProvider):
         Generate TwiML response for starting a call session.
         """
         _, wss_backend_endpoint = await get_backend_endpoints()
+        ws_url = ws_auth.build_media_ws_url(
+            wss_backend_endpoint, workflow_id, organization_id, workflow_run_id
+        )
 
         twiml_content = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Connect>
-        <Stream url="{wss_backend_endpoint}/api/v1/telephony/ws/{workflow_id}/{organization_id}/{workflow_run_id}"></Stream>
+        <Stream url="{ws_url}"></Stream>
     </Connect>
     <Pause length="40"/>
 </Response>"""
-        logger.info(f"Twiml content generated - {twiml_content}")
+        # Redacted: the stream URL carries a bearer capability token, and this
+        # log line is the one place it would otherwise reach a log sink.
+        logger.info(f"Twiml content generated - {ws_auth.redact_token(twiml_content)}")
         return twiml_content
 
     async def get_call_cost(self, call_id: str) -> Dict[str, Any]:

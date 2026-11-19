@@ -510,7 +510,7 @@ class TataSmartfloProvider(TelephonyProvider):
         organization_id: int,
         workflow_run_id: int,
     ) -> None:
-        """Take over the media socket the shared /api/v1/telephony/ws route
+        """Take over the media socket the shared telephony media-WS route
         accepted, and run the agent on it.
 
         SmartFlo's stream is Twilio Media Streams in shape: ``connected``, then

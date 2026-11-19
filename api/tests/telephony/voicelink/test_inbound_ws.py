@@ -13,7 +13,7 @@ Nothing guarded it here.
 """
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import WebSocketDisconnect
@@ -70,16 +70,11 @@ def _no_matching_did():
     Enough to prove which number was extracted and looked up, without
     standing up a workflow, a run and a pipeline.
     """
-    result = MagicMock()
-    result.first.return_value = None
-
-    session = MagicMock()
-    session.execute = AsyncMock(return_value=result)
-
-    ctx = MagicMock()
-    ctx.__aenter__ = AsyncMock(return_value=session)
-    ctx.__aexit__ = AsyncMock(return_value=False)
-    return patch.object(voicelink_routes.db_client, "async_session", return_value=ctx)
+    return patch.object(
+        voicelink_routes.db_client,
+        "find_inbound_routes_by_number",
+        AsyncMock(return_value=[]),
+    )
 
 
 class TestHandshake:

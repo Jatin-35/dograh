@@ -130,7 +130,8 @@
               "integrations/mcp",
               "integrations/webhook-sync",
               "integrations/tuner",
-              "integrations/paygent"
+              "integrations/paygent",
+              "integrations/noveum"
             ]
           }
         ]
