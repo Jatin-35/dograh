@@ -9,7 +9,7 @@ conflict-free.
 - **Live**: deployed to the prod server. **Not deployed**: committed, not yet on prod.
 - ⚠️ marks what has not been checked on a real call or against the real provider.
 
-**Where prod is now:** everything up to `cdc06738` (18 Nov 2026) is live, on
+**Where prod is now:** everything up to `4a45f0f5` (19 Nov 2026) is live, on
 Dograh v1.44.0. The Vectus lookup service (`vectus-api`) is a separate container
 with its own deploys.
 
@@ -18,11 +18,11 @@ it **Live** after the deploy.
 
 ---
 
-## 2026-11-19 (not deployed)
-- **"Hire an Expert" renamed "Build My AI Agent"** in the sidebar button, the
-  agent-builder nudge ("Our team builds it for you") and the billing
-  message.
-- **Lead email subject** is now `BotrixAI Voicebot Lead – Build My AI Agent: <company>`
+## 2026-11-19, live (api + ui)
+- `4a45f0f5` **"Hire an Expert" renamed "Build My AI Agent"** in the sidebar
+  button, the agent-builder nudge ("Our team builds it for you") and the
+  billing message.
+- `4a45f0f5` **Lead email subject** is now `BotrixAI Voicebot Lead – Build My AI Agent: <company>`
   (or `– Enterprise: …`). It was `[BotrixAI lead] …`.
 - **Ops (no code), live:** SMTP set up on prod with Zoho (`smtp.zoho.in`, 465, SSL,
   from contact@botrixai.com). Lead emails go to contact@ and jatin@botrixai.com
