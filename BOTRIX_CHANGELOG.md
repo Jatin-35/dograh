@@ -9,14 +9,47 @@ conflict-free.
 - **Live**: deployed to the prod server. **Not deployed**: committed, not yet on prod.
 - ⚠️ marks what has not been checked on a real call or against the real provider.
 
-**Where prod is now:** everything up to `4a45f0f5` (19 Nov 2026) is live, on
-Dograh v1.44.0. The Vectus lookup service (`vectus-api`) is a separate container
+**Where prod is now:** everything up to `e7898766` (19 Nov 2026) is live, on
+Dograh v1.46.0 with pipecat 1.7. The Vectus lookup service (`vectus-api`) is a separate container
 with its own deploys.
 
 **Adding an entry:** add a line under today's date with every commit, and mark
 it **Live** after the deploy.
 
 ---
+
+## 2026-11-19: Upgraded to Dograh v1.46 (Checkpoint B), live
+- `6e7ffdd4` Merged upstream **v1.45** (pipecat 1.5 → 1.7). `58666050` merged
+  **v1.46**. `e7898766` build fixes (OpenCV 4.14 pin, five new pins, Linux
+  lockfile).
+- **New from upstream:**
+  - **Call dispositions:** business outcomes per agent, mapping to your own codes.
+  - **Telephony:** SIP trunks, setup checklist, and inactive configurations.
+  - **Pre-call fetch** can be limited to inbound or outbound calls.
+  - **Tools:** URL path parameters and nested JSON bodies.
+  - **Noveum** tracing node.
+  - **Termination funnel**, so call endings are recorded in order.
+  - **Gemini 3.x** no longer gets a "nudge" after a tool result, which used to
+    make the bot cut itself off.
+- **Kept our way:**
+  - Preset tool values beat the AI's values, so the caller's real number wins.
+  - Dograh-managed SIP stays **off** unless `MANAGED_SIP_PROVISIONING_ENABLED=true`.
+  - Campaign failures are counted once per call, never from busy or no-answer.
+  - A rejected provider key still ends the call.
+  - Gemini Live keeps the bot's words beside a tool call when reseeding.
+  - langfuse stays on 3.9.3.
+- **Bugs the merge would have shipped, fixed before deploy:**
+  - Soniox couldn't connect.
+  - Every call crashed when ending.
+  - The API wouldn't start (VoiceLink/TATA spec).
+  - Custom Tools got switched off on saving preferences.
+  - VoiceLink/TATA calls were missing from call-history filters.
+  - Agent settings validation broke.
+- **Data migrations:** Gemini 2.5 → 3.5 Flash (changed 0 rows; none in use),
+  telephony inactive flag, trunks, pre-call fetch mode. DB backup taken first:
+  `~/backups/pre-v1.46-20261119-1617.dump` on the VM.
+- Live-tested: Gemini 3.1 with a tool, Gemini 3.8, VoiceLink in/out, Soniox.
+  ⚠️ Not tested: a campaign on a rejected key.
 
 ## 2026-11-19, live (api + ui)
 - `4a45f0f5` **"Hire an Expert" renamed "Build My AI Agent"** in the sidebar
