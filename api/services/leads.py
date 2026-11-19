@@ -1,4 +1,4 @@
-"""In-app sales leads ("Hire an expert", "Enterprise") delivered to our team.
+"""In-app sales leads ("Build My AI Agent", "Enterprise") delivered to our team.
 
 The lead forms used to post to Dograh's lead server; with that cut off a
 submission went nowhere. Now the signed-in user's form is emailed to
@@ -18,7 +18,7 @@ LeadKind = Literal["hire_expert", "enterprise"]
 
 DEFAULT_LEADS_EMAIL = "contact@botrixai.com"
 
-_TITLES = {"hire_expert": "Hire an expert", "enterprise": "Enterprise"}
+_TITLES = {"hire_expert": "Build My AI Agent", "enterprise": "Enterprise"}
 
 # Readable labels, in the order they appear in the email.
 _FIELD_LABELS = {
@@ -56,7 +56,7 @@ def format_lead(
         or fields.get("workEmail")
         or "unknown"
     )
-    subject = f"[BotrixAI lead] {_TITLES[kind]}: {who}"
+    subject = f"BotrixAI Voicebot Lead – {_TITLES[kind]}: {who}"
 
     lines = []
     for key, label in _FIELD_LABELS.items():

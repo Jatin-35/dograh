@@ -62,7 +62,7 @@ export function BuyCreditsControl({ className }: { className?: string }) {
       await startTopUp(amount);
     } catch {
       // The seam is intentionally unimplemented until Razorpay lands.
-      setError("Self-serve top-up is coming soon. Use \"Hire an Expert\" or contact us for now.");
+      setError("Self-serve top-up is coming soon. Please contact us to add credits for now.");
     } finally {
       setBusy(false);
     }

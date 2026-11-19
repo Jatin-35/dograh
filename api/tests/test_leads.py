@@ -19,7 +19,7 @@ def test_format_lead_orders_known_fields_and_keeps_unknown_ones():
         "asha@acme.in",
         7,
     )
-    assert subject == "[BotrixAI lead] Hire an expert: Acme"
+    assert subject == "BotrixAI Voicebot Lead – Build My AI Agent: Acme"
     lines = body.splitlines()
     assert lines[:4] == [
         "Name: Asha",
@@ -37,7 +37,7 @@ def test_enterprise_subject_falls_back_to_work_email():
     subject, body = leads.format_lead(
         "enterprise", {"workEmail": "it@corp.in"}, None, None
     )
-    assert subject == "[BotrixAI lead] Enterprise: it@corp.in"
+    assert subject == "BotrixAI Voicebot Lead – Enterprise: it@corp.in"
     assert "Work email: it@corp.in" in body
     assert "Signed-in account: unknown" in body
 
@@ -63,4 +63,4 @@ async def test_deliver_lead_emails_the_team(monkeypatch, sent):
     result = await leads.deliver_lead("hire_expert", {"name": "Asha"}, "a@b.in", 1)
     assert result is sent
     assert calls[0][0] == ["contact@botrixai.com"]
-    assert calls[0][1] == "[BotrixAI lead] Hire an expert: Asha"
+    assert calls[0][1] == "BotrixAI Voicebot Lead – Build My AI Agent: Asha"

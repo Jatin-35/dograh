@@ -377,7 +377,7 @@ export function AppSidebar() {
     </Button>
   );
 
-  // "Hire an Expert" CTA, rendered INSIDE the shared footer pill next to the
+  // "Build My AI Agent" CTA, rendered INSIDE the shared footer pill next to the
   // profile icon. Expanded: label pill filling the row. Collapsed: icon-only.
   const hireExpertButton = isCollapsed ? (
     <Tooltip>
@@ -386,13 +386,13 @@ export function AppSidebar() {
           size="icon"
           className="h-7 w-7 rounded-full"
           onClick={() => openHireExpert("sidebar")}
-          aria-label="Hire an Expert"
+          aria-label="Build My AI Agent"
         >
           <UserRound className="h-3.5 w-3.5" />
         </Button>
       </TooltipTrigger>
       <TooltipContent side="right">
-        <p>Hire an Expert</p>
+        <p>Build My AI Agent</p>
       </TooltipContent>
     </Tooltip>
   ) : (
@@ -402,7 +402,7 @@ export function AppSidebar() {
       onClick={() => openHireExpert("sidebar")}
     >
       <UserRound className="h-3.5 w-3.5" />
-      Hire an Expert
+      Build My AI Agent
     </Button>
   );
 

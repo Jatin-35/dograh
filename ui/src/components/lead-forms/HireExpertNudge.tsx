@@ -76,8 +76,8 @@ export function HireExpertNudge({ workflowId }: HireExpertNudgeProps) {
       <button type="button" onClick={handleClick} className="flex flex-1 items-center gap-3 text-left">
         <UserRound className="h-5 w-5 shrink-0 text-primary" />
         <span>
-          <span className="block text-sm font-semibold">Hire an Expert</span>
-          <span className="block text-xs text-muted-foreground">We&apos;ll build your agent for you</span>
+          <span className="block text-sm font-semibold">Build My AI Agent</span>
+          <span className="block text-xs text-muted-foreground">Our team builds it for you</span>
         </span>
       </button>
       <button
