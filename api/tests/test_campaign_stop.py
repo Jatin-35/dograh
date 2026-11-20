@@ -217,3 +217,28 @@ class TestDispatcherSkipsCancelledCampaign:
         result = await dispatcher.process_batch(campaign_id=campaign_id, batch_size=5)
 
         assert result == 0
+
+
+class TestStopCampaignRoute:
+    """The Stop button's route returns the stopped campaign, not a 500.
+
+    Regression: upstream v1.48 made ``_build_campaign_response`` async and our
+    stop route still called it without ``await``, so the campaign was stopped
+    but the request failed with an internal server error.
+    """
+
+    async def test_route_returns_the_cancelled_campaign(self, db_session_factory):
+        from types import SimpleNamespace
+
+        from api.routes.campaign import stop_campaign as stop_route
+        from api.routes.campaign import CampaignResponse
+
+        ids = await _create_campaign(db_session_factory, "running")
+        try:
+            user = SimpleNamespace(id=ids.user_id, selected_organization_id=ids.organization_id)
+            response = await stop_route(ids.campaign_id, user=user)
+            assert isinstance(response, CampaignResponse)
+            assert response.id == ids.campaign_id
+            assert response.state == "cancelled"
+        finally:
+            await _cleanup_campaign(db_session_factory, ids)

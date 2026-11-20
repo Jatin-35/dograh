@@ -18,6 +18,13 @@ it **Live** after the deploy.
 
 ---
 
+## 2026-11-21: Campaign Stop button fix, not deployed
+- **Stop campaign returned "Internal Server Error".** The campaign *was* stopped
+  (state set to cancelled first); only the reply failed. Upstream v1.48 made
+  `_build_campaign_response` async and our own Stop route still called it without
+  `await`. Fixed, with a route-level test (the old tests only covered the service).
+  API-only deploy, no migrations.
+
 ## 2026-11-20: Merged Dograh v1.48 (Checkpoint C, part 2), deployed (api + ui)
 - **Deployed to prod 2026-11-20 ~15:35 UTC** from branch `upgrade/dograh-v1.48`
   (health 1.48.0). DB backup `~/backups/pre-v1.48-20261120-1521.dump`; rollback images

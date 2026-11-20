@@ -810,7 +810,7 @@ async def stop_campaign(
     cfg_name = await _get_telephony_configuration_name(
         campaign.telephony_configuration_id, user.selected_organization_id
     )
-    return _build_campaign_response(
+    return await _build_campaign_response(
         campaign,
         workflow_name or "Unknown",
         executed,
