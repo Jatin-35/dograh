@@ -9,8 +9,8 @@ conflict-free.
 - **Live**: deployed to the prod server. **Not deployed**: committed, not yet on prod.
 - ⚠️ marks what has not been checked on a real call or against the real provider.
 
-**Where prod is now:** everything up to `e7898766` (19 Nov 2026) is live, on
-Dograh v1.46.0 with pipecat 1.7. The Vectus lookup service (`vectus-api`) is a separate container
+**Where prod is now:** everything up to `019b6c9e` (20 Nov 2026) is live, on
+Dograh v1.48.0 with pipecat 1.12. The Vectus lookup service (`vectus-api`) is a separate container
 with its own deploys.
 
 **Adding an entry:** add a line under today's date with every commit, and mark
@@ -25,7 +25,7 @@ it **Live** after the deploy.
   c4e21b7f80a9 (agent 5's live version: provisional_vad → default), 6d7b40a9c2e1,
   3a7b91c5d402 applied. Live-tested: Flux turn start, Gemini 3.1 + 3.8 with node
   transitions, VoiceLink in/out, MCP, greeting barge-in on Gemini and cascaded over
-  the phone. ⚠️ Campaign not tested yet.
+  the phone, and a 2-number VoiceLink campaign (dial, no-answer, retry scheduled).
   - Greeting barge-in can't be tested from a browser without headphones: the
     browser's echo cancellation silences the caller's mic while the bot speaks
     (measured: caller 0.002 RMS vs bot 0.15 during the greeting).
