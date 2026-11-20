@@ -19,7 +19,7 @@ it **Live** after the deploy.
 ---
 
 ## 2026-11-20: Merged Dograh v1.48 (Checkpoint C, part 2), not deployed
-- Merged upstream **v1.48** (pipecat ~1.10 → 1.12, FastMCP 3 → 4, MCP 1 → 2) on
+- `6543888b` Merged upstream **v1.48** (pipecat ~1.10 → 1.12, FastMCP 3 → 4, MCP 1 → 2) on
   branch `upgrade/dograh-v1.48`.
 - **New from upstream:**
   - **Campaign traffic splits** (A/B between agents or versions) and workflow
