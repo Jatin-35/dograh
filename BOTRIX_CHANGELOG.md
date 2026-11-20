@@ -18,7 +18,19 @@ it **Live** after the deploy.
 
 ---
 
-## 2026-11-20: Merged Dograh v1.48 (Checkpoint C, part 2), not deployed
+## 2026-11-20: Merged Dograh v1.48 (Checkpoint C, part 2), deployed (api + ui)
+- **Deployed to prod 2026-11-20 ~15:35 UTC** from branch `upgrade/dograh-v1.48`
+  (health 1.48.0). DB backup `~/backups/pre-v1.48-20261120-1521.dump`; rollback images
+  `dograh-local/dograh-api:rollback-v146` / `dograh-ui:rollback-v146`. Migrations
+  c4e21b7f80a9 (agent 5's live version: provisional_vad → default), 6d7b40a9c2e1,
+  3a7b91c5d402 applied. Live-tested: Flux turn start, Gemini 3.1 + 3.8 with node
+  transitions, VoiceLink in/out, MCP, greeting barge-in on Gemini and cascaded over
+  the phone. ⚠️ Campaign not tested yet.
+  - Greeting barge-in can't be tested from a browser without headphones: the
+    browser's echo cancellation silences the caller's mic while the bot speaks
+    (measured: caller 0.002 RMS vs bot 0.15 during the greeting).
+  - New end-to-end test `test_greeting_bargein_e2e.py` (cascaded, Flux-style,
+    switch off).
 - `6543888b` Merged upstream **v1.48** (pipecat ~1.10 → 1.12, FastMCP 3 → 4, MCP 1 → 2) on
   branch `upgrade/dograh-v1.48`.
 - **New from upstream:**
