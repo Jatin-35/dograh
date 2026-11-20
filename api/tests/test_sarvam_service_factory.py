@@ -56,14 +56,14 @@ class TestSarvamLLMServiceFactory:
             mock_service.Settings = RealSarvamLLMService.Settings
             create_llm_service_from_provider(
                 provider=ServiceProviders.SARVAM.value,
-                model="sarvam-105b",
+                model="sarvam-105b-conversations",
                 api_key="test-key",
             )
 
         assert mock_service.call_count == 1
         kwargs = mock_service.call_args.kwargs
         assert kwargs["api_key"] == "test-key"
-        assert kwargs["settings"].model == "sarvam-105b"
+        assert kwargs["settings"].model == "sarvam-105b-conversations"
         assert kwargs["settings"].temperature == 0.5
         assert kwargs["base_url"] == "https://api.sarvam.ai/v1"
 
@@ -147,7 +147,7 @@ class TestSarvamLLMServiceFactory:
         )
         assert service._client.default_headers["api-subscription-key"] == "test-key"
 
-    def test_create_sarvam_llm_service_passes_user_temperature(self):
+    def test_create_sarvam_llm_service_passes_base_url(self):
         with patch(
             "api.services.pipecat.service_factory.DograhSarvamLLMService"
         ) as mock_service:
@@ -155,6 +155,21 @@ class TestSarvamLLMServiceFactory:
             create_llm_service_from_provider(
                 provider=ServiceProviders.SARVAM.value,
                 model="sarvam-105b",
+                api_key="test-key",
+                base_url="https://api.sarvam.ai/v1",
+            )
+
+        kwargs = mock_service.call_args.kwargs
+        assert kwargs["base_url"] == "https://api.sarvam.ai/v1"
+
+    def test_create_sarvam_llm_service_passes_user_temperature(self):
+        with patch(
+            "api.services.pipecat.service_factory.DograhSarvamLLMService"
+        ) as mock_service:
+            mock_service.Settings = RealSarvamLLMService.Settings
+            create_llm_service_from_provider(
+                provider=ServiceProviders.SARVAM.value,
+                model="sarvam-105b-conversations",
                 api_key="test-key",
                 temperature=0.8,
             )

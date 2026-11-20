@@ -147,7 +147,7 @@ def _layout(stt=None, tts=None):
         audio_buffer=_Stub("recorder"),
         user_context_aggregator=_Stub("user_agg"),
         assistant_context_aggregator=_Stub("assistant_agg"),
-        call_duration_processor=_Stub("clock"),
+        call_monitor_processor=_Stub("clock"),
         agent_generation_processor=_Stub("generation"),
         pipeline_metrics_aggregator=_Stub("metrics"),
         termination_funnel=_Stub("funnel"),
@@ -160,8 +160,10 @@ def _layout(stt=None, tts=None):
 
 
 def test_pipeline_with_no_custom_parts_is_unchanged():
+    # The call monitor (clock) sits ahead of the realtime service (upstream
+    # dograh v1.48), so a stalled reply can't hide a request from it.
     assert _layout() == [
-        "input", "funnel", "user_agg", "inworld", "generation", "clock", "output", "recorder",
+        "input", "funnel", "user_agg", "clock", "inworld", "generation", "output", "recorder",
         "assistant_agg", "metrics",
     ]
 
@@ -172,7 +174,7 @@ def test_custom_transcriber_sits_before_the_turn_rules():
 
 
 def test_custom_voice_sits_after_inworld_before_the_output():
-    assert _layout(tts=_Stub("tts"))[3:8] == ["inworld", "generation", "clock", "tts", "output"]
+    assert _layout(tts=_Stub("tts"))[4:8] == ["inworld", "generation", "tts", "output"]
 
 
 # ── The wrapper ───────────────────────────────────────────────────────

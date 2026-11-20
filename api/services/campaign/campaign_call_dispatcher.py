@@ -22,6 +22,7 @@ from api.services.campaign.errors import (
     ConcurrentSlotAcquisitionError,
     PhoneNumberPoolExhaustedError,
 )
+from api.services.campaign.traffic_split import campaign_split, pick_variant
 from api.services.quota_service import authorize_workflow_run_start
 from api.services.webhook_sync import calling as webhook_sync_calling
 from api.services.workflow.initial_context import merge_external_initial_context
@@ -286,15 +287,18 @@ class CampaignCallDispatcher:
         attempted = False
         accepted = False
         try:
-            workflow = await db_client.get_workflow(
-                campaign.workflow_id,
-                organization_id=campaign.organization_id,
-            )
-            if not workflow:
-                raise ValueError(f"Workflow {campaign.workflow_id} not found")
             phone_number = queued_run.context_variables.get("phone_number")
             if not phone_number:
                 raise ValueError(f"No phone number in queued run {queued_run.id}")
+            split = campaign_split(campaign)
+            variant = pick_variant(split, phone_number)
+            workflow_id = variant["workflow_id"]
+            workflow = await db_client.get_workflow(
+                workflow_id,
+                organization_id=campaign.organization_id,
+            )
+            if not workflow:
+                raise ValueError(f"Workflow {workflow_id} not found")
 
             provider = await self.get_provider_for_campaign(campaign)
             from_number = None
@@ -322,10 +326,12 @@ class CampaignCallDispatcher:
                 "direction": "outbound",
                 "telephony_configuration_id": campaign.telephony_configuration_id,
             }
-            run_inputs = await prepare_workflow_run_inputs(db_client, workflow)
+            run_inputs = await prepare_workflow_run_inputs(
+                db_client, workflow, definition_id=variant["workflow_definition_id"]
+            )
             workflow_run = await db_client.create_workflow_run(
                 name=f"WR-CAMPAIGN-{campaign.id}-{queued_run.id}",
-                workflow_id=campaign.workflow_id,
+                workflow_id=workflow_id,
                 mode=provider.PROVIDER_NAME,
                 user_id=campaign.created_by,
                 initial_context=initial_context,
@@ -333,6 +339,12 @@ class CampaignCallDispatcher:
                 queued_run_id=queued_run.id,
                 organization_id=campaign.organization_id,
                 definition_id=run_inputs.definition_id,
+                campaign_traffic_split={
+                    "variant_id": variant["id"],
+                    "revision": split["revision"],
+                    "workflow_definition_id": variant["workflow_definition_id"],
+                    "weight": variant["weight"],
+                },
             )
             await call_concurrency.bind_workflow_run(concurrency_slot, workflow_run.id)
             if from_slot is not None:
@@ -353,7 +365,7 @@ class CampaignCallDispatcher:
                     gathered_context={"call_tags": ["retry", f"retry_reason_{reason}"]},
                 )
             quota = await authorize_workflow_run_start(
-                workflow_id=campaign.workflow_id,
+                workflow_id=workflow_id,
                 organization_id=campaign.organization_id,
                 workflow_run_id=workflow_run.id,
                 campaign_id=campaign.id,
@@ -364,7 +376,7 @@ class CampaignCallDispatcher:
             backend_endpoint, _ = await get_backend_endpoints()
             webhook_url = (
                 f"{backend_endpoint}/api/v1/telephony/{provider.WEBHOOK_ENDPOINT}"
-                f"?workflow_id={campaign.workflow_id}"
+                f"?workflow_id={workflow_id}"
                 f"&workflow_run_id={workflow_run.id}"
                 f"&organization_id={campaign.organization_id}"
             )
@@ -380,7 +392,7 @@ class CampaignCallDispatcher:
                 webhook_url=webhook_url,
                 workflow_run_id=workflow_run.id,
                 from_number=from_number,
-                workflow_id=campaign.workflow_id,
+                workflow_id=workflow_id,
                 organization_id=campaign.organization_id,
             )
             accepted = True

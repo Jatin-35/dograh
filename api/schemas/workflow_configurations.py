@@ -176,6 +176,10 @@ class WorkflowConfigurationDefaults(BaseModel):
     # STT / the realtime model hears the audio.
     noise_reduction: Literal["off", "rnnoise"] = DEFAULT_NOISE_REDUCTION
 
+    tts_cache_enabled: bool = Field(
+        default=False,
+        description="Reuse generated speech for repeated phrases. Supports MiniMax TTS.",
+    )
     call_dispositions: list[CallDispositionOption] = Field(
         default_factory=list,
         max_length=MAX_CALL_DISPOSITIONS,

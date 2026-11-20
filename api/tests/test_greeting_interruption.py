@@ -223,7 +223,8 @@ async def test_switch_on_still_mutes_when_the_call_is_shutting_down():
 @pytest.mark.asyncio
 async def test_switch_on_still_mutes_queued_transition_speech():
     engine = _engine(_workflow(allow_interrupt_greeting=True))
-    engine._queued_speech_mute_state = "waiting"
+    # Transition / tool speech queued with mute_user holds the caller muted.
+    engine.speech_playback.create(mute_user=True)
     assert await engine.should_mute_user(UserStartedSpeakingFrame()) is True
 
 

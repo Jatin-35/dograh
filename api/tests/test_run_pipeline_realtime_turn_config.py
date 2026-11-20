@@ -1,3 +1,25 @@
+import pytest
+from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.frames.frames import (
+    BotStartedSpeakingFrame,
+    EndFrame,
+    InterimTranscriptionFrame,
+    InterruptionFrame,
+    LLMContextFrame,
+    ProposedUserStartedSpeakingFrame,
+    ProposedUserStoppedSpeakingFrame,
+    TranscriptionFrame,
+    UserStartedSpeakingFrame,
+    UserStoppedSpeakingFrame,
+    VADUserStartedSpeakingFrame,
+    VADUserStoppedSpeakingFrame,
+)
+from pipecat.processors.aggregators.llm_context import LLMContext
+from pipecat.processors.aggregators.llm_response_universal import (
+    LLMUserAggregator,
+    LLMUserAggregatorParams,
+)
+from pipecat.tests.utils import SleepFrame, run_test
 from pipecat.turns.user_start import (
     ExternalUserTurnStartStrategy,
     MinWordsUserTurnStartStrategy,
@@ -11,6 +33,7 @@ from pipecat.turns.user_stop import (
     SpeechTimeoutUserTurnStopStrategy,
     TurnAnalyzerUserTurnStopStrategy,
 )
+from pipecat.turns.user_turn_strategies import UserTurnStrategies
 
 import api.services.pipecat.run_pipeline as run_pipeline_module
 from api.schemas.workflow_configurations import WorkflowConfigurationDefaults
@@ -137,7 +160,7 @@ def test_unknown_realtime_providers_keep_local_vad():
     assert strategies.stop[0].wait_for_transcript is False
 
 
-def test_voice_activity_strategy_uses_external_start_for_external_turn_stt():
+def test_non_realtime_voice_activity_uses_external_start_for_external_turn_stt():
     strategies = _create_non_realtime_user_turn_start_strategies(
         {"turn_start_strategy": "default"},
         uses_external_turns=True,
@@ -148,7 +171,7 @@ def test_voice_activity_strategy_uses_external_start_for_external_turn_stt():
     assert strategies[0]._enable_interruptions is True
 
 
-def test_voice_activity_strategy_uses_transcript_and_vad_for_standard_stt():
+def test_non_realtime_voice_activity_uses_transcription_and_vad_for_standard_stt():
     strategies = _create_non_realtime_user_turn_start_strategies(
         {"turn_start_strategy": "default"},
         uses_external_turns=False,
@@ -187,54 +210,45 @@ def test_non_realtime_can_use_min_words_start_strategy():
     assert strategies[0]._min_words == 4
 
 
-def test_external_turn_stt_overrides_an_explicit_min_words_request():
-    """External-turn STT decides the start even when min_words is chosen.
-
-    min_words gates the start on transcript text, which would ignore the
-    provider's turn detection on the start side while still using it to end the
-    turn, and would resolve the start from a queued frame — the shape that lets
-    a turn's own interruption flush the stop proposal queued behind it.
-    """
+def test_external_turn_stt_honors_an_explicit_min_words_request():
     strategies = _create_non_realtime_user_turn_start_strategies(
         {"turn_start_strategy": "min_words", "turn_start_min_words": 4},
         uses_external_turns=True,
     )
 
     assert len(strategies) == 1
-    assert isinstance(strategies[0], ExternalUserTurnStartStrategy)
+    assert isinstance(strategies[0], MinWordsUserTurnStartStrategy)
+    assert strategies[0]._min_words == 4
 
 
-def test_external_turn_stt_decides_when_no_strategy_is_chosen():
-    strategies = _create_non_realtime_user_turn_start_strategies(
-        {"turn_start_strategy": "default"},
-        uses_external_turns=True,
-    )
-
-    assert len(strategies) == 1
-    assert isinstance(strategies[0], ExternalUserTurnStartStrategy)
-
-
-def test_retired_strategy_value_falls_back_to_our_min_words_default():
-    """A definition still carrying "provisional_vad" resolves, it does not raise."""
-    strategies = _create_non_realtime_user_turn_start_strategies(
+@pytest.mark.parametrize("uses_external_turns", [False, True])
+@pytest.mark.parametrize(
+    "config",
+    [
+        {},
+        {"turn_start_strategy": None, "turn_start_min_words": None},
         {"turn_start_strategy": "provisional_vad"},
-        uses_external_turns=False,
+    ],
+    ids=["unset", "null", "retired"],
+)
+def test_non_realtime_defaults_to_two_word_interruptions(config, uses_external_turns):
+    strategies = _create_non_realtime_user_turn_start_strategies(
+        config,
+        uses_external_turns=uses_external_turns,
     )
+
     assert len(strategies) == 1
     assert isinstance(strategies[0], MinWordsUserTurnStartStrategy)
-
-    strategies = _create_non_realtime_user_turn_start_strategies(
-        {"turn_start_strategy": "provisional_vad"},
-        uses_external_turns=True,
-    )
-    assert len(strategies) == 1
-    assert isinstance(strategies[0], ExternalUserTurnStartStrategy)
+    assert strategies[0]._min_words == 2
 
 
-def test_non_realtime_min_words_start_strategy_has_default_threshold():
+@pytest.mark.parametrize("uses_external_turns", [False, True])
+def test_non_realtime_min_words_start_strategy_has_default_threshold(
+    uses_external_turns,
+):
     strategies = _create_non_realtime_user_turn_start_strategies(
         {"turn_start_strategy": "min_words"},
-        uses_external_turns=False,
+        uses_external_turns=uses_external_turns,
     )
 
     assert len(strategies) == 1
@@ -344,3 +358,77 @@ def test_inworld_realtime_uses_provider_turn_frames_without_local_vad():
     assert vad_analyzer is None
     assert isinstance(strategies.start[0], ExternalUserTurnStartStrategy)
     assert isinstance(strategies.stop[0], ExternalUserTurnStopStrategy)
+@pytest.mark.parametrize(
+    "bot_speaking,text,send_interim,accepted",
+    [
+        (True, "okay", True, False),
+        (True, "please wait", True, True),
+        (False, "yes", True, True),
+        (True, "please wait", False, True),
+    ],
+    ids=["below-threshold", "interim-interruption", "silent-bot", "final-only"],
+)
+async def test_default_min_words_with_provider_turn_markers(
+    bot_speaking, text, send_interim, accepted
+):
+    config = {}
+    context = LLMContext()
+    user = LLMUserAggregator(
+        context,
+        params=LLMUserAggregatorParams(
+            user_turn_strategies=UserTurnStrategies(
+                start=_create_non_realtime_user_turn_start_strategies(
+                    config, uses_external_turns=True
+                ),
+                stop=_create_non_realtime_user_turn_stop_strategies(
+                    config, uses_external_turns=True
+                ),
+            ),
+        ),
+    )
+    snapshots = {}
+
+    @user.event_handler("on_before_process_frame")
+    async def capture_turn_state(aggregator, frame):
+        if isinstance(
+            frame,
+            (
+                InterimTranscriptionFrame,
+                TranscriptionFrame,
+                ProposedUserStoppedSpeakingFrame,
+                EndFrame,
+            ),
+        ):
+            snapshots[type(frame)] = (
+                aggregator.user_turn_controller.has_active_user_turn,
+                [message["content"] for message in context.messages],
+            )
+
+    frames = [BotStartedSpeakingFrame(), SleepFrame()] if bot_speaking else []
+    frames.extend([ProposedUserStartedSpeakingFrame(), VADUserStartedSpeakingFrame()])
+    if send_interim:
+        frames.extend([InterimTranscriptionFrame(text, "user", "now"), SleepFrame()])
+    frames.extend(
+        [
+            VADUserStoppedSpeakingFrame(),
+            TranscriptionFrame(text, "user", "now", finalized=True),
+            ProposedUserStoppedSpeakingFrame(),
+            SleepFrame(),
+        ]
+    )
+    down, _ = await run_test(user, frames_to_send=frames)
+
+    # Neither the provider's onset nor local VAD bypasses the word threshold.
+    if send_interim:
+        assert snapshots[InterimTranscriptionFrame] == (False, [])
+    assert snapshots[TranscriptionFrame] == (accepted and send_interim, [])
+    # The complete transcript waits for the provider's stop before running the LLM.
+    assert snapshots[ProposedUserStoppedSpeakingFrame] == (accepted, [])
+    assert snapshots[EndFrame] == (False, [text] if accepted else [])
+    for frame_type in (
+        UserStartedSpeakingFrame,
+        InterruptionFrame,
+        LLMContextFrame,
+        UserStoppedSpeakingFrame,
+    ):
+        assert sum(isinstance(frame, frame_type) for frame in down) == int(accepted)

@@ -240,6 +240,7 @@ async def test_dispatch_dials_the_number_and_records_the_slot():
     dispatcher = module.CampaignCallDispatcher()
     slot = "+919429396634::ch3"
     campaign = SimpleNamespace(
+        orchestrator_metadata=None,
         id=7,
         organization_id=5,
         workflow_id=10,
@@ -324,6 +325,7 @@ async def test_failed_dispatch_releases_the_slot_it_took():
     dispatcher = module.CampaignCallDispatcher()
     slot = "+919429396634::ch2"
     campaign = SimpleNamespace(
+        orchestrator_metadata=None,
         id=7,
         organization_id=5,
         workflow_id=10,

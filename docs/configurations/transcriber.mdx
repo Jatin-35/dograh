@@ -46,3 +46,8 @@ The agent's own turn detection decides when the caller has finished; 60db is the
 **Advanced:** 60db drops a short answer it is unsure of, such as a quiet "haan" on a noisy line. **Keep short unsure answers** (on by default) keeps what it heard instead, so the agent doesn't wait for an answer the caller already gave.
 
 Each 60db plan limits how many calls can transcribe at the same time; a call over the limit is refused. See the [60db speech-to-text](https://docs.60db.ai/websocket-api/stt) documentation.
+## Deepgram Flux language hints
+
+With the `flux-general-multi` model, **Language hints** biases transcription toward the languages you expect callers to speak. Pick several when callers switch between known languages, for example Hindi and English. Hints are combined with the **Language** setting, and leaving both on auto-detect lets Flux detect the language on its own.
+
+Hints only help within the languages Flux multilingual supports. They do not add new ones. See [Deepgram's language prompting guide](https://developers.deepgram.com/docs/flux/language-prompting).

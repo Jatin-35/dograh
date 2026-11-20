@@ -13,7 +13,6 @@ import {
     DEFAULT_TURN_START_MIN_WORDS,
     ExternalPBXFieldMapping,
     resolveWorkflowConfigurations,
-    SELF_DETECTING_TRANSCRIBERS_NOTE,
     TURN_START_STRATEGY_OPTIONS,
     TurnStartStrategy,
     TurnStopStrategy,
@@ -64,6 +63,9 @@ export const ConfigurationsDialog = ({
     const [contextCompactionEnabled, setContextCompactionEnabled] = useState<boolean>(
         resolvedWorkflowConfigurations.context_compaction_enabled
     );
+    const [ttsCacheEnabled, setTtsCacheEnabled] = useState<boolean>(
+        resolvedWorkflowConfigurations.tts_cache_enabled
+    );
     const [externalPbxFieldMappings, setExternalPbxFieldMappings] = useState<ExternalPBXFieldMapping[]>(
         resolvedWorkflowConfigurations.external_pbx_field_mappings
     );
@@ -92,6 +94,7 @@ export const ConfigurationsDialog = ({
                 transcript_configuration: resolvedWorkflowConfigurations.transcript_configuration,
                 context_compaction_enabled: contextCompactionEnabled,
                 noise_reduction: resolvedWorkflowConfigurations.noise_reduction,
+                tts_cache_enabled: ttsCacheEnabled,
                 external_pbx_field_mappings: externalPbxFieldMappings,
             }, name);
             onOpenChange(false);
@@ -115,6 +118,7 @@ export const ConfigurationsDialog = ({
             setTurnStartMinWords(nextWorkflowConfigurations.turn_start_min_words);
             setTurnStopStrategy(nextWorkflowConfigurations.turn_stop_strategy);
             setContextCompactionEnabled(nextWorkflowConfigurations.context_compaction_enabled);
+            setTtsCacheEnabled(nextWorkflowConfigurations.tts_cache_enabled);
             setExternalPbxFieldMappings(nextWorkflowConfigurations.external_pbx_field_mappings);
         }
     }, [open, workflowName, workflowConfigurations]);
@@ -274,9 +278,6 @@ export const ConfigurationsDialog = ({
                             <p className="text-xs text-muted-foreground">
                                 {selectedTurnStartStrategy?.description}
                             </p>
-                            <p className="text-xs text-muted-foreground">
-                                {SELF_DETECTING_TRANSCRIBERS_NOTE}
-                            </p>
                         </div>
 
                         {turnStartStrategy === 'min_words' && (
@@ -322,6 +323,26 @@ export const ConfigurationsDialog = ({
                                 id="context-compaction-enabled"
                                 checked={contextCompactionEnabled}
                                 onCheckedChange={setContextCompactionEnabled}
+                            />
+                        </div>
+                    </div>
+
+                    <div className="space-y-4">
+                        <div>
+                            <h3 className="text-sm font-semibold mb-1">Speech Caching</h3>
+                            <p className="text-xs text-muted-foreground">
+                                Reuse generated audio for repeated phrases to reduce response time and speech generation costs.
+                                Cached audio expires after 24 hours. Currently available with MiniMax TTS.
+                            </p>
+                        </div>
+                        <div className="flex items-center justify-between">
+                            <Label htmlFor="tts-cache-enabled" className="text-sm">
+                                Enable Speech Caching
+                            </Label>
+                            <Switch
+                                id="tts-cache-enabled"
+                                checked={ttsCacheEnabled}
+                                onCheckedChange={setTtsCacheEnabled}
                             />
                         </div>
                     </div>

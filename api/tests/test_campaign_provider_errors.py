@@ -490,6 +490,7 @@ async def _dial_and_fail(exception):
     from api.services.campaign import campaign_call_dispatcher as dispatcher_module
 
     campaign = SimpleNamespace(
+        orchestrator_metadata=None,
         id=42,
         workflow_id=7,
         organization_id=5,

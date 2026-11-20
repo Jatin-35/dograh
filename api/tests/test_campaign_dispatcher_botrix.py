@@ -268,6 +268,7 @@ def dial():
     instance = CampaignCallDispatcher()
     instance.CAPACITY_WAIT_TIMEOUT = 0
     campaign = SimpleNamespace(
+        orchestrator_metadata=None,
         id=7,
         organization_id=3,
         workflow_id=11,

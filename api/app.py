@@ -40,6 +40,7 @@ from api.services.pipecat.tracing_config import (
     handle_langfuse_sync,
     load_all_org_langfuse_credentials,
 )
+from api.services.pipecat.tts_cache.runtime import close_speech_cache
 from api.services.worker_sync.manager import (
     WorkerSyncManager,
     set_worker_sync_manager,
@@ -68,30 +69,43 @@ async def lifespan(app: FastAPI):
         await sync_manager.start()
         set_worker_sync_manager(sync_manager)
 
-        from api.services.observability import loop_exceptions, loop_lag
+        from api.services.observability import loop_exceptions, loop_lag, metrics
+        from api.services.observability.call_events import (
+            delivery as call_event_delivery,
+        )
+
+        call_event_delivery.start()
 
         # Event-loop lag gauge — per-pod saturation signal read off
         # /health/active-calls during autoscaling load tests.
+        metrics.start()
         loop_lag.start()
         # Routes exceptions that escape tasks and timer callbacks; demotes one
         # known aioice teardown race and leaves everything else at ERROR.
         loop_exceptions.install()
 
-        yield  # Run app
-
-        # Shutdown sequence - this runs when FastAPI is shutting down
-        logger.info("Starting graceful shutdown...")
-        from api.services.workflow.text_chat_stream import (
-            finish_streaming_text_chat_turns,
-        )
-
-        # Let streaming chat replies finish and hand off their completion work
-        # before the worker goes away.
         try:
-            await finish_streaming_text_chat_turns()
+            yield  # Run app
         finally:
-            await sync_manager.stop()
-            await loop_lag.stop()
+            logger.info("Starting graceful shutdown...")
+            from api.services.workflow.text_chat_stream import (
+                finish_streaming_text_chat_turns,
+            )
+
+            try:
+                # Let streaming chat replies finish and hand off their
+                # completion work before the worker goes away.
+                await finish_streaming_text_chat_turns()
+            finally:
+                await call_event_delivery.shutdown()
+                try:
+                    await sync_manager.stop()
+                finally:
+                    try:
+                        await close_speech_cache()
+                    finally:
+                        await loop_lag.stop()
+                        metrics.stop()
 
 
 app = FastAPI(

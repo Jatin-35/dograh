@@ -78,17 +78,22 @@ async def test_a_recorded_greeting_is_handed_to_the_realtime_service(audio_workf
         generate_if_no_greeting=True,
     )
 
-    assert result == "greeting"
+    assert result.action == "greeting"
     llm.handle_prerecorded_greeting.assert_awaited_once_with(
         context, "Namaskar, main Aastha"
     )
     queued = [c.args[0] for c in engine._transport_output.queue_frame.await_args_list]
+    # Upstream dograh v1.48 brackets each queued speech with SpeechBoundaryFrames
+    # so its playback can be tracked. On this (non-realtime) engine the greeting
+    # no longer enters the context through the aggregator: the greeting
+    # controller adds it once it has played in full, so there is no push frame.
     assert [type(f).__name__ for f in queued] == [
+        "SpeechBoundaryFrame",
         "TTSStartedFrame",
         "TTSTextFrame",
         "TTSAudioRawFrame",
         "TTSStoppedFrame",
-        "LLMAssistantPushAggregationFrame",  # the greeting is its own turn
+        "SpeechBoundaryFrame",
     ]
 
 
@@ -101,7 +106,7 @@ async def test_a_text_llm_without_a_session_is_left_alone(audio_workflow):
         previous_node_id=None,
         generate_if_no_greeting=True,
     )
-    assert result == "greeting"
+    assert result.action == "greeting"
 
 
 @pytest.mark.asyncio

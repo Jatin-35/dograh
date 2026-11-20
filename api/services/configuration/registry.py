@@ -534,12 +534,6 @@ ATLASCLOUD_MODELS = [
 
 GROQ_MODELS = [
     "llama-3.3-70b-versatile",
-    "deepseek-r1-distill-llama-70b",
-    "qwen-qwq-32b",
-    "meta-llama/llama-4-scout-17b-16e-instruct",
-    "meta-llama/llama-4-maverick-17b-128e-instruct",
-    "gemma2-9b-it",
-    "llama-3.1-8b-instant",
     "openai/gpt-oss-120b",
 ]
 OPENROUTER_MODELS = [
@@ -739,6 +733,15 @@ class OpenRouterLLMConfiguration(BaseLLMConfiguration):
     base_url: str = Field(
         default="https://openrouter.ai/api/v1",
         description="Override only if proxying OpenRouter through your own gateway.",
+    )
+    provider_order: list[str] = Field(
+        default_factory=list,
+        description=(
+            "OpenRouter provider slugs to try first, in order, one per entry "
+            "(e.g. groq), as listed on the model's OpenRouter page. Pinning a "
+            "low-latency provider avoids OpenRouter's default price-weighted "
+            "routing; other providers are still used if these are unavailable."
+        ),
     )
 
 
@@ -2188,7 +2191,7 @@ class CartesiaTTSConfiguration(BaseTTSConfiguration):
     model_config = CARTESIA_PROVIDER_MODEL_CONFIG
     provider: Literal[ServiceProviders.CARTESIA] = ServiceProviders.CARTESIA
     model: str = Field(
-        default="sonic-3.5",
+        default="sonic-3.6",
         description="Cartesia TTS model.",
         json_schema_extra={"examples": CARTESIA_TTS_MODELS},
     )
@@ -2804,6 +2807,19 @@ class DeepgramSTTConfiguration(BaseSTTConfiguration):
             },
         },
     )
+    language_hints: list[str] = Field(
+        default_factory=list,
+        description=(
+            "More languages to bias Flux multilingual toward, on top of the "
+            "language above. Pick several when callers switch between known "
+            "languages; leave empty to rely on the language above."
+        ),
+        json_schema_extra={
+            "examples": DEEPGRAM_FLUX_MULTILINGUAL_LANGUAGES,
+            "visible_for_models": ["flux-general-multi"],
+        },
+    )
+
     base_url: str = Field(
         default=DEEPGRAM_DEFAULT_BASE_URL,
         description=(
@@ -2817,6 +2833,23 @@ class DeepgramSTTConfiguration(BaseSTTConfiguration):
             "allow_custom_input": True,
         },
     )
+
+    @field_validator("language_hints")
+    @classmethod
+    def validate_language_hints(cls, hints: list[str]) -> list[str]:
+        # Deepgram rejects the whole stream for an unsupported hint, so catch it
+        # when the configuration is saved rather than when a call connects.
+        unsupported = [
+            hint
+            for hint in hints
+            if hint.split("-", 1)[0].lower() not in DEEPGRAM_FLUX_MULTILINGUAL_LANGUAGES
+        ]
+        if unsupported:
+            raise ValueError(
+                "Unsupported Flux multilingual language hints: "
+                + ", ".join(unsupported)
+            )
+        return hints
 
 
 @register_stt

@@ -117,13 +117,18 @@ async def test_min_words_start_with_external_stop_answers_every_turn():
 
 @pytest.mark.asyncio
 async def test_production_strategies_for_external_turn_stt_answer_every_turn():
-    """The exact strategies run_pipeline builds, for an unconfigured agent and
-    for one that asked for min_words: the STT decides the start in both."""
+    """The exact strategies run_pipeline builds. Since upstream dograh v1.48
+    (#832) the two-word minimum applies to external-turn STT too (unconfigured
+    and min_words agents); only "default" lets the STT decide the start."""
     for configs in ({}, {"turn_start_strategy": "min_words"}):
         starts = _create_non_realtime_user_turn_start_strategies(
             configs, uses_external_turns=True
         )
-        assert [type(s) for s in starts] == [ExternalUserTurnStartStrategy]
+        assert [type(s) for s in starts] == [MinWordsUserTurnStartStrategy]
+    starts = _create_non_realtime_user_turn_start_strategies(
+        {"turn_start_strategy": "default"}, uses_external_turns=True
+    )
+    assert [type(s) for s in starts] == [ExternalUserTurnStartStrategy]
     configs: dict = {}
     generations = await _two_turns(
         _create_non_realtime_user_turn_start_strategies(

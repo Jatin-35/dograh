@@ -20,6 +20,7 @@ from api.services.configuration.options import (
     GOOGLE_VERTEX_DEFAULT_LOCATION,
 )
 from api.services.configuration.registry import (
+    ATLASCLOUD_API_BASE_URL,
     HOPPER_API_BASE_URL,
     INCEPTION_API_BASE_URL,
     ServiceProviders,
@@ -40,7 +41,11 @@ from api.services.pipecat.sarvam_llm import (
 from api.services.pipecat.gemini_json_schema_adapter import (
     DograhGeminiJSONSchemaAdapter,
 )
-from api.services.pipecat.minimax_tts import MiniMaxOwnedSessionTTSService
+from api.services.pipecat.minimax_tts import (
+    MiniMaxCachingTTSService,
+    MiniMaxOwnedSessionTTSService,
+)
+from api.services.pipecat.tts_cache.runtime import get_speech_cache
 from api.services.pipecat.anthropic_llm import DograhAnthropicLLMService
 from api.services.pipecat.murf_tts import MurfTTSService
 from api.services.pipecat.vartalaap_tts import VartalaapTTSService
@@ -457,10 +462,19 @@ def create_stt_service(
                 "keyterm": keyterms or [],
             }
             if user_config.stt.model == "flux-general-multi":
-                language = getattr(user_config.stt, "language", None)
-                language_hint = _resolve_deepgram_flux_language_hint(language)
-                if language_hint:
-                    settings_kwargs["language_hints"] = [language_hint]
+                codes = [
+                    getattr(user_config.stt, "language", None),
+                    *(getattr(user_config.stt, "language_hints", None) or []),
+                ]
+                language_hints = list(
+                    dict.fromkeys(
+                        hint
+                        for hint in map(_resolve_deepgram_flux_language_hint, codes)
+                        if hint
+                    )
+                )
+                if language_hints:
+                    settings_kwargs["language_hints"] = language_hints
 
             return DeepgramFluxSTTService(
                 api_key=user_config.stt.api_key,
@@ -760,13 +774,21 @@ def create_stt_service(
 
 @_report_service_factory_failures(ErrorSource.TTS, config_section="tts")
 def create_tts_service(
-    user_config, audio_config: "AudioConfig", correlation_id: str | None = None
+    user_config,
+    audio_config: "AudioConfig",
+    correlation_id: str | None = None,
+    *,
+    organization_id: int | None = None,
+    tts_cache_enabled: bool = False,
 ):
     """Create and return appropriate TTS service based on user configuration
 
     Args:
         user_config: User configuration containing TTS settings
-        transport_type: Type of transport (e.g., 'twilio', 'webrtc')
+        audio_config: Pipeline and transport audio configuration.
+        correlation_id: Managed model services correlation ID.
+        organization_id: Trusted tenant scope for TTS caching.
+        tts_cache_enabled: Whether the workflow enables caching for supported providers.
     """
     # Synthesis carries the same residency question as transcription - the text
     # sent for speaking is drawn from the conversation - so the endpoint is
@@ -1070,12 +1092,20 @@ def create_tts_service(
             base_url = f"{base_url}/t2a_v2"
         _validate_runtime_service_url(base_url, "base_url")
 
+        cache = get_speech_cache(organization_id, enabled=tts_cache_enabled)
+        service_type = (
+            MiniMaxCachingTTSService if cache else MiniMaxOwnedSessionTTSService
+        )
+        cache_kwargs = (
+            {"speech_cache": cache, "organization_id": organization_id} if cache else {}
+        )
         session = aiohttp.ClientSession()
-        return MiniMaxOwnedSessionTTSService(
+        return service_type(
             api_key=user_config.tts.api_key,
             group_id=group_id,
             base_url=base_url,
             aiohttp_session=session,
+            **cache_kwargs,
             settings=MiniMaxTTSSettings(
                 model=user_config.tts.model,
                 voice=voice,
@@ -1320,6 +1350,7 @@ def create_llm_service_from_provider(
     temperature: float | None = None,
     bill_to: str | None = None,
     reasoning_effort: str | None = None,
+    provider_order: list[str] | None = None,
     usage_context: str | None = None,
 ):
     """Create an LLM service from explicit provider/model/api_key.
@@ -1348,6 +1379,10 @@ def create_llm_service_from_provider(
         ServiceProviders.OPENAI.value,
         ServiceProviders.ATLASCLOUD.value,
     ):
+        # Voicemail and QA configs with their own provider pass no base_url;
+        # without this default the OpenAI client sends the Atlas Cloud key to OpenAI.
+        if provider == ServiceProviders.ATLASCLOUD.value and not base_url:
+            base_url = ATLASCLOUD_API_BASE_URL
         kwargs = {}
         if base_url:
             _validate_runtime_service_url(base_url, "base_url")
@@ -1426,9 +1461,14 @@ def create_llm_service_from_provider(
         if base_url:
             _validate_runtime_service_url(base_url, "base_url")
             kwargs["base_url"] = base_url
+        extra = {}
+        if provider_order:
+            # OpenRouter's provider preferences are a request-body field the
+            # OpenAI client does not know, so they travel in extra_body.
+            extra["extra_body"] = {"provider": {"order": provider_order}}
         return OpenRouterLLMService(
             api_key=api_key,
-            settings=OpenRouterLLMSettings(model=model, temperature=0.1),
+            settings=OpenRouterLLMSettings(model=model, temperature=0.1, extra=extra),
             **kwargs,
         )
     elif provider == ServiceProviders.GOOGLE.value:
@@ -1964,6 +2004,7 @@ def llm_provider_kwargs(provider: str, get) -> dict:
         kwargs["base_url"] = get("base_url")
     elif provider == ServiceProviders.OPENROUTER.value:
         kwargs["base_url"] = get("base_url")
+        kwargs["provider_order"] = get("provider_order")
     elif provider == ServiceProviders.INCEPTION.value:
         kwargs["base_url"] = get("base_url")
         kwargs["reasoning_effort"] = get("reasoning_effort")

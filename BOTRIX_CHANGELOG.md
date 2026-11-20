@@ -18,6 +18,45 @@ it **Live** after the deploy.
 
 ---
 
+## 2026-11-20: Merged Dograh v1.48 (Checkpoint C, part 2), not deployed
+- Merged upstream **v1.48** (pipecat ~1.10 → 1.12, FastMCP 3 → 4, MCP 1 → 2) on
+  branch `upgrade/dograh-v1.48`.
+- **New from upstream:**
+  - **Campaign traffic splits** (A/B between agents or versions) and workflow
+    version links.
+  - **Speech caching** for MiniMax TTS (per agent, off by default).
+  - **Call events export to BigQuery** (org setting).
+  - **Transfer introduction** for Twilio transfers (off by default).
+  - MCP tools `list_calls` and `get_call_transcript`.
+  - Agent-to-agent handoff keeps the earlier conversation; hang-up during call
+    setup no longer leaks an agent worker.
+  - Deepgram Flux language hints; Cartesia sonic-3.6 default; form-encoded HTTP
+    tool bodies; Prometheus metrics (off unless `ENABLE_PROMETHEUS_METRICS=true`).
+- **Kept our way:**
+  - Our **Soniox** and **Hopper** (upstream added its own of both; ours are
+    supersets). Upstream's duplicate copies were removed.
+  - **Gemini Realtime** default stays 3.1; **Gemini 3.8** stays its own provider.
+  - **Greeting:** the caller stays muted until the greeting ends unless the
+    start node allows greeting interruption. With the switch on, upstream's
+    two-word barge-in applies; realtime (Gemini) greetings stay interruptible too.
+  - **Empty-turn recovery:** ours, switched per agent. pipecat 1.12's own
+    recovery is turned off so a cough gets one "please repeat", not two.
+  - Campaign health counts every finished call, successes included.
+  - MinIO image `quay.io/minio/minio` (upstream moved to its own build).
+  - langfuse 3.9.3, google-auth 2.58.0, default Sarvam model `sarvam-105b`.
+- **Changed on purpose:**
+  - **Turn start:** the two-word minimum now applies to Deepgram Flux, Cartesia
+    ink-2 and Soniox turn detection too (upstream #832). The UI note saying
+    those transcribers decide the turn start was removed.
+  - **Call screening:** the answer supervisor hears the pickup while the
+    greeting plays (upstream #790).
+- **Pins moved** (forced by pipecat 1.12 / FastMCP 4): fastmcp 4.0.10, mcp 2.3.0,
+  aws-sdk-bedrock-runtime 0.9.0 + smithy/awscrt, sentencex 1.0.31, tzdata 2026.4.
+- Tests: 6009 passed. Not ours: the Windows-only loop-lag test, upstream's
+  OpenAI Live end-node test (fails on clean upstream too), two timing flakes.
+- ⚠️ Not tested on real calls: everything above. Test calls must include a
+  campaign, a greeting barge-in agent, a Flux/Soniox agent and an MCP client.
+
 ## 2026-11-20: Merged Dograh v1.47 (Checkpoint C, part 1), not deployed
 - `768471ff` Merged upstream **v1.47** (pipecat 1.7 → ~1.10) on branch `upgrade/dograh-v1.48`.
 - **New from upstream:**

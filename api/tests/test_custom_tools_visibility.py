@@ -48,6 +48,9 @@ async def test_context_reports_the_orgs_choice_hidden_by_default(show, expected)
     assert context.custom_tools_visible is expected
 
 
+_PREFS = "api.services.organization_preferences"
+
+
 @pytest.mark.asyncio
 async def test_saving_other_preferences_keeps_the_custom_tools_choice():
     """An older Settings form that only sends the timezone must not switch
@@ -55,35 +58,32 @@ async def test_saving_other_preferences_keeps_the_custom_tools_choice():
     stored = OrganizationPreferences(
         timezone="Asia/Kolkata", test_phone_number="+919018737669", show_custom_tools=True
     )
-    upsert = AsyncMock(side_effect=lambda org_id, prefs: prefs)
-    with patch(
-        "api.routes.organization.get_organization_preferences",
-        AsyncMock(return_value=stored),
-    ), patch("api.routes.organization.upsert_organization_preferences", upsert):
-        saved = await save_preferences(
-            request=OrganizationPreferences(timezone="UTC"), user=_user()
-        )
+    upsert = AsyncMock()
+    with patch(f"{_PREFS}.get_organization_preferences", AsyncMock(return_value=stored)), patch(
+        f"{_PREFS}.upsert_organization_preferences", upsert
+    ), patch(f"{_PREFS}.get_organization_preferences_response", AsyncMock()):
+        await save_preferences(request=OrganizationPreferences(timezone="UTC"), user=_user())
 
-    assert saved == OrganizationPreferences(
-        timezone="UTC", test_phone_number="+919018737669", show_custom_tools=True
+    upsert.assert_awaited_once_with(
+        ORG_ID,
+        OrganizationPreferences(
+            timezone="UTC", test_phone_number="+919018737669", show_custom_tools=True
+        ),
     )
-    upsert.assert_awaited_once_with(ORG_ID, saved)
 
 
 @pytest.mark.asyncio
 async def test_a_field_sent_as_null_is_still_cleared():
     stored = OrganizationPreferences(test_phone_number="+919018737669")
-    with patch(
-        "api.routes.organization.get_organization_preferences",
-        AsyncMock(return_value=stored),
-    ), patch(
-        "api.routes.organization.upsert_organization_preferences",
-        AsyncMock(side_effect=lambda org_id, prefs: prefs),
-    ):
-        saved = await save_preferences(
+    upsert = AsyncMock()
+    with patch(f"{_PREFS}.get_organization_preferences", AsyncMock(return_value=stored)), patch(
+        f"{_PREFS}.upsert_organization_preferences", upsert
+    ), patch(f"{_PREFS}.get_organization_preferences_response", AsyncMock()):
+        await save_preferences(
             request=OrganizationPreferences(test_phone_number=None, show_custom_tools=False),
             user=_user(),
         )
 
+    saved = upsert.await_args.args[1]
     assert saved.test_phone_number is None
     assert saved.show_custom_tools is False
