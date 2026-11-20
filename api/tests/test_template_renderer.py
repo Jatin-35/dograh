@@ -1,5 +1,6 @@
 import pytest
 
+from api.services.workflow.workflow_graph import extract_template_variables
 from api.utils.template_renderer import render_template
 
 
@@ -75,3 +76,25 @@ class TestFormatFilters:
     def test_other_filter_names_are_still_defaults(self):
         assert render_template("{{name | there}}", {}) == "there"
         assert render_template("{{name | fallback:Guest}}", {}) == "Guest"
+def test_clock_variables_are_not_asked_of_source_data():
+    """A campaign's contact file cannot supply what the clock supplies.
+
+    ``{{current_time_<TZ>}}`` is resolved here at render time, so a workflow
+    using one is complete without a column named after it. Treating it as a
+    required variable rejected contact files that had everything they could
+    have.
+    """
+    required = extract_template_variables(
+        "Hi {{customer_name}}, it is {{current_time_America/New_York}} "
+        "on {{current_weekday_America/New_York}}. {{current_time}} "
+        "{{current_weekday}}"
+    )
+
+    assert required == {"customer_name"}
+
+
+def test_clock_variables_still_render():
+    rendered = render_template("It is {{current_weekday_America/New_York}}", {})
+
+    assert rendered != "It is "
+    assert "{{" not in rendered

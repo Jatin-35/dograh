@@ -102,7 +102,9 @@ def _chained(status):
         "ws-close-code",
     ],
 )
-def test_the_http_status_is_found_wherever_the_provider_put_it(exception, message, expected):
+def test_the_http_status_is_found_wherever_the_provider_put_it(
+    exception, message, expected
+):
     assert provider_http_status(exception, message) == expected
 
 
@@ -132,9 +134,15 @@ async def _report(service, frame):
 @pytest.mark.asyncio
 async def test_a_service_401_pauses_the_runs_campaign():
     service = FrameProcessor()
-    with patch.object(module.circuit_breaker, "pause_on_provider_error", AsyncMock()) as pause:
+    with patch.object(
+        module.circuit_breaker, "pause_on_provider_error", AsyncMock()
+    ) as pause:
         register_campaign_provider_error_handler(
-            service, provider="sarvam", source="tts", workflow_run_id=77, organization_id=5
+            service,
+            provider="sarvam",
+            source="tts",
+            workflow_run_id=77,
+            organization_id=5,
         )
         err = _WithStatusCode(401)
         await _report(service, ErrorFrame(error="Sarvam TTS error", exception=err))
@@ -149,9 +157,15 @@ async def test_a_service_401_pauses_the_runs_campaign():
 async def test_a_tools_own_http_error_never_pauses_the_campaign():
     # e.g. the LSQ update tool getting a 401 from LeadSquared.
     service = FrameProcessor()
-    with patch.object(module.circuit_breaker, "pause_on_provider_error", AsyncMock()) as pause:
+    with patch.object(
+        module.circuit_breaker, "pause_on_provider_error", AsyncMock()
+    ) as pause:
         register_campaign_provider_error_handler(
-            service, provider="openai", source="llm", workflow_run_id=77, organization_id=5
+            service,
+            provider="openai",
+            source="llm",
+            workflow_run_id=77,
+            organization_id=5,
         )
         await _report(
             service,
@@ -167,7 +181,9 @@ async def test_a_tools_own_http_error_never_pauses_the_campaign():
 @pytest.mark.parametrize("status", [400, 404, 429, 500, 503])
 async def test_only_401_402_403_pause(status):
     breaker = CircuitBreaker()
-    with patch.object(module.db_client, "pause_campaign_for_provider_error", AsyncMock()) as db_pause:
+    with patch.object(
+        module.db_client, "pause_campaign_for_provider_error", AsyncMock()
+    ) as db_pause:
         await breaker.pause_on_provider_error(
             organization_id=5,
             workflow_run_id=77,
@@ -182,10 +198,16 @@ async def test_only_401_402_403_pause(status):
 async def test_a_database_failure_while_pausing_never_breaks_the_call():
     breaker = CircuitBreaker()
     with patch.object(
-        module.db_client, "pause_campaign_for_provider_error", AsyncMock(side_effect=RuntimeError("db down"))
+        module.db_client,
+        "pause_campaign_for_provider_error",
+        AsyncMock(side_effect=RuntimeError("db down")),
     ):
         await breaker.pause_on_provider_error(
-            organization_id=5, workflow_run_id=77, provider="openai", service="llm", exception=_WithStatusCode(401)
+            organization_id=5,
+            workflow_run_id=77,
+            provider="openai",
+            service="llm",
+            exception=_WithStatusCode(401),
         )  # logged, not raised
 
 
@@ -220,7 +242,9 @@ async def _setup(factory, state="running") -> Ids:
         org = OrganizationModel(provider_id=f"org-{uuid.uuid4().hex[:8]}")
         session.add(org)
         await session.flush()
-        user = UserModel(provider_id=f"user-{uuid.uuid4().hex[:8]}", selected_organization_id=org.id)
+        user = UserModel(
+            provider_id=f"user-{uuid.uuid4().hex[:8]}", selected_organization_id=org.id
+        )
         session.add(user)
         await session.flush()
         workflow = WorkflowModel(
@@ -244,8 +268,15 @@ async def _setup(factory, state="running") -> Ids:
         )
         session.add(campaign)
         await session.flush()
-        run = WorkflowRunModel(name="campaign call", workflow_id=workflow.id, mode="voicelink", campaign_id=campaign.id)
-        loose = WorkflowRunModel(name="test call", workflow_id=workflow.id, mode="smallwebrtc")
+        run = WorkflowRunModel(
+            name="campaign call",
+            workflow_id=workflow.id,
+            mode="voicelink",
+            campaign_id=campaign.id,
+        )
+        loose = WorkflowRunModel(
+            name="test call", workflow_id=workflow.id, mode="smallwebrtc"
+        )
         session.add_all([run, loose])
         await session.commit()
         return Ids(org.id, user.id, workflow.id, campaign.id, run.id, loose.id)
@@ -253,33 +284,55 @@ async def _setup(factory, state="running") -> Ids:
 
 async def _cleanup(factory, ids: Ids):
     async with factory() as session:
-        await session.execute(delete(WorkflowRunModel).where(WorkflowRunModel.workflow_id == ids.workflow_id))
-        await session.execute(delete(CampaignModel).where(CampaignModel.id == ids.campaign_id))
-        await session.execute(delete(WorkflowModel).where(WorkflowModel.id == ids.workflow_id))
+        await session.execute(
+            delete(WorkflowRunModel).where(
+                WorkflowRunModel.workflow_id == ids.workflow_id
+            )
+        )
+        await session.execute(
+            delete(CampaignModel).where(CampaignModel.id == ids.campaign_id)
+        )
+        await session.execute(
+            delete(WorkflowModel).where(WorkflowModel.id == ids.workflow_id)
+        )
         await session.execute(delete(UserModel).where(UserModel.id == ids.user_id))
-        await session.execute(delete(OrganizationModel).where(OrganizationModel.id == ids.organization_id))
+        await session.execute(
+            delete(OrganizationModel).where(OrganizationModel.id == ids.organization_id)
+        )
         await session.commit()
 
 
 async def _campaign(factory, campaign_id):
     async with factory() as session:
-        return await session.scalar(select(CampaignModel).where(CampaignModel.id == campaign_id))
+        return await session.scalar(
+            select(CampaignModel).where(CampaignModel.id == campaign_id)
+        )
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("state", ["running", "syncing"])
-async def test_a_provider_401_pauses_the_campaign_and_says_why(db_session_factory, state):
+async def test_a_provider_401_pauses_the_campaign_and_says_why(
+    db_session_factory, state
+):
     from api.db import db_client
 
     ids = await _setup(db_session_factory, state)
     try:
         paused = await db_client.pause_campaign_for_provider_error(
-            ids.organization_id, ids.run_id, provider="sarvam", service="tts", status_code=401
+            ids.organization_id,
+            ids.run_id,
+            provider="sarvam",
+            service="tts",
+            status_code=401,
         )
         assert paused == ids.campaign_id
         campaign = await _campaign(db_session_factory, ids.campaign_id)
         assert campaign.state == "paused"
-        [entry] = [log for log in campaign.logs if log["event"] == "provider_error_circuit_breaker_tripped"]
+        [entry] = [
+            log
+            for log in campaign.logs
+            if log["event"] == "provider_error_circuit_breaker_tripped"
+        ]
         assert "sarvam tts returned HTTP 401" in entry["message"]
         assert entry["details"] == {
             "workflow_run_id": ids.run_id,
@@ -290,30 +343,50 @@ async def test_a_provider_401_pauses_the_campaign_and_says_why(db_session_factor
 
         # A second failure from another in-flight call: no second entry.
         again = await db_client.pause_campaign_for_provider_error(
-            ids.organization_id, ids.run_id, provider="sarvam", service="tts", status_code=401
+            ids.organization_id,
+            ids.run_id,
+            provider="sarvam",
+            service="tts",
+            status_code=401,
         )
         assert again is None
         campaign = await _campaign(db_session_factory, ids.campaign_id)
-        assert sum(log["event"] == "provider_error_circuit_breaker_tripped" for log in campaign.logs) == 1
+        assert (
+            sum(
+                log["event"] == "provider_error_circuit_breaker_tripped"
+                for log in campaign.logs
+            )
+            == 1
+        )
     finally:
         await _cleanup(db_session_factory, ids)
 
 
 @pytest.mark.asyncio
-async def test_calls_without_a_campaign_and_other_orgs_are_untouched(db_session_factory):
+async def test_calls_without_a_campaign_and_other_orgs_are_untouched(
+    db_session_factory,
+):
     from api.db import db_client
 
     ids = await _setup(db_session_factory)
     try:
         assert (
             await db_client.pause_campaign_for_provider_error(
-                ids.organization_id, ids.loose_run_id, provider="openai", service="llm", status_code=401
+                ids.organization_id,
+                ids.loose_run_id,
+                provider="openai",
+                service="llm",
+                status_code=401,
             )
             is None
         )
         assert (
             await db_client.pause_campaign_for_provider_error(
-                ids.organization_id + 999_999, ids.run_id, provider="openai", service="llm", status_code=401
+                ids.organization_id + 999_999,
+                ids.run_id,
+                provider="openai",
+                service="llm",
+                status_code=401,
             )
             is None
         )
@@ -331,7 +404,11 @@ async def test_an_inactive_campaign_is_left_as_it_is(db_session_factory, state):
     try:
         assert (
             await db_client.pause_campaign_for_provider_error(
-                ids.organization_id, ids.run_id, provider="openai", service="llm", status_code=403
+                ids.organization_id,
+                ids.run_id,
+                provider="openai",
+                service="llm",
+                status_code=403,
             )
             is None
         )
@@ -352,9 +429,15 @@ async def test_resuming_clears_the_pause_and_the_breaker_window(db_session_facto
     ids = await _setup(db_session_factory)
     try:
         await db_client.pause_campaign_for_provider_error(
-            ids.organization_id, ids.run_id, provider="openai", service="llm", status_code=402
+            ids.organization_id,
+            ids.run_id,
+            provider="openai",
+            service="llm",
+            status_code=402,
         )
-        with patch.object(runner_module.circuit_breaker, "reset", AsyncMock(return_value=True)) as reset:
+        with patch.object(
+            runner_module.circuit_breaker, "reset", AsyncMock(return_value=True)
+        ) as reset:
             await CampaignRunnerService().resume_campaign(ids.campaign_id)
         reset.assert_awaited_once_with(ids.campaign_id)
         assert (await _campaign(db_session_factory, ids.campaign_id)).state == "running"
@@ -362,7 +445,11 @@ async def test_resuming_clears_the_pause_and_the_breaker_window(db_session_facto
         # Another rejection after the fix pauses it again.
         assert (
             await db_client.pause_campaign_for_provider_error(
-                ids.organization_id, ids.run_id, provider="openai", service="llm", status_code=402
+                ids.organization_id,
+                ids.run_id,
+                provider="openai",
+                service="llm",
+                status_code=402,
             )
             == ids.campaign_id
         )
@@ -379,9 +466,15 @@ async def test_a_failed_breaker_reset_keeps_the_campaign_paused(db_session_facto
     ids = await _setup(db_session_factory)
     try:
         await db_client.pause_campaign_for_provider_error(
-            ids.organization_id, ids.run_id, provider="openai", service="llm", status_code=401
+            ids.organization_id,
+            ids.run_id,
+            provider="openai",
+            service="llm",
+            status_code=401,
         )
-        with patch.object(runner_module.circuit_breaker, "reset", AsyncMock(return_value=False)):
+        with patch.object(
+            runner_module.circuit_breaker, "reset", AsyncMock(return_value=False)
+        ):
             with pytest.raises(ValueError, match="reset"):
                 await CampaignRunnerService().resume_campaign(ids.campaign_id)
         assert (await _campaign(db_session_factory, ids.campaign_id)).state == "paused"
@@ -397,35 +490,74 @@ async def _dial_and_fail(exception):
     from api.services.campaign import campaign_call_dispatcher as dispatcher_module
 
     campaign = SimpleNamespace(
-        id=42, workflow_id=7, organization_id=5, telephony_configuration_id=None, created_by=1
+        id=42,
+        workflow_id=7,
+        organization_id=5,
+        telephony_configuration_id=None,
+        created_by=1,
+        rate_limit_per_second=1,
     )
-    queued_run = SimpleNamespace(id=9, context_variables={"phone_number": "+919999999999"}, source_uuid="u")
+    queued_run = SimpleNamespace(
+        id=9, context_variables={"phone_number": "+919999999999"}, source_uuid="u"
+    )
     run = SimpleNamespace(id=300, logs={})
     provider = SimpleNamespace(
         PROVIDER_NAME="voicelink",
         WEBHOOK_ENDPOINT="voicelink",
+        from_numbers=["+918000000000"],
         initiate_call=AsyncMock(side_effect=exception),
     )
-    breaker = SimpleNamespace(pause_on_provider_error=AsyncMock(), record_and_evaluate=AsyncMock())
+    breaker = SimpleNamespace(
+        pause_on_provider_error=AsyncMock(), record_and_evaluate=AsyncMock()
+    )
     db = MagicMock()
     db.get_workflow = AsyncMock(return_value=SimpleNamespace(id=7))
     db.create_workflow_run = AsyncMock(return_value=run)
     db.update_workflow_run = AsyncMock()
+    db.update_queued_run = AsyncMock()
     dispatcher = dispatcher_module.CampaignCallDispatcher()
     with (
         patch.object(dispatcher_module, "db_client", db),
         patch.object(dispatcher_module, "circuit_breaker", breaker),
-        patch.object(dispatcher, "get_provider_for_campaign", AsyncMock(return_value=provider)),
+        patch.object(
+            dispatcher, "get_provider_for_campaign", AsyncMock(return_value=provider)
+        ),
         patch.object(dispatcher, "acquire_from_number", AsyncMock(return_value="slot")),
         patch.object(dispatcher, "release_call_slot", AsyncMock()),
-        patch.object(dispatcher_module.rate_limiter, "pool_slot_address", MagicMock(return_value="+918000000000")),
-        patch.object(dispatcher_module.rate_limiter, "store_workflow_from_number_mapping", AsyncMock()),
-        patch.object(dispatcher_module, "call_concurrency", MagicMock(bind_workflow_run=AsyncMock())),
-        patch.object(dispatcher_module.webhook_sync_calling, "call_started", AsyncMock()),
         patch.object(
-            dispatcher_module, "authorize_workflow_run_start", AsyncMock(return_value=SimpleNamespace(has_quota=True))
+            dispatcher_module,
+            "rate_limiter",
+            MagicMock(
+                pool_slot_address=MagicMock(return_value="+918000000000"),
+                store_workflow_from_number_mapping=AsyncMock(),
+                get_workflow_from_number_mapping=AsyncMock(return_value=None),
+                release_from_number=AsyncMock(),
+                acquire_token=AsyncMock(return_value=True),
+            ),
         ),
-        patch.object(dispatcher_module, "get_backend_endpoints", AsyncMock(return_value=("https://x", "wss://x"))),
+        patch.object(
+            dispatcher_module,
+            "call_concurrency",
+            MagicMock(bind_workflow_run=AsyncMock(), release_slot=AsyncMock()),
+        ),
+        patch.object(
+            dispatcher_module,
+            "prepare_workflow_run_inputs",
+            AsyncMock(return_value=SimpleNamespace(definition_id=1)),
+        ),
+        patch.object(
+            dispatcher_module.webhook_sync_calling, "call_started", AsyncMock()
+        ),
+        patch.object(
+            dispatcher_module,
+            "authorize_workflow_run_start",
+            AsyncMock(return_value=SimpleNamespace(has_quota=True)),
+        ),
+        patch.object(
+            dispatcher_module,
+            "get_backend_endpoints",
+            AsyncMock(return_value=("https://x", "wss://x")),
+        ),
     ):
         with pytest.raises(type(exception)):
             await dispatcher.dispatch_call(queued_run, campaign, MagicMock())
@@ -441,7 +573,11 @@ async def test_a_telephony_401_pauses_the_campaign_and_isnt_counted_as_a_call_fa
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("exception", [_WithStatusCode(503), TimeoutError("dial timed out")], ids=["5xx", "timeout"])
+@pytest.mark.parametrize(
+    "exception",
+    [_WithStatusCode(503), TimeoutError("dial timed out")],
+    ids=["5xx", "timeout"],
+)
 async def test_a_telephony_outage_counts_toward_the_failure_rate(exception):
     breaker = await _dial_and_fail(exception)
     breaker.record_and_evaluate.assert_awaited_once()
@@ -465,13 +601,28 @@ async def test_a_bad_number_neither_pauses_nor_counts(status):
 @pytest.mark.parametrize(
     "message,expected",
     [
-        ('400 Bad Request. {"message": "API key not valid. Please pass a valid API key."}', 401),  # Google
-        ("Gemini Live connection failed after 3 consecutive attempts: 1007 None. API key not valid.", 401),
-        ("connection closed, but with an error: received 1008 (policy violation) Invalid API key", 401),
+        (
+            '400 Bad Request. {"message": "API key not valid. Please pass a valid API key."}',
+            401,
+        ),  # Google
+        (
+            "Gemini Live connection failed after 3 consecutive attempts: 1007 None. API key not valid.",
+            401,
+        ),
+        (
+            "connection closed, but with an error: received 1008 (policy violation) Invalid API key",
+            401,
+        ),
         ("received 1008 (policy violation) Invalid api key used.", 401),  # Murf
-        ("Error code: 429 - You exceeded your current quota, please check your plan and billing details.", 402),
+        (
+            "Error code: 429 - You exceeded your current quota, please check your plan and billing details.",
+            402,
+        ),
         ("insufficient_quota", 402),
-        ("Error code: 429 - Rate limit reached, please try again in 20ms", 429),  # wait it out, don't pause
+        (
+            "Error code: 429 - Rate limit reached, please try again in 20ms",
+            429,
+        ),  # wait it out, don't pause
         ("connection closed by server", None),
         ("Error code: 503 - service unavailable", 503),
     ],
@@ -517,13 +668,21 @@ async def test_murf_reports_a_rejected_key_instead_of_reconnecting():
         reported.append(frame)
 
     rejected = ConnectionClosedError(Close(1008, "Invalid api key used."), None)
-    keep_going = await _Service()._maybe_try_reconnect("closed with an error", report, rejected)
+    keep_going = await _Service()._maybe_try_reconnect(
+        "closed with an error", report, rejected
+    )
     assert keep_going is False and _Base.reconnects == 0
-    assert reported and provider_http_status(reported[0].exception, reported[0].error) == 401
+    assert (
+        reported
+        and provider_http_status(reported[0].exception, reported[0].error) == 401
+    )
 
     # Any other drop still reconnects as before.
     dropped = ConnectionClosedError(Close(1011, "internal error"), None)
-    assert await _Service()._maybe_try_reconnect("closed with an error", report, dropped) is True
+    assert (
+        await _Service()._maybe_try_reconnect("closed with an error", report, dropped)
+        is True
+    )
     assert _Base.reconnects == 1
 
 
@@ -562,24 +721,30 @@ class _DeepgramFake:
 
 @pytest.mark.asyncio
 async def test_deepgram_reports_a_rejected_key_and_stops_retrying():
-    from api.services.pipecat.deepgram_stt import DograhDeepgramSTTService
+    # pipecat's own Deepgram service now does what our wrapper used to: a 4xx
+    # at the handshake is reported once, with the provider's exception (so the
+    # campaign pause can read its status), and is not retried.
+    from deepgram.core.api_error import ApiError
+    from pipecat.services.deepgram.stt import DeepgramSTTService
 
-    service = DograhDeepgramSTTService(api_key="bad", sample_rate=16000)
-    fake = _DeepgramFake([_WithStatusCode(401)])
+    service = DeepgramSTTService(api_key="bad", sample_rate=16000)
+    fake = _DeepgramFake([ApiError(status_code=401, body="Invalid credentials")])
     service._client = SimpleNamespace(listen=SimpleNamespace(v1=fake))
     service.push_error = AsyncMock()
     await service._connection_handler()
     assert fake.attempts == 1  # no retry loop
     service.push_error.assert_awaited_once()
-    assert provider_http_status(service.push_error.await_args.kwargs["exception"]) == 401
+    assert (
+        provider_http_status(service.push_error.await_args.kwargs["exception"]) == 401
+    )
 
 
 @pytest.mark.asyncio
 async def test_deepgram_backs_off_between_reconnects_after_a_drop():
-    from api.services.pipecat import deepgram_stt
+    from pipecat.services.deepgram import stt as deepgram_stt
 
-    service = deepgram_stt.DograhDeepgramSTTService(api_key="k", sample_rate=16000)
-    fake = _DeepgramFake([ConnectionError("network")] * 4)
+    service = deepgram_stt.DeepgramSTTService(api_key="k", sample_rate=16000)
+    fake = _DeepgramFake([ConnectionError("network")] * 2)
     service._client = SimpleNamespace(listen=SimpleNamespace(v1=fake))
     service.push_error = AsyncMock()
     sleeps = []
@@ -590,22 +755,19 @@ async def test_deepgram_backs_off_between_reconnects_after_a_drop():
     with patch.object(deepgram_stt.asyncio, "sleep", fake_sleep):
         with pytest.raises(asyncio.CancelledError):
             await service._connection_handler()
-    assert sleeps == [0.5, 1.0, 2.0, 4.0]  # was a tight loop with no wait at all
-    service.push_error.assert_not_awaited()
-
-
-def test_the_factory_builds_the_fixed_deepgram_service():
-    from api.services.pipecat import service_factory
-
-    assert service_factory.DograhDeepgramSTTService.__name__ == "DograhDeepgramSTTService"
-    assert not hasattr(service_factory, "DeepgramSTTService")
+    assert len(sleeps) == 2 and all(s > 0 for s in sleeps)  # never a tight loop
+    # A dropped connection is not a key rejection, so it can't pause a campaign.
+    for call in service.push_error.await_args_list:
+        assert provider_http_status(call.kwargs.get("exception")) is None
 
 
 # ── Many calls hitting the same bad key at once ───────────────────────
 
 
 @pytest.mark.asyncio
-async def test_twenty_calls_failing_at_once_pause_once_with_one_log_entry(db_session_factory):
+async def test_twenty_calls_failing_at_once_pause_once_with_one_log_entry(
+    db_session_factory,
+):
     from api.db import db_client
 
     ids = await _setup(db_session_factory)
@@ -613,7 +775,10 @@ async def test_twenty_calls_failing_at_once_pause_once_with_one_log_entry(db_ses
         async with db_session_factory() as session:
             extra = [
                 WorkflowRunModel(
-                    name=f"call {i}", workflow_id=ids.workflow_id, mode="voicelink", campaign_id=ids.campaign_id
+                    name=f"call {i}",
+                    workflow_id=ids.workflow_id,
+                    mode="voicelink",
+                    campaign_id=ids.campaign_id,
                 )
                 for i in range(19)
             ]
@@ -623,15 +788,27 @@ async def test_twenty_calls_failing_at_once_pause_once_with_one_log_entry(db_ses
         results = await asyncio.gather(
             *[
                 db_client.pause_campaign_for_provider_error(
-                    ids.organization_id, run_id, provider="sarvam", service="tts", status_code=403
+                    ids.organization_id,
+                    run_id,
+                    provider="sarvam",
+                    service="tts",
+                    status_code=403,
                 )
                 for run_id in run_ids
             ]
         )
-        assert sum(r is not None for r in results) == 1  # exactly one call did the pausing
+        assert (
+            sum(r is not None for r in results) == 1
+        )  # exactly one call did the pausing
         campaign = await _campaign(db_session_factory, ids.campaign_id)
         assert campaign.state == "paused"
-        assert sum(log["event"] == "provider_error_circuit_breaker_tripped" for log in campaign.logs) == 1
+        assert (
+            sum(
+                log["event"] == "provider_error_circuit_breaker_tripped"
+                for log in campaign.logs
+            )
+            == 1
+        )
     finally:
         await _cleanup(db_session_factory, ids)
 
@@ -640,7 +817,9 @@ async def test_twenty_calls_failing_at_once_pause_once_with_one_log_entry(db_ses
 
 
 @pytest.mark.asyncio
-async def test_a_rejection_during_a_resume_leaves_the_campaign_paused(db_session_factory):
+async def test_a_rejection_during_a_resume_leaves_the_campaign_paused(
+    db_session_factory,
+):
     from api.db import db_client
     from api.services.campaign import runner as runner_module
     from api.services.campaign.runner import CampaignRunnerService
@@ -656,12 +835,18 @@ async def test_a_rejection_during_a_resume_leaves_the_campaign_paused(db_session
             return True
 
         with patch.object(runner_module.circuit_breaker, "reset", slow_reset):
-            resume = asyncio.create_task(CampaignRunnerService().resume_campaign(ids.campaign_id))
+            resume = asyncio.create_task(
+                CampaignRunnerService().resume_campaign(ids.campaign_id)
+            )
             await in_reset.wait()
             # Another call's provider rejects the key while the resume holds the row.
             pause = asyncio.create_task(
                 db_client.pause_campaign_for_provider_error(
-                    ids.organization_id, ids.run_id, provider="openai", service="llm", status_code=401
+                    ids.organization_id,
+                    ids.run_id,
+                    provider="openai",
+                    service="llm",
+                    status_code=401,
                 )
             )
             await asyncio.sleep(0.3)
@@ -673,6 +858,7 @@ async def test_a_rejection_during_a_resume_leaves_the_campaign_paused(db_session
         assert (await _campaign(db_session_factory, ids.campaign_id)).state == "paused"
     finally:
         await _cleanup(db_session_factory, ids)
+
 
 # ── The failure-rate path end to end (real Redis + DB) ────────────────
 
@@ -687,13 +873,22 @@ async def test_five_failed_calls_pause_the_campaign_naming_them(db_session_facto
         failed_runs = [ids.run_id * 1000 + i for i in range(5)]
         for i, run_id in enumerate(failed_runs):
             await circuit_breaker.record_and_evaluate(
-                ids.campaign_id, is_failure=True, workflow_run_id=run_id, reason="pipeline_error"
+                ids.campaign_id,
+                is_failure=True,
+                workflow_run_id=run_id,
+                reason="pipeline_error",
             )
             expected = "paused" if i == 4 else "running"  # min 5 calls, 50% threshold
-            assert (await _campaign(db_session_factory, ids.campaign_id)).state == expected
+            assert (
+                await _campaign(db_session_factory, ids.campaign_id)
+            ).state == expected
         campaign = await _campaign(db_session_factory, ids.campaign_id)
-        [trip] = [log for log in campaign.logs if log["event"] == "circuit_breaker_tripped"]
-        named = {entry["workflow_run_id"] for entry in trip["details"]["recent_failures"]}
+        [trip] = [
+            log for log in campaign.logs if log["event"] == "circuit_breaker_tripped"
+        ]
+        named = {
+            entry["workflow_run_id"] for entry in trip["details"]["recent_failures"]
+        }
         assert named == set(failed_runs)
     finally:
         await circuit_breaker.reset(ids.campaign_id)
@@ -709,15 +904,24 @@ async def test_the_same_call_reported_many_times_counts_once(db_session_factory)
         await circuit_breaker.reset(ids.campaign_id)
         for _ in range(10):  # one failed call, finalized ten times
             await circuit_breaker.record_and_evaluate(
-                ids.campaign_id, is_failure=True, workflow_run_id=ids.run_id, reason="pipeline_error"
+                ids.campaign_id,
+                is_failure=True,
+                workflow_run_id=ids.run_id,
+                reason="pipeline_error",
             )
         assert (await _campaign(db_session_factory, ids.campaign_id)).state == "running"
         # A failed call can't also count as a success.
         await circuit_breaker.record_and_evaluate(
-            ids.campaign_id, is_failure=False, workflow_run_id=ids.run_id, reason="user_hangup"
+            ids.campaign_id,
+            is_failure=False,
+            workflow_run_id=ids.run_id,
+            reason="user_hangup",
         )
         tripped, stats = await circuit_breaker.is_circuit_open(ids.campaign_id)
-        assert stats is None or (stats["failure_count"], stats["success_count"]) == (1, 0)
+        assert stats is None or (stats["failure_count"], stats["success_count"]) == (
+            1,
+            0,
+        )
     finally:
         await circuit_breaker.reset(ids.campaign_id)
         await _cleanup(db_session_factory, ids)
@@ -733,11 +937,17 @@ async def test_healthy_calls_keep_the_rate_below_the_threshold(db_session_factor
         base = ids.run_id * 1000
         for i in range(6):  # 6 good calls
             await circuit_breaker.record_and_evaluate(
-                ids.campaign_id, is_failure=False, workflow_run_id=base + i, reason="user_hangup"
+                ids.campaign_id,
+                is_failure=False,
+                workflow_run_id=base + i,
+                reason="user_hangup",
             )
         for i in range(4):  # 4 failures: 40% < 50%
             await circuit_breaker.record_and_evaluate(
-                ids.campaign_id, is_failure=True, workflow_run_id=base + 100 + i, reason="pipeline_error"
+                ids.campaign_id,
+                is_failure=True,
+                workflow_run_id=base + 100 + i,
+                reason="pipeline_error",
             )
         assert (await _campaign(db_session_factory, ids.campaign_id)).state == "running"
     finally:

@@ -133,7 +133,7 @@ def _campaign_run(gathered_context):
 
 
 async def _process_campaign_no_answer(workflow_run, *, wins_claim=True):
-    publisher = SimpleNamespace(publish_retry_needed=AsyncMock())
+    schedule_retry = AsyncMock()
     claim = AsyncMock(return_value=wins_claim)
     with (
         patch("api.services.telephony.status_processor.db_client") as mock_db,
@@ -141,9 +141,8 @@ async def _process_campaign_no_answer(workflow_run, *, wins_claim=True):
             "api.services.telephony.status_processor.campaign_call_dispatcher"
         ) as mock_dispatcher,
         patch(
-            "api.services.telephony.status_processor.get_campaign_event_publisher",
-            new_callable=AsyncMock,
-            return_value=publisher,
+            "api.services.telephony.status_processor.schedule_campaign_retry",
+            schedule_retry,
         ),
         patch(
             "api.services.telephony.status_processor.enqueue_job",
@@ -168,21 +167,15 @@ async def _process_campaign_no_answer(workflow_run, *, wins_claim=True):
                 StatusCallbackRequest(call_id="call-789", status="no-answer"),
             )
 
-    return publisher, SimpleNamespace(record_and_evaluate=record), mock_dispatcher, claim
+    return schedule_retry, SimpleNamespace(record_and_evaluate=record), mock_dispatcher, claim
 
 
 @pytest.mark.asyncio
 async def test_first_campaign_no_answer_schedules_one_retry(no_disposition_mapping):
-    publisher, breaker, dispatcher, claim = await _process_campaign_no_answer(
-        _campaign_run({})
-    )
+    run = _campaign_run({})
+    schedule_retry, breaker, dispatcher, claim = await _process_campaign_no_answer(run)
 
-    publisher.publish_retry_needed.assert_awaited_once_with(
-        workflow_run_id=789,
-        reason="no_answer",
-        campaign_id=42,
-        queued_run_id=9,
-    )
+    schedule_retry.assert_awaited_once_with(run, "no_answer", organization_id=7)
     # No answer is not a failure of the agent: it never counts toward pausing.
     breaker.record_and_evaluate.assert_not_awaited()
     dispatcher.release_call_slot.assert_awaited_once_with(789)
@@ -198,11 +191,11 @@ async def test_repeated_not_connected_report_schedules_no_second_retry(no_dispos
     already_reported.state = WorkflowRunState.COMPLETED.value
     already_reported.is_completed = True
 
-    publisher, breaker, dispatcher, claim = await _process_campaign_no_answer(
+    schedule_retry, breaker, dispatcher, claim = await _process_campaign_no_answer(
         already_reported
     )
 
-    publisher.publish_retry_needed.assert_not_awaited()
+    schedule_retry.assert_not_awaited()
     breaker.record_and_evaluate.assert_not_awaited()
     dispatcher.release_call_slot.assert_awaited_once_with(789)
     claim.assert_not_awaited()
@@ -212,11 +205,11 @@ async def test_repeated_not_connected_report_schedules_no_second_retry(no_dispos
 async def test_concurrent_report_that_loses_the_claim_schedules_no_retry(no_disposition_mapping):
     # Both reports read the run before either tagged it; the atomic claim
     # lets only one of them act.
-    publisher, breaker, dispatcher, claim = await _process_campaign_no_answer(
+    schedule_retry, breaker, dispatcher, claim = await _process_campaign_no_answer(
         _campaign_run({}), wins_claim=False
     )
 
     claim.assert_awaited_once_with(789)
-    publisher.publish_retry_needed.assert_not_awaited()
+    schedule_retry.assert_not_awaited()
     breaker.record_and_evaluate.assert_not_awaited()
     dispatcher.release_call_slot.assert_awaited_once_with(789)

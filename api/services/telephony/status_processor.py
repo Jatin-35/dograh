@@ -16,9 +16,10 @@ from api.db.workflow_run_client import append_unique_tags
 from api.enums import TelephonyCallStatus, WorkflowRunState
 from api.services.campaign.campaign_call_dispatcher import campaign_call_dispatcher
 from api.services.campaign.campaign_event_publisher import (
-    get_campaign_event_publisher,
+    notify_campaign_call_completed,
 )
 from api.services.call_concurrency.rate_limiter import rate_limiter
+from api.services.campaign.campaign_retry import schedule_campaign_retry
 from api.services.webhook_sync import calling as webhook_sync_calling
 from api.services.workflow.disposition_mapping import map_disposition
 from api.tasks.arq import enqueue_job
@@ -185,12 +186,13 @@ async def _process_status_update(workflow_run_id: int, status: StatusCallbackReq
             and workflow_run.campaign_id
             and not already_reported
         ):
-            publisher = await get_campaign_event_publisher()
-            await publisher.publish_retry_needed(
-                workflow_run_id=workflow_run_id,
-                reason=normalized_status.value.replace("-", "_"),
-                campaign_id=workflow_run.campaign_id,
-                queued_run_id=workflow_run.queued_run_id,
+            # Persist the retry before making this run terminal. Completion
+            # checks must never observe an idle campaign while a retry event
+            # is still waiting to create its queue row.
+            await schedule_campaign_retry(
+                workflow_run,
+                normalized_status.value.replace("-", "_"),
+                organization_id=workflow_run.workflow.organization_id,
             )
 
         call_tags = append_unique_tags(
@@ -242,3 +244,9 @@ async def _process_status_update(workflow_run_id: int, status: StatusCallbackReq
         logger.warning(
             f"[run {workflow_run_id}] Unexpected status update: {status.status}"
         )
+
+    if (
+        normalized_status == TelephonyCallStatus.COMPLETED
+        or normalized_status in TERMINAL_NOT_CONNECTED_STATUSES
+    ):
+        await notify_campaign_call_completed(workflow_run.campaign_id, workflow_run_id)

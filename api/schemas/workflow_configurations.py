@@ -198,6 +198,17 @@ class WorkflowConfigurationDefaults(BaseModel):
         max_length=MAX_EXTERNAL_PBX_LEAD_HEADERS,
     )
 
+    @field_validator("turn_start_strategy", mode="before")
+    @classmethod
+    def _coerce_retired_turn_start_strategy(cls, value: object) -> object:
+        # "provisional_vad" was retired. The runtime already reads this key off
+        # the raw dict and falls through to the default for anything it does not
+        # recognise, so a row the data migration missed still runs correctly —
+        # this keeps such a row loadable (and re-savable) through the API too.
+        if value == "provisional_vad":
+            return DEFAULT_TURN_START_STRATEGY
+        return value
+
     @field_validator("call_dispositions")
     @classmethod
     def validate_call_dispositions(

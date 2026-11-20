@@ -75,7 +75,7 @@ def _workflow(
 def _engine(workflow: WorkflowGraph, *, on_agent_node: bool = False) -> PipecatEngine:
     engine = PipecatEngine(workflow=workflow, call_context_vars={}, workflow_run_id=1)
     node_id = "end" if on_agent_node else workflow.start_node_id
-    engine._current_node = workflow.nodes[node_id]
+    engine.active_agent.current_node = workflow.nodes[node_id]
     return engine
 
 

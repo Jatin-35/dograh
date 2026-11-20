@@ -46,8 +46,8 @@ from pipecat.frames.frames import (
     InterruptionFrame,
     OutputTransportMessageFrame,
     OutputTransportMessageUrgentFrame,
-    StartFrame,
 )
+from pipecat.processors.frame_processor import FrameProcessorSetup
 from pipecat.serializers.base_serializer import FrameSerializer
 from pipecat.utils.enums import EndTaskReason
 
@@ -145,9 +145,9 @@ class SmartfloFrameSerializer(FrameSerializer):
         self._hangup_attempted = False
         self._transfer_attempted = False
 
-    async def setup(self, frame: StartFrame):
+    async def setup(self, setup: FrameProcessorSetup):
         """Adopt the pipeline's input sample rate."""
-        self._sample_rate = self._params.sample_rate or frame.audio_in_sample_rate
+        self._sample_rate = self._params.sample_rate or setup.audio_in_sample_rate
 
     def _call_context(self) -> dict[str, Any]:
         """Identifiers handed to the call-control strategies.
@@ -201,8 +201,11 @@ class SmartfloFrameSerializer(FrameSerializer):
                 # __init__ rejects auto_hang_up without a strategy, so this is
                 # never None here — checked rather than asserted because `-O`
                 # strips assertions and this runs while a caller is on the line.
-                if self._hangup_strategy and not await self._hangup_strategy.execute_hangup(
-                    self._call_context()
+                if (
+                    self._hangup_strategy
+                    and not await self._hangup_strategy.execute_hangup(
+                        self._call_context()
+                    )
                 ):
                     logger.error(
                         f"SmartFlo hangup failed for {self._identifier_label()}"

@@ -14,7 +14,7 @@ from opentelemetry import trace
 
 from api.db import db_client
 from api.services.gen_ai import build_embedding_service
-from api.services.pipecat.langfuse_visibility import mark_trace_public
+from pipecat.utils.tracing.langfuse_helpers import mark_trace_public
 from api.services.pipecat.tracing_config import ensure_tracing
 
 

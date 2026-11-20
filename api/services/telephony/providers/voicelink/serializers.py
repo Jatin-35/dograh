@@ -34,8 +34,8 @@ from pipecat.frames.frames import (
     InterruptionFrame,
     OutputTransportMessageFrame,
     OutputTransportMessageUrgentFrame,
-    StartFrame,
 )
+from pipecat.processors.frame_processor import FrameProcessorSetup
 from pipecat.serializers.base_serializer import FrameSerializer
 
 
@@ -90,13 +90,13 @@ class VoiceLinkFrameSerializer(FrameSerializer):
         self._inbound_gain = float(os.getenv("VOICELINK_INBOUND_GAIN", "1.0"))
         self._in_frame_count = 0
 
-    async def setup(self, frame: StartFrame):
+    async def setup(self, setup: FrameProcessorSetup):
         """Sets up the serializer with pipeline configuration.
 
         Args:
-            frame: The StartFrame containing pipeline configuration.
+            setup: Configuration object containing setup parameters.
         """
-        self._sample_rate = self._params.sample_rate or frame.audio_in_sample_rate
+        self._sample_rate = self._params.sample_rate or setup.audio_in_sample_rate
 
     async def serialize(self, frame: Frame) -> str | bytes | None:
         """Serializes a Pipecat frame to VoiceLink WebSocket format.
@@ -172,7 +172,11 @@ class VoiceLinkFrameSerializer(FrameSerializer):
             # VAD/ASR can actually hear quiet telephony audio. RMS is logged
             # ~once/sec (every 50 ~20ms frames) so the gain can be tuned live.
             samples = np.frombuffer(deserialized_data, dtype=np.int16)
-            rms_in = float(np.sqrt(np.mean(samples.astype(np.float32) ** 2))) if samples.size else 0.0
+            rms_in = (
+                float(np.sqrt(np.mean(samples.astype(np.float32) ** 2)))
+                if samples.size
+                else 0.0
+            )
             if self._inbound_gain != 1.0 and samples.size:
                 boosted = np.clip(
                     samples.astype(np.float32) * self._inbound_gain, -32768, 32767

@@ -153,18 +153,22 @@ async def test_a_provider_error_fails_the_lead_with_the_providers_message(env, n
 
 
 @pytest.mark.asyncio
-async def test_missing_telephony_setup_fails_the_lead(env, no_kick):
+async def test_missing_telephony_setup_keeps_the_lead_waiting(env, no_kick):
+    # Shared telephony setup is checked once, before any lead is claimed
+    # (upstream dograh v1.47), so a configuration problem no longer burns
+    # leads: this one stays queued, and is called once telephony is fixed.
     endpoint = await _endpoint_with_lead(env)
-    await _run_batch(
-        endpoint,
-        None,
-        provider_error=ValueError("No telephony configuration for this campaign"),
-    )
+    with pytest.raises(ValueError):
+        await _run_batch(
+            endpoint,
+            None,
+            provider_error=ValueError("No telephony configuration for this campaign"),
+        )
     (lead,) = await env.leads(endpoint)
-    assert (lead.status, lead.status_reason) == (
-        "failed",
-        "No telephony configuration for this campaign",
-    )
+    assert lead.status == "queued"
+    assert lead.call_attempts == 0
+    campaign = await db_client.get_campaign_by_id(endpoint.campaign_id)
+    assert campaign.state == "running"  # continuous campaigns stay up
 
 
 @pytest.mark.asyncio

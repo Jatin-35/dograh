@@ -72,7 +72,7 @@ class RateLimiter:
         
         if current_requests < max_requests then
             -- Add current timestamp
-            redis.call('ZADD', key, now, now)
+            redis.call('ZADD', key, now, ARGV[4])
             redis.call('EXPIRE', key, 2)  -- Expire after 2 seconds
             return 1
         else
@@ -82,7 +82,7 @@ class RateLimiter:
 
         try:
             result = await redis_client.eval(
-                lua_script, 1, key, now, window_start, rate_limit
+                lua_script, 1, key, now, window_start, rate_limit, uuid.uuid4().hex
             )
             return bool(result)
         except Exception as e:
@@ -91,7 +91,7 @@ class RateLimiter:
             return False
 
     async def get_next_available_slot(
-        self, organization_id: int, rate_limit: int = 1
+        self, organization_id: int, rate_limit: int = 1, *, scope_key: str | None = None
     ) -> float:
         """
         Returns seconds until next available slot
@@ -99,7 +99,7 @@ class RateLimiter:
         """
         redis_client = await self._get_redis()
 
-        key = f"rate_limit:{organization_id}"
+        key = f"rate_limit:{scope_key or organization_id}"
 
         try:
             # Get oldest timestamp in current window
@@ -401,6 +401,37 @@ class RateLimiter:
             logger.error(f"Error getting workflow slot mapping: {e}")
             return None
 
+    async def reconcile_workflow_slot_mapping(
+        self,
+        workflow_run_id: int,
+        *,
+        organization_id: int,
+        slot_id: str | None = None,
+        scope_key: str | None = None,
+    ) -> None:
+        """Durable cleanup, including after the workflow mapping's TTL expires.
+
+        Errors propagate so the DB cleanup marker stays pending until every
+        counter and the mapping have been cleared. Repeating cleanup is safe.
+        """
+        redis_client = await self._get_redis()
+        mapping_key = f"workflow_slot_mapping:{workflow_run_id}"
+        mapping = await redis_client.hgetall(mapping_key)
+        slots = {(slot_id, scope_key)} if slot_id else set()
+        if mapping:
+            if int(mapping["org_id"]) != organization_id:
+                raise ValueError(
+                    f"Slot mapping organization mismatch for run {workflow_run_id}"
+                )
+            slots.add((mapping["slot_id"], mapping.get("scope_key") or None))
+        for reserved_slot_id, reserved_scope in slots:
+            released = await self.release_concurrent_slot(
+                organization_id, reserved_slot_id, scope_key=reserved_scope
+            )
+            if released is None:
+                raise ConnectionError(f"Slot cleanup failed for run {workflow_run_id}")
+        await redis_client.delete(mapping_key)
+
     async def delete_workflow_slot_mapping(self, workflow_run_id: int) -> bool:
         """
         Delete the workflow slot mapping after releasing the slot.
@@ -677,6 +708,32 @@ class RateLimiter:
         except Exception as e:
             logger.error(f"Error claiming not-connected report: {e}")
             return True
+
+    async def select_from_number(
+        self,
+        organization_id: int,
+        telephony_configuration_id: int | None,
+        from_numbers: list[str],
+    ) -> str | None:
+        """Rotate active caller IDs without reserving them for a call's lifetime."""
+        numbers = sorted(set(from_numbers))
+        if not numbers:
+            return None
+        key = f"caller_id_rotation:{organization_id}:{telephony_configuration_id}"
+        try:
+            redis_client = await self._get_redis()
+            index = await redis_client.eval(
+                "local n = redis.call('INCR', KEYS[1]); "
+                "redis.call('EXPIRE', KEYS[1], 86400); return n - 1",
+                1,
+                key,
+            )
+            return numbers[int(index) % len(numbers)]
+        except Exception as exc:
+            logger.warning(
+                f"Caller-ID rotation unavailable for config {telephony_configuration_id}: {exc}"
+            )
+            return numbers[0]
 
     async def close(self):
         """Close Redis connection"""

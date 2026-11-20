@@ -1,7 +1,8 @@
 """Gemini Live: does the caller's audio reach Google during the greeting?
 
-Our Gemini services drop caller audio while the user aggregator reports the
-caller as muted (UserMuteStartedFrame). Wires the real user aggregator, the
+Our Gemini services replace caller audio with silence while the user
+aggregator reports the caller as muted (UserMuteStartedFrame), so Google's
+input clock keeps running but it hears nothing. Wires the real user aggregator, the
 real mute-strategy stack and the real Gemini 3.8 service together, plays a
 "greeting" (bot speaking), streams caller audio through it, and counts the
 audio chunks actually sent on to Gemini.
@@ -42,9 +43,16 @@ class _Gemini38(DograhGemini38LiveLLMService):
         )
 
 
-def _audio(n=1):
+# Each phase's audio carries its own byte, so what Gemini receives can be
+# traced to the phase it was spoken in. Muted audio arrives as zeros.
+_PHASE_BYTES = {1: "before_greeting", 2: "during_greeting", 3: "after_greeting"}
+
+
+def _audio(n, phase_byte):
     return [
-        InputAudioRawFrame(audio=b"\x01\x00" * 320, sample_rate=16000, num_channels=1)
+        InputAudioRawFrame(
+            audio=bytes([phase_byte, 0]) * 320, sample_rate=16000, num_channels=1
+        )
         for _ in range(n)
     ]
 
@@ -52,7 +60,7 @@ def _audio(n=1):
 async def _audio_sent_to_gemini(allow_interrupt_greeting: bool) -> dict:
     graph = _workflow(allow_interrupt_greeting=allow_interrupt_greeting)
     engine = PipecatEngine(workflow=graph, call_context_vars={}, workflow_run_id=1)
-    engine._current_node = graph.nodes[graph.start_node_id]
+    engine.active_agent.current_node = graph.nodes[graph.start_node_id]
 
     turn_strategies, vad = _create_realtime_user_turn_config(
         ServiceProviders.GEMINI_LIVE_38.value
@@ -69,36 +77,30 @@ async def _audio_sent_to_gemini(allow_interrupt_greeting: bool) -> dict:
         ),
     ).user()
 
-    gemini = _Gemini38(api_key="k", settings=_Gemini38.Settings(model="gemini-3.8-live"))
+    gemini = _Gemini38(
+        api_key="k", settings=_Gemini38.Settings(model="gemini-3.8-live")
+    )
     gemini.push_error = AsyncMock()
 
     sent = {"before_greeting": 0, "during_greeting": 0, "after_greeting": 0}
     frames = []
     # Caller talks as soon as the call connects, before the bot speaks.
-    frames += _audio(3)
+    frames += _audio(3, 1)
     frames.append(SleepFrame(0.05))
     frames.append(BotStartedSpeakingFrame())
     frames.append(SleepFrame(0.05))
-    during = _audio(5)
-    frames += during
+    frames += _audio(5, 2)
     frames.append(SleepFrame(0.05))
     frames.append(BotStoppedSpeakingFrame())
     frames.append(SleepFrame(0.05))
-    after = _audio(4)
-    frames += after
+    frames += _audio(4, 3)
     frames.append(SleepFrame(0.05))
 
-    # Bucket each audio chunk Gemini is handed by which phase it was sent in.
-    during_ids = {f.id for f in during}
-    after_ids = {f.id for f in after}
-
+    # Count the caller audio Gemini is handed, by the phase it was spoken in.
     async def count_frame(self, frame):
-        if frame.id in during_ids:
-            sent["during_greeting"] += 1
-        elif frame.id in after_ids:
-            sent["after_greeting"] += 1
-        else:
-            sent["before_greeting"] += 1
+        phase = _PHASE_BYTES.get(max(frame.audio, default=0))
+        if phase is not None:
+            sent[phase] += 1
 
     with (
         patch.object(GeminiLiveLLMService, "_send_user_audio", count_frame),

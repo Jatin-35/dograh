@@ -245,6 +245,7 @@ async def test_dispatch_dials_the_number_and_records_the_slot():
         workflow_id=10,
         created_by=1,
         telephony_configuration_id=42,
+        rate_limit_per_second=1,
     )
     queued_run = SimpleNamespace(
         id=99,
@@ -254,6 +255,7 @@ async def test_dispatch_dials_the_number_and_records_the_slot():
     provider = SimpleNamespace(
         PROVIDER_NAME="voicelink",
         WEBHOOK_ENDPOINT="voicelink/events",
+        from_numbers=["+919000000001"],
         initiate_call=AsyncMock(
             return_value=SimpleNamespace(call_id="c1", provider_metadata={})
         ),
@@ -264,6 +266,15 @@ async def test_dispatch_dials_the_number_and_records_the_slot():
         patch.object(module, "db_client") as db,
         patch.object(module, "rate_limiter") as rl,
         patch.object(module, "call_concurrency") as cc,
+        patch.object(
+            module, "webhook_sync_calling", SimpleNamespace(call_started=AsyncMock())
+        ),
+        patch.object(
+            module,
+            "prepare_workflow_run_inputs",
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(definition_id=1),
+        ),
         patch.object(
             module,
             "authorize_workflow_run_start",
@@ -288,6 +299,7 @@ async def test_dispatch_dials_the_number_and_records_the_slot():
     ):
         rl.pool_slot_address = RateLimiter.pool_slot_address
         rl.store_workflow_from_number_mapping = AsyncMock()
+        rl.acquire_token = AsyncMock(return_value=True)
         db.get_workflow = AsyncMock(return_value=SimpleNamespace(id=10))
         db.create_workflow_run = AsyncMock(return_value=run)
         db.update_workflow_run = AsyncMock()
@@ -323,7 +335,9 @@ async def test_failed_dispatch_releases_the_slot_it_took():
         source_uuid="row-1",
         context_variables={"phone_number": "+919018737669"},
     )
-    provider = SimpleNamespace(PROVIDER_NAME="voicelink")
+    provider = SimpleNamespace(
+        PROVIDER_NAME="voicelink", from_numbers=["+919000000001"]
+    )
 
     with (
         patch.object(module, "db_client") as db,

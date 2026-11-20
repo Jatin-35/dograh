@@ -582,14 +582,13 @@ async def test_repeated_carrier_callbacks_do_not_record_outcomes(status_value):
     run.gathered_context = {}
     run.initial_context = {}
     status = status_processor.StatusCallbackRequest(call_id="call-123", status=status_value)
-    publisher = MagicMock(publish_retry_needed=AsyncMock())
     with (
         patch.object(status_processor.db_client, "get_workflow_run_by_id", AsyncMock(return_value=run)),
         patch.object(status_processor.db_client, "update_workflow_run", AsyncMock()),
         patch.object(
             status_processor.campaign_call_dispatcher, "release_call_slot", AsyncMock()
         ) as release,
-        patch.object(status_processor, "get_campaign_event_publisher", AsyncMock(return_value=publisher)),
+        patch.object(status_processor, "schedule_campaign_retry", AsyncMock()),
         patch.object(status_processor, "enqueue_job", AsyncMock()),
         patch.object(
             status_processor.rate_limiter, "claim_not_connected_report", AsyncMock(return_value=True)

@@ -122,6 +122,19 @@ Pick the variable that holds the **customer's** number for how your agent's call
 If a required preset resolves to an empty value (for example there is no caller number), the request is not sent and the tool reports an error. The **Test** button in the tool editor asks you to type preset values by hand, so formatting only runs on live calls.
 </Note>
 
+#### Send the workflow run ID
+
+Every call and text chat has a reserved `initial_context.workflow_run_id` that external context cannot override. To send it, add a **Preset Parameter**:
+
+| Field | Value |
+|---|---|
+| Name | `workflow_run_id` |
+| Type | `number` |
+| Value template | `{{initial_context.workflow_run_id}}` |
+| Required | Yes |
+
+The preset is sent in the JSON body for POST/PUT/PATCH or query parameters for GET/DELETE. With a custom body template, include `{{workflow_run_id}}` where needed. For UI tool tests, enter a sample numeric value.
+
 <br/>
 <div style={{ borderBottom: '2px solid #e5e5e5', margin: '20px 0' }}></div>
 

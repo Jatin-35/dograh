@@ -1,9 +1,10 @@
-"""Our default "min words" turn start paired with an external-turn STT's stop.
+"""Turn strategies for an STT that owns turn detection.
 
 run_pipeline gives an STT that owns turn detection (Deepgram Flux, Cartesia
-ink-2, Soniox turn detection) ExternalUserTurnStopStrategy, while the start
-strategy follows the agent's turn_start_strategy, "min_words" by default.
-Every caller turn must still reach the LLM with that pairing.
+ink-2, Soniox turn detection) external start AND stop strategies, whatever the
+agent's turn_start_strategy says (upstream dograh #767): pairing our min_words
+start with the STT's stop can lose the stop when the caller barges in, so the
+bot never answers. Every caller turn must reach the LLM.
 """
 
 import asyncio
@@ -116,7 +117,13 @@ async def test_min_words_start_with_external_stop_answers_every_turn():
 
 @pytest.mark.asyncio
 async def test_production_strategies_for_external_turn_stt_answer_every_turn():
-    """The exact strategies run_pipeline builds for an unconfigured agent."""
+    """The exact strategies run_pipeline builds, for an unconfigured agent and
+    for one that asked for min_words: the STT decides the start in both."""
+    for configs in ({}, {"turn_start_strategy": "min_words"}):
+        starts = _create_non_realtime_user_turn_start_strategies(
+            configs, uses_external_turns=True
+        )
+        assert [type(s) for s in starts] == [ExternalUserTurnStartStrategy]
     configs: dict = {}
     generations = await _two_turns(
         _create_non_realtime_user_turn_start_strategies(

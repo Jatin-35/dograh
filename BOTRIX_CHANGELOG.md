@@ -18,6 +18,45 @@ it **Live** after the deploy.
 
 ---
 
+## 2026-11-20: Merged Dograh v1.47 (Checkpoint C, part 1), not deployed
+- Merged upstream **v1.47** (pipecat 1.7 → ~1.10) on branch `upgrade/dograh-v1.48`.
+- **New from upstream:**
+  - **Transfer a call to another agent** (new "saved agent" transfer tool).
+  - **Answer supervision** before the agent speaks (voicemail / screening).
+  - **Exotel** telephony provider and **Speechify** voice.
+  - **Campaign dispatcher rebuilt** for higher concurrency (parallel setup, claims
+    that survive a crashed worker, recovery of calls with no callback).
+  - Run id and provider call id available to tools (`initial_context`).
+  - Gemini Live: mute sends silence, fresh-session fixes after a reconnect.
+- **Kept our way:**
+  - Separate **Gemini 3.8** provider; our Gemini compaction and refused-resume
+    reconnect sit on top of upstream's Gemini fixes.
+  - Caller-ID pool: one channel per live call, reserved and released per call.
+  - Pause/stop takes effect before every dial; provider 401/402/403 pauses the
+    campaign; only telephony outages count toward the failure rate.
+  - Campaign health counted once at pipeline finish, never from carrier callbacks.
+  - max_concurrency above the caller IDs' channels is still refused (400).
+  - Webhook Sync lead updates, continuous campaigns, wallet.
+- **Changed on purpose:**
+  - **Turn start:** Deepgram Flux, Cartesia ink-2 and Soniox (with its turn
+    detection on) now decide when the caller starts, as upstream does; mixing
+    them with our 2-word rule could leave a turn that never ends. Other
+    transcribers keep the 2-word rule. A note under "Turn start strategy" says so.
+  - A missing telephony setup leaves Webhook Sync leads **queued** (called once
+    fixed) instead of marking them failed.
+  - Providers with no caller IDs can now dial campaigns.
+  - Deepgram: our reconnect wrapper removed; pipecat now does the same.
+- **Bugs the merge would have shipped, fixed before deploy:**
+  - The API wouldn't start (Soniox and Rumik imports) and the image wouldn't build.
+  - Every call would break before the greeting finished (greeting-interrupt check).
+  - Deepgram and Sarvam transcription couldn't connect.
+  - A muted caller's speech could replay to Gemini after a compaction reconnect.
+  - A caller-ID channel leaked when setup failed before its mapping was saved.
+  - A timeout-only telephony outage never paused a campaign.
+- Tests: 5,050 backend tests pass (one Windows-only timing test aside), all UI
+  tests pass; 16 new dispatcher tests for our campaign behaviour.
+- ⚠️ Not yet tested on real calls: everything above. Deploy waits for v1.48.
+
 ## 2026-11-19: Upgraded to Dograh v1.46 (Checkpoint B), live
 - `6e7ffdd4` Merged upstream **v1.45** (pipecat 1.5 → 1.7). `58666050` merged
   **v1.46**. `e7898766` build fixes (OpenCV 4.14 pin, five new pins, Linux

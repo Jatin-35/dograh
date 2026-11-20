@@ -194,12 +194,22 @@ async def _say(task, text):
     await task.queue_frame(TranscriptionFrame(text=text, user_id="caller", timestamp=time_now_iso8601()))
 
 
-async def _cleanup(task):
+async def _cleanup(task, run_task=None):
     if task is not None and not task.has_finished():
         try:
             await asyncio.wait_for(task.cancel(), timeout=3.0)
         except Exception:
             pass
+    # Cancelling the call worker directly skips the engine's agent retirement
+    # (a real hangup goes through end_call_with_reason, which retires agents
+    # first); the runner then tears the agent worker down. Wait for it, or the
+    # agent's tasks outlive the test and interfere with the next one.
+    if run_task is not None and not run_task.done():
+        try:
+            await asyncio.wait_for(run_task, timeout=10.0)
+        except BaseException:
+            if not run_task.done():
+                run_task.cancel()
 
 
 def _end_call_step():
@@ -220,6 +230,7 @@ async def _body_wiring(setup, db_session, expect_start_cls=MinWordsUserTurnStart
     tts = MockTTSService(mock_audio_duration_ms=300, frame_delay=0)
     captured = _ObservedTasks(_Recorder())
     task = None
+    run_task = None
     try:
         with patch_run_pipeline_externals(captured, llm=llm, tts=tts):
             run_task, task, _ = await _start(setup, captured)
@@ -240,7 +251,7 @@ async def _body_wiring(setup, db_session, expect_start_cls=MinWordsUserTurnStart
         refreshed = await db_session.get_workflow_run_by_id(setup[0].id)
         assert refreshed.state == WorkflowRunState.COMPLETED.value
     finally:
-        await _cleanup(task)
+        await _cleanup(task, run_task)
 
 
 @pytest.mark.asyncio
@@ -280,9 +291,10 @@ async def _body_vad_hears_speech(setup, mode):
     tts = MockTTSService(mock_audio_duration_ms=200, frame_delay=0)
     captured = _ObservedTasks(_Recorder())
     task = None
+    run_task = None
     try:
         with patch_run_pipeline_externals(captured, llm=llm, tts=tts):
-            _, task, audio_config = await _start(setup, captured, mode=mode)
+            run_task, task, audio_config = await _start(setup, captured, mode=mode)
             rec = captured.recorder
             assert await _wait_for(lambda: rec.bot_stopped, timeout=5.0)
             for frame in _speech_frames(audio_config.transport_in_sample_rate):
@@ -294,7 +306,7 @@ async def _body_vad_hears_speech(setup, mode):
             # Voice-activity turn start: the detected speech opened a user turn.
             assert rec.user_started >= 1
     finally:
-        await _cleanup(task)
+        await _cleanup(task, run_task)
 
 
 @pytest.mark.asyncio
@@ -328,6 +340,7 @@ async def _body_empty_turn(setup, db_session, recovery_on=True):
     tts = MockTTSService(mock_audio_duration_ms=3000, frame_delay=0)
     captured = _ObservedTasks(_Recorder())
     task = None
+    run_task = None
     try:
         with patch_run_pipeline_externals(captured, llm=llm, tts=tts):
             run_task, task, _ = await _start(setup, captured)
@@ -375,7 +388,7 @@ async def _body_empty_turn(setup, db_session, recovery_on=True):
         assert breakdowns, "no latency breakdown saved in the run logs"
         assert "ttfb" in breakdowns[0]["payload"]
     finally:
-        await _cleanup(task)
+        await _cleanup(task, run_task)
 
 
 @pytest.mark.asyncio

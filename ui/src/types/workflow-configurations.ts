@@ -74,6 +74,12 @@ export type TurnStartStrategy = NonNullable<GeneratedWorkflowConfigurationDefaul
 export type NoiseReduction = NonNullable<GeneratedWorkflowConfigurationDefaults["noise_reduction"]>;
 export const DEFAULT_TURN_START_MIN_WORDS = 2;
 
+// Transcribers that detect turns themselves decide when the caller starts
+// speaking, so the turn start setting is not used with them (the backend
+// ignores it; mixing the two can leave a turn that never ends).
+export const SELF_DETECTING_TRANSCRIBERS_NOTE =
+    'Not used with Deepgram Flux, Cartesia ink-2, or Soniox with "Use Soniox turn detection" on: those transcribers decide when the caller starts speaking.';
+
 export const NOISE_REDUCTION_OPTIONS: Array<{
     value: NoiseReduction;
     label: string;
@@ -90,6 +96,16 @@ export const NOISE_REDUCTION_OPTIONS: Array<{
         description: 'Removes steady background noise (fans, traffic, hum) from the caller before the agent hears it. Free; adds a little server CPU per call.',
     },
 ];
+
+// "provisional_vad" was retired. Definitions saved before then still carry it,
+// so map it onto the option the backend now resolves such a value to
+// (min_words, our default), rather than handing the select a value it has no
+// entry for.
+function coerceTurnStartStrategy(value: string): TurnStartStrategy {
+    return TURN_START_STRATEGY_OPTIONS.some(o => o.value === value)
+        ? (value as TurnStartStrategy)
+        : 'min_words';
+}
 
 export const TURN_START_STRATEGY_OPTIONS: Array<{
     value: TurnStartStrategy;
@@ -108,20 +124,36 @@ export const TURN_START_STRATEGY_OPTIONS: Array<{
     },
 ];
 
-export interface VoicemailDetectionConfiguration {
+export interface AnswerMessage {
+    text?: string;
+    recording_id?: string;
+    recording_pk?: number;
+}
+
+export interface AnswerSupervisorSettings {
+    listening_window_ms?: number;
+    human_utterance_max_ms?: number;
+    machine_utterance_cap_ms?: number;
+    classify_budget_ms?: number;
+    screening_wait_ms?: number;
+    max_screening_rearms?: number;
+    voicemail_action?: 'hangup' | 'leave_message';
+    voicemail_message?: AnswerMessage;
+    screening_message?: AnswerMessage;
+}
+
+export interface VoicemailDetectionConfiguration extends AnswerSupervisorSettings {
     enabled: boolean;
     use_workflow_llm: boolean;
     provider?: string;
     model?: string;
     api_key?: string;
-    system_prompt?: string;
-    long_speech_timeout: number;  // seconds cutoff for long speech detection
 }
 
 export const DEFAULT_VOICEMAIL_DETECTION_CONFIGURATION: VoicemailDetectionConfiguration = {
     enabled: false,
     use_workflow_llm: true,
-    long_speech_timeout: 8.0,
+    voicemail_action: 'hangup',
 };
 
 export interface TranscriptConfiguration {
@@ -257,10 +289,11 @@ export function resolveWorkflowConfigurations(
             configurations?.smart_turn_stop_secs
             ?? defaults?.smart_turn_stop_secs
             ?? FALLBACK_WORKFLOW_CONFIGURATIONS.smart_turn_stop_secs,
-        turn_start_strategy:
+        turn_start_strategy: coerceTurnStartStrategy(
             configurations?.turn_start_strategy
             ?? defaults?.turn_start_strategy
             ?? FALLBACK_WORKFLOW_CONFIGURATIONS.turn_start_strategy,
+        ),
         turn_start_min_words:
             configurations?.turn_start_min_words
             ?? defaults?.turn_start_min_words

@@ -16,7 +16,8 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
 )
 
 from api.scripts.fix_langfuse_trace_urls import plan_rewrites
-from api.services.pipecat import langfuse_visibility, tracing_config
+from api.services.pipecat import tracing_config
+from pipecat.utils.tracing import langfuse_helpers as langfuse_visibility
 from pipecat.utils.run_context import set_current_org_id
 
 ORG = "org-42"
@@ -128,19 +129,6 @@ def test_failing_resolver_keeps_trace_private(no_resolver):
     span = MagicMock()
     langfuse_visibility.mark_trace_public(span)
     span.set_attribute.assert_not_called()
-
-
-def test_install_replaces_pipecat_marking_everywhere():
-    import pipecat.utils.tracing.langfuse_helpers as helpers
-    import pipecat.utils.tracing.service_decorators as decorators
-    import pipecat.utils.tracing.turn_trace_observer as observer
-
-    langfuse_visibility.install()
-    for module in (helpers, decorators, observer):
-        assert module.mark_trace_public is langfuse_visibility.mark_trace_public
-
-
-# --- v4 ingestion -----------------------------------------------------------
 
 
 def test_org_exporter_sends_v4_ingestion_header(exporter):

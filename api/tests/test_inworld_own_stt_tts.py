@@ -142,17 +142,27 @@ class _Stub(FrameProcessor):
 def _layout(stt=None, tts=None):
     transport = SimpleNamespace(input=lambda: _Stub("input"), output=lambda: _Stub("output"))
     pipeline = build_realtime_pipeline(
-        transport, _Stub("inworld"), _Stub("recorder"), _Stub("user_agg"), _Stub("assistant_agg"),
-        _Stub("engine_cb"), _Stub("metrics"), _Stub("funnel"), stt=stt, tts=tts,
+        transport=transport,
+        realtime_llm=_Stub("inworld"),
+        audio_buffer=_Stub("recorder"),
+        user_context_aggregator=_Stub("user_agg"),
+        assistant_context_aggregator=_Stub("assistant_agg"),
+        call_duration_processor=_Stub("clock"),
+        agent_generation_processor=_Stub("generation"),
+        pipeline_metrics_aggregator=_Stub("metrics"),
+        termination_funnel=_Stub("funnel"),
+        stt=stt,
+        tts=tts,
     )
     return [p.name for p in pipeline.processors if p.name in {
-        "input", "funnel", "stt", "user_agg", "inworld", "engine_cb", "tts", "output", "recorder",
-        "assistant_agg", "metrics"}]
+        "input", "funnel", "stt", "user_agg", "inworld", "generation", "clock", "tts",
+        "output", "recorder", "assistant_agg", "metrics"}]
 
 
 def test_pipeline_with_no_custom_parts_is_unchanged():
     assert _layout() == [
-        "input", "funnel", "user_agg", "inworld", "engine_cb", "output", "recorder", "assistant_agg", "metrics"
+        "input", "funnel", "user_agg", "inworld", "generation", "clock", "output", "recorder",
+        "assistant_agg", "metrics",
     ]
 
 
@@ -162,7 +172,7 @@ def test_custom_transcriber_sits_before_the_turn_rules():
 
 
 def test_custom_voice_sits_after_inworld_before_the_output():
-    assert _layout(tts=_Stub("tts"))[3:7] == ["inworld", "engine_cb", "tts", "output"]
+    assert _layout(tts=_Stub("tts"))[3:8] == ["inworld", "generation", "clock", "tts", "output"]
 
 
 # ── The wrapper ───────────────────────────────────────────────────────

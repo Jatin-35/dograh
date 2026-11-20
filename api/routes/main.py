@@ -122,7 +122,6 @@ async def health() -> HealthResponse:
     from api.services.workflow_gen.config import is_workflow_gen_configured
     from api.utils.common import get_backend_endpoints, is_local_or_private_url
 
-    logger.debug("Health endpoint called")
     backend_endpoint, _ = await get_backend_endpoints()
     # tunnel_url is set only when a Cloudflare tunnel was actually resolved: the
     # configured address isn't publicly reachable, but get_backend_endpoints found

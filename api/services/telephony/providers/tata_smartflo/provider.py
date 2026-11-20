@@ -322,9 +322,8 @@ class TataSmartfloProvider(TelephonyProvider):
 
     # The config is keyed by the login email, which SmartFlo's connect request
     # does not carry (whether it carries any account id of its own is not yet
-    # known; see the field-name log in parse_inbound_webhook). So /inbound/run
-    # routes it by the called number alone.
-    INBOUND_REQUEST_HAS_ACCOUNT_ID = False
+    # known; see the field-name log in parse_inbound_webhook). parse_inbound_webhook
+    # sets no account id, so /inbound/run routes it by the called number alone.
 
     # A SmartFlo transfer tool sends the call id (``{{gathered_context.call_id}}``)
     # while the caller is on the line, so the pipeline offers it to tools from

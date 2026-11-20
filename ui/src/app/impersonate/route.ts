@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getStackConfig } from "@/lib/auth/config";
+import { isSecureRequest } from "@/lib/auth/cookies";
 import { IMPERSONATION_COOKIE, isClientDomain } from "@/lib/clientDomain";
 
 /**
@@ -106,13 +107,7 @@ export async function GET(request: NextRequest) {
         return new Response("Stack auth is not configured", { status: 400 });
     }
 
-    const forwardedProto = request.headers
-        .get("x-forwarded-proto")
-        ?.split(",")[0]
-        ?.trim()
-        .toLowerCase();
-    const isSecure =
-        request.nextUrl.protocol === "https:" || forwardedProto === "https";
+    const isSecure = isSecureRequest(request);
 
     // Behind nginx, request.url / request.nextUrl reflect this container's own
     // bind address (HOSTNAME:PORT from the standalone server config), not the

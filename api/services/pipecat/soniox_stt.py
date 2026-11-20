@@ -20,7 +20,7 @@ from websockets.protocol import State
 
 import pipecat.services.soniox.stt as _pipecat_soniox
 from api.services.pipecat.provider_rejection import PROVIDER_PAUSE_STATUSES
-from pipecat.services.settings import assert_given
+from pipecat.utils.types import assert_given
 from pipecat.services.soniox.stt import (
     SonioxContextGeneralItem,
     SonioxContextObject,

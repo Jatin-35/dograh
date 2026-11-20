@@ -30,8 +30,11 @@ from api.constants import (
     LANGFUSE_PUBLIC_KEY,
     LANGFUSE_SECRET_KEY,
 )
-from api.services.pipecat import langfuse_visibility
 from pipecat.utils.run_context import get_current_org_id
+from pipecat.utils.tracing.langfuse_helpers import (
+    set_trace_public_resolver,
+    traces_public_from_env,
+)
 from pipecat.utils.tracing.setup import setup_tracing
 
 _tracing_initialized = False
@@ -237,6 +240,11 @@ class _OrgRoutingExporter(SpanExporter):
             self._org_project_ids[key] = project_id
         self._org_traces_public[key] = bool(traces_public)
 
+        # Same reason, and more pressing: visibility is the one setting an org
+        # changes on its own, without touching the credentials that decide
+        # whether the exporter below is rebuilt.
+        self._org_traces_public[key] = bool(traces_public)
+
         # Skip if already registered with identical settings
         if key in self._org_exporters:
             existing = self._org_exporters[key]
@@ -314,17 +322,21 @@ class _OrgRoutingExporter(SpanExporter):
 
 
 def _resolve_trace_public() -> bool:
-    """Visibility of the span being started, decided by where it is exported.
+    """Decide the visibility of the span being started, from its destination.
 
-    Mirrors the routing rule in ``_OrgRoutingExporter.export``: an org with its
-    own Langfuse credentials gets the visibility it chose in Settings; every
-    other span goes to the env-configured project and follows
+    Deliberately mirrors the routing rule in ``_OrgRoutingExporter.export`` so
+    the two can never disagree: an org whose own Langfuse credentials are
+    registered gets the visibility it chose in the UI, and every other span —
+    all of them bound for the env-configured project — follows
     ``LANGFUSE_TRACES_PUBLIC``.
+
+    Routing reads ``dograh.org_id``, stamped from this same context var by
+    ``_OrgAttributeSpanProcessor.on_start``, so both see one org id per span.
     """
     org_id = get_current_org_id()
     if org_id and _org_routing_exporter and _org_routing_exporter.has_org(org_id):
         return _org_routing_exporter.is_org_traces_public(org_id)
-    return langfuse_visibility.traces_public_from_env()
+    return traces_public_from_env()
 
 
 def ensure_tracing() -> bool:
@@ -356,11 +368,11 @@ def ensure_tracing() -> bool:
     _org_routing_exporter = _OrgRoutingExporter(default_exporter)
     setup_tracing(service_name="dograh-pipeline", exporter=_org_routing_exporter)
 
-    # Traces are private unless their destination opted in (see
-    # langfuse_visibility); our Pipecat would otherwise mark every one public.
-    langfuse_visibility.set_trace_public_resolver(_resolve_trace_public)
-    langfuse_visibility.install()
+    # Spans fan out to per-org Langfuse projects, so trace visibility can't come
+    # from a single env flag — see _resolve_trace_public.
+    set_trace_public_resolver(_resolve_trace_public)
 
+    # Add processor that stamps every span with the current org_id context var
     from opentelemetry import trace as otel_trace
 
     provider = otel_trace.get_tracer_provider()
@@ -380,9 +392,11 @@ def register_org_langfuse_credentials(
     """Register or update org-specific Langfuse credentials for span routing.
 
     Safe to call multiple times — updates credentials if they changed. A missing
-    ``project_id`` only degrades trace links to the legacy form; spans still
-    export. ``traces_public`` is the org's own choice and governs only the
-    traces landing in that org's project.
+    ``project_id`` only degrades the trace URL to the legacy form; spans still
+    export, so it is not treated as a registration failure.
+
+    ``traces_public`` is the org's own choice, made in Platform Settings; it
+    governs only the traces landing in that org's project.
     """
     if not ensure_tracing():
         return

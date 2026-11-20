@@ -59,7 +59,10 @@ class _Dispatch:
         )
         self.db = MagicMock()
         self.db.find_inbound_route_by_account = AsyncMock(return_value=by_account)
-        self.db.find_inbound_routes_by_number = AsyncMock(return_value=list(by_number))
+        # Upstream's lookup returns a route only when the number is unique.
+        self.db.find_inbound_route_by_called_number = AsyncMock(
+            return_value=by_number[0] if len(by_number) == 1 else None
+        )
         self.db.get_workflow = AsyncMock(return_value=SimpleNamespace(id=7, user_id=3))
         self.concurrency = MagicMock()
         self.concurrency.acquire_org_slot = AsyncMock(return_value="slot")
@@ -121,8 +124,9 @@ async def test_a_smartflo_call_is_routed_by_its_number_alone():
         "success": True,
         "wss_url": "wss://voice-app.example/api/v1/telephony/ws/7/5/901",
     }
-    d.db.find_inbound_routes_by_number.assert_awaited_once()
-    assert d.db.find_inbound_routes_by_number.await_args.kwargs["to_number"] == DID
+    d.db.find_inbound_route_by_account.assert_not_awaited()  # no account id
+    d.db.find_inbound_route_by_called_number.assert_awaited_once()
+    assert d.db.find_inbound_route_by_called_number.await_args.kwargs["to_number"] == DID
     # The signature (shared-secret) check still runs against the matched config.
     d.provider.verify_inbound_signature.assert_awaited_once()
 
@@ -167,7 +171,7 @@ async def test_providers_that_send_an_account_id_never_route_by_number_alone():
 
     # The account-scoped lookup ran (and missed); the number-only one did not.
     d.db.find_inbound_route_by_account.assert_awaited_once()
-    d.db.find_inbound_routes_by_number.assert_not_awaited()
+    d.db.find_inbound_route_by_called_number.assert_not_awaited()
     d.provider.start_inbound_stream.assert_not_awaited()
 
 

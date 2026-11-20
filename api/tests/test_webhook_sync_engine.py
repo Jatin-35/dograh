@@ -258,11 +258,7 @@ async def test_the_batch_task_calls_each_queued_lead_from_the_pool(env, no_kick)
     # Hang both calls up (no answer) so their slots and numbers are released.
 
     for lead in leads.values():
-        with patch.object(
-            status_processor,
-            "get_campaign_event_publisher",
-            AsyncMock(return_value=AsyncMock()),
-        ):
+        with patch.object(status_processor, "schedule_campaign_retry", AsyncMock()):
             await status_processor._process_status_update(
                 lead.last_workflow_run_id,
                 status_processor.StatusCallbackRequest(call_id="x", status="no-answer"),
@@ -326,7 +322,10 @@ async def test_no_answer_is_retried_then_the_final_result_is_sent(env, no_kick):
     )
     org = endpoint.organization_id
     orchestrator = CampaignOrchestrator.__new__(CampaignOrchestrator)
-    orchestrator._last_activity = {}
+    orchestrator._batch_in_progress = {}
+    orchestrator.publisher = AsyncMock()
+    # Only the retry decision is under test, not dispatching the next batch.
+    orchestrator._schedule_next_batch = AsyncMock()
 
     async def attempt(queued_run):
         run = await db_client.create_workflow_run(

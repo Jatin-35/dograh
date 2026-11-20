@@ -450,10 +450,13 @@ async def test_a_continuous_campaign_never_auto_completes(env, no_kick):
     )
     campaign = await db_client.get_campaign_by_id(campaign.id)
     orchestrator = CampaignOrchestrator.__new__(CampaignOrchestrator)
-    orchestrator._batch_in_progress = set()
-    orchestrator._last_activity = {}
-    orchestrator.completion_timeout = 3600
-    assert await orchestrator._should_mark_complete(campaign) is False
+    orchestrator._batch_in_progress = {}
+    orchestrator.publisher = AsyncMock()
+    # Every completion path (idle check, batch done, retries) goes through
+    # _complete_campaign; an idle continuous campaign must survive it.
+    await orchestrator._complete_campaign(campaign)
+    assert (await db_client.get_campaign_by_id(campaign.id)).state == "running"
+    orchestrator.publisher.publish_campaign_completed.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -495,7 +498,9 @@ def _dispatcher_patches(dispatcher_module, provider, quota_ok=True):
     fake_rate_limiter = SimpleNamespace(
         pool_slot_address=lambda slot: slot,
         store_workflow_from_number_mapping=AsyncMock(),
+        get_workflow_from_number_mapping=AsyncMock(return_value=None),
         release_from_number=AsyncMock(),
+        acquire_token=AsyncMock(return_value=True),
     )
     fake_concurrency = SimpleNamespace(
         bind_workflow_run=AsyncMock(),
@@ -556,6 +561,7 @@ async def test_the_real_dispatcher_marks_the_lead_calling(env, no_kick):
     provider = SimpleNamespace(
         PROVIDER_NAME="twilio",
         WEBHOOK_ENDPOINT="twiml",
+        from_numbers=["+918065607348"],
         initiate_call=AsyncMock(
             return_value=SimpleNamespace(call_id="CA1", provider_metadata={})
         ),
@@ -595,11 +601,7 @@ async def test_the_real_dispatcher_marks_the_lead_calling(env, no_kick):
             "claim_not_connected_report",
             AsyncMock(return_value=True),
         ),
-        patch.object(
-            status_processor,
-            "get_campaign_event_publisher",
-            AsyncMock(return_value=AsyncMock()),
-        ),
+        patch.object(status_processor, "schedule_campaign_retry", AsyncMock()),
         patch.object(
             status_processor, "_enqueue_integrations_for_unconnected_run", AsyncMock()
         ),

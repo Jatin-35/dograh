@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from pipecat.frames.frames import ProposedUserStartedSpeakingFrame
 from pipecat.frames.frames import LLMMessagesAppendFrame
 from pipecat.services.openai.realtime import events
 from websockets.exceptions import ConnectionClosedError
@@ -1025,7 +1026,9 @@ async def test_a_held_reply_is_dropped_when_the_caller_cuts_in():
 
     # Boson answers when the caller stops; no second reply from us.
     assert [m["type"] for m in sock.sent] == ["response.create"]
-    service.broadcast_interruption.assert_awaited_once()
+    # Since pipecat 1.8 the service proposes the turn start; the external start
+    # strategy (interruptions on) turns that into the barge-in.
+    service.broadcast_frame.assert_any_await(ProposedUserStartedSpeakingFrame)
 
 
 @pytest.mark.asyncio

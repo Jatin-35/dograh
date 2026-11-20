@@ -29,3 +29,5 @@ class PhoneNumberPoolExhaustedError(Exception):
 
 class CampaignDispatchPaused(Exception):
     """Campaign stopped before dialing; keep the contact queued for resume."""
+class CampaignRateLimitTimeout(Exception):
+    """Temporary dial-rate contention; return the undispatched contact to the queue."""

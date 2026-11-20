@@ -168,22 +168,23 @@ class DograhSarvamSTTService(SarvamSTTService):
             kwargs["vad_signals"] = "true" if settings.vad_signals else "false"
         if settings.high_vad_sensitivity is not None:
             kwargs["high_vad_sensitivity"] = "true" if settings.high_vad_sensitivity else "false"
-        if self._config.supports_vad_params:
-            for name in (
-                "positive_speech_threshold",
-                "negative_speech_threshold",
-                "min_speech_frames",
-                "first_turn_min_speech_frames",
-                "negative_frames_count",
-                "negative_frames_window",
-                "start_speech_volume_threshold",
-                "interrupt_min_speech_frames",
-                "pre_speech_pad_frames",
-                "num_initial_ignored_frames",
-            ):
-                value = getattr(settings, name, None)
-                if value is not None:
-                    kwargs[name] = str(value)
+        # Every current model takes the fine-grained VAD parameters; only the
+        # ones that are set are sent, so the server defaults apply otherwise.
+        for name in (
+            "positive_speech_threshold",
+            "negative_speech_threshold",
+            "min_speech_frames",
+            "first_turn_min_speech_frames",
+            "negative_frames_count",
+            "negative_frames_window",
+            "start_speech_volume_threshold",
+            "interrupt_min_speech_frames",
+            "pre_speech_pad_frames",
+            "num_initial_ignored_frames",
+        ):
+            value = getattr(settings, name, None)
+            if value is not None:
+                kwargs[name] = str(value)
         language = self._get_language_string()
         if language is not None:
             kwargs["language_code"] = language

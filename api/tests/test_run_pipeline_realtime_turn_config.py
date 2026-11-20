@@ -1,8 +1,6 @@
 from pipecat.turns.user_start import (
     ExternalUserTurnStartStrategy,
     MinWordsUserTurnStartStrategy,
-)
-from pipecat.turns.user_start.transcription_user_turn_start_strategy import (
     TranscriptionUserTurnStartStrategy,
 )
 from pipecat.turns.user_start.vad_user_turn_start_strategy import (
@@ -57,6 +55,20 @@ def test_gemini_vertex_realtime_uses_same_turn_config_as_gemini_live():
     assert strategies.stop[0].wait_for_transcript is False
 
 
+def test_nova_sonic_uses_local_vad_without_local_interruptions():
+    strategies, vad_analyzer = _create_realtime_user_turn_config(
+        ServiceProviders.AWS_NOVA_SONIC.value
+    )
+
+    assert isinstance(vad_analyzer, DograhSileroVADAnalyzer)
+    assert len(strategies.start) == 1
+    assert isinstance(strategies.start[0], VADUserTurnStartStrategy)
+    assert strategies.start[0]._enable_interruptions is False
+    assert len(strategies.stop) == 1
+    assert isinstance(strategies.stop[0], SpeechTimeoutUserTurnStopStrategy)
+    assert strategies.stop[0].wait_for_transcript is False
+
+
 def test_openai_realtime_uses_provider_turn_frames_without_local_vad():
     strategies, vad_analyzer = _create_realtime_user_turn_config(
         ServiceProviders.OPENAI_REALTIME.value
@@ -65,7 +77,7 @@ def test_openai_realtime_uses_provider_turn_frames_without_local_vad():
     assert vad_analyzer is None
     assert len(strategies.start) == 1
     assert isinstance(strategies.start[0], ExternalUserTurnStartStrategy)
-    assert strategies.start[0]._enable_interruptions is False
+    assert strategies.start[0]._enable_interruptions is True
     assert len(strategies.stop) == 1
     assert isinstance(strategies.stop[0], ExternalUserTurnStopStrategy)
     assert strategies.stop[0].wait_for_transcript is False
@@ -79,7 +91,7 @@ def test_azure_realtime_uses_provider_turn_frames_without_local_vad():
     assert vad_analyzer is None
     assert len(strategies.start) == 1
     assert isinstance(strategies.start[0], ExternalUserTurnStartStrategy)
-    assert strategies.start[0]._enable_interruptions is False
+    assert strategies.start[0]._enable_interruptions is True
     assert len(strategies.stop) == 1
     assert isinstance(strategies.stop[0], ExternalUserTurnStopStrategy)
     assert strategies.stop[0].wait_for_transcript is False
@@ -93,7 +105,7 @@ def test_grok_realtime_uses_provider_turn_frames_without_local_vad():
     assert vad_analyzer is None
     assert len(strategies.start) == 1
     assert isinstance(strategies.start[0], ExternalUserTurnStartStrategy)
-    assert strategies.start[0]._enable_interruptions is False
+    assert strategies.start[0]._enable_interruptions is True
     assert len(strategies.stop) == 1
     assert isinstance(strategies.stop[0], ExternalUserTurnStopStrategy)
     assert strategies.stop[0].wait_for_transcript is False
@@ -148,13 +160,12 @@ def test_voice_activity_strategy_uses_transcript_and_vad_for_standard_stt():
 
 
 def test_unconfigured_agent_needs_two_words_to_interrupt():
-    for external in (False, True):
-        strategies = _create_non_realtime_user_turn_start_strategies(
-            {}, uses_external_turns=external
-        )
-        assert len(strategies) == 1
-        assert isinstance(strategies[0], MinWordsUserTurnStartStrategy)
-        assert strategies[0]._min_words == DEFAULT_TURN_START_MIN_WORDS == 2
+    strategies = _create_non_realtime_user_turn_start_strategies(
+        {}, uses_external_turns=False
+    )
+    assert len(strategies) == 1
+    assert isinstance(strategies[0], MinWordsUserTurnStartStrategy)
+    assert strategies[0]._min_words == DEFAULT_TURN_START_MIN_WORDS == 2
 
 
 def test_null_min_words_uses_the_default_instead_of_crashing():
@@ -176,15 +187,48 @@ def test_non_realtime_can_use_min_words_start_strategy():
     assert strategies[0]._min_words == 4
 
 
-def test_non_realtime_explicit_min_words_overrides_external_turn_default():
+def test_external_turn_stt_overrides_an_explicit_min_words_request():
+    """External-turn STT decides the start even when min_words is chosen.
+
+    min_words gates the start on transcript text, which would ignore the
+    provider's turn detection on the start side while still using it to end the
+    turn, and would resolve the start from a queued frame — the shape that lets
+    a turn's own interruption flush the stop proposal queued behind it.
+    """
     strategies = _create_non_realtime_user_turn_start_strategies(
         {"turn_start_strategy": "min_words", "turn_start_min_words": 4},
         uses_external_turns=True,
     )
 
     assert len(strategies) == 1
+    assert isinstance(strategies[0], ExternalUserTurnStartStrategy)
+
+
+def test_external_turn_stt_decides_when_no_strategy_is_chosen():
+    strategies = _create_non_realtime_user_turn_start_strategies(
+        {"turn_start_strategy": "default"},
+        uses_external_turns=True,
+    )
+
+    assert len(strategies) == 1
+    assert isinstance(strategies[0], ExternalUserTurnStartStrategy)
+
+
+def test_retired_strategy_value_falls_back_to_our_min_words_default():
+    """A definition still carrying "provisional_vad" resolves, it does not raise."""
+    strategies = _create_non_realtime_user_turn_start_strategies(
+        {"turn_start_strategy": "provisional_vad"},
+        uses_external_turns=False,
+    )
+    assert len(strategies) == 1
     assert isinstance(strategies[0], MinWordsUserTurnStartStrategy)
-    assert strategies[0]._min_words == 4
+
+    strategies = _create_non_realtime_user_turn_start_strategies(
+        {"turn_start_strategy": "provisional_vad"},
+        uses_external_turns=True,
+    )
+    assert len(strategies) == 1
+    assert isinstance(strategies[0], ExternalUserTurnStartStrategy)
 
 
 def test_non_realtime_min_words_start_strategy_has_default_threshold():

@@ -10,7 +10,11 @@ import asyncio
 import time
 
 import pytest
-from pipecat.audio.turn.base_turn_analyzer import BaseTurnAnalyzer, BaseTurnParams, EndOfTurnState
+from pipecat.audio.turn.base_turn_analyzer import (
+    BaseTurnAnalyzer,
+    BaseTurnParams,
+    EndOfTurnState,
+)
 from pipecat.frames.frames import (
     InterimTranscriptionFrame,
     STTMetadataFrame,
@@ -22,6 +26,8 @@ from pipecat.turns.user_stop import (
     SpeechTimeoutUserTurnStopStrategy,
     TurnAnalyzerUserTurnStopStrategy,
 )
+from pipecat.clocks.system_clock import SystemClock
+from pipecat.processors.frame_processor import FrameProcessorSetup
 from pipecat.utils.asyncio.task_manager import TaskManager, TaskManagerParams
 
 from api.services.pipecat.turn_stop_strategies import (
@@ -35,8 +41,12 @@ SPEECH_TIMEOUT = 0.1
 async def _setup(strategy, stt_timeout: float):
     tm = TaskManager()
     tm.setup(TaskManagerParams(loop=asyncio.get_running_loop()))
-    await strategy.setup(tm)
-    await strategy.process_frame(STTMetadataFrame(service_name="test", ttfs_p99_latency=stt_timeout))
+    await strategy.setup(
+        FrameProcessorSetup(task_manager=tm, clock=SystemClock(), pipeline_worker=None)
+    )
+    await strategy.process_frame(
+        STTMetadataFrame(service_name="test", ttfs_p99_latency=stt_timeout)
+    )
     stopped = []
 
     @strategy.event_handler("on_user_turn_stopped")
@@ -47,7 +57,9 @@ async def _setup(strategy, stt_timeout: float):
 
 
 def _text(text, finalized=False):
-    return TranscriptionFrame(text=text, user_id="caller", timestamp="", finalized=finalized)
+    return TranscriptionFrame(
+        text=text, user_id="caller", timestamp="", finalized=finalized
+    )
 
 
 # ── Speech timeout ────────────────────────────────────────────────────
@@ -71,12 +83,17 @@ async def test_stock_strategy_keeps_the_turn_open_while_the_caller_is_still_talk
 
 @pytest.mark.asyncio
 async def test_turn_stays_open_while_the_caller_is_still_talking():
-    assert await _mid_utterance_turn_boundary(DograhSpeechTimeoutUserTurnStopStrategy) == []
+    assert (
+        await _mid_utterance_turn_boundary(DograhSpeechTimeoutUserTurnStopStrategy)
+        == []
+    )
 
 
 @pytest.mark.asyncio
 async def test_turn_still_ends_once_the_caller_stops():
-    strategy = DograhSpeechTimeoutUserTurnStopStrategy(user_speech_timeout=SPEECH_TIMEOUT)
+    strategy = DograhSpeechTimeoutUserTurnStopStrategy(
+        user_speech_timeout=SPEECH_TIMEOUT
+    )
     stopped = await _setup(strategy, stt_timeout=0.0)
     await strategy.process_frame(VADUserStartedSpeakingFrame())
     await strategy.reset()
@@ -91,8 +108,12 @@ async def _finalized_then_more_speech(cls):
     strategy = cls(user_speech_timeout=SPEECH_TIMEOUT)
     stopped = await _setup(strategy, stt_timeout=0.6)
     await strategy.process_frame(VADUserStartedSpeakingFrame())
-    await strategy.process_frame(_text("Samba", finalized=True))  # finalized on a short pause
-    await strategy.process_frame(InterimTranscriptionFrame(text="Jammu", user_id="caller", timestamp=""))
+    await strategy.process_frame(
+        _text("Samba", finalized=True)
+    )  # finalized on a short pause
+    await strategy.process_frame(
+        InterimTranscriptionFrame(text="Jammu", user_id="caller", timestamp="")
+    )
     t0 = time.monotonic()
     await strategy.process_frame(VADUserStoppedSpeakingFrame(stop_secs=0.2))
     await asyncio.sleep(SPEECH_TIMEOUT + 0.15)
@@ -108,7 +129,9 @@ async def test_stock_strategy_waits_for_the_tail_after_an_early_finalized_transc
 
 @pytest.mark.asyncio
 async def test_interim_transcript_reopens_the_stt_wait():
-    stopped, _, strategy = await _finalized_then_more_speech(DograhSpeechTimeoutUserTurnStopStrategy)
+    stopped, _, strategy = await _finalized_then_more_speech(
+        DograhSpeechTimeoutUserTurnStopStrategy
+    )
     assert stopped == []  # still waiting for the rest of "Samba, Jammu Kashmir"
     await strategy.process_frame(_text(" Kashmir", finalized=True))
     await asyncio.sleep(0.05)
@@ -172,7 +195,9 @@ async def test_stock_smart_turn_acts_on_a_transcript_finalized_during_inference(
 
 @pytest.mark.asyncio
 async def test_smart_turn_acts_on_a_transcript_finalized_during_inference():
-    stopped, t0 = await _transcript_during_inference(DograhTurnAnalyzerUserTurnStopStrategy)
+    stopped, t0 = await _transcript_during_inference(
+        DograhTurnAnalyzerUserTurnStopStrategy
+    )
     assert len(stopped) == 1
     assert stopped[0] - t0 < 0.4  # right after the 0.2 s verdict, not ~1 s
 
@@ -208,7 +233,9 @@ async def test_smart_turn_drops_buffered_speech_only_when_a_turn_ends():
 
 @pytest.mark.asyncio
 async def test_smart_turn_keeps_live_vad_state_across_a_boundary():
-    strategy = DograhTurnAnalyzerUserTurnStopStrategy(turn_analyzer=_FakeAnalyzer(delay=0.0))
+    strategy = DograhTurnAnalyzerUserTurnStopStrategy(
+        turn_analyzer=_FakeAnalyzer(delay=0.0)
+    )
     await _setup(strategy, stt_timeout=0.0)
     await strategy.process_frame(VADUserStartedSpeakingFrame())
     await strategy.reset()

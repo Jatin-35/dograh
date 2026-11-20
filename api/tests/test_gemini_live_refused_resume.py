@@ -75,7 +75,7 @@ async def test_the_fresh_session_is_reseeded_and_held_audio_replayed():
     await _reconnect_with(service, failures=2)
 
     # Caller audio arriving while the fresh session connects is held, not lost.
-    frame = SimpleNamespace(audio=b"\x01\x02" * 160)
+    frame = SimpleNamespace(audio=b"\x01\x02" * 160, sample_rate=16000, num_channels=1)
     sent = []
     with patch.object(
         GeminiLiveLLMService, "_send_user_audio", AsyncMock(side_effect=lambda f: sent.append(f))

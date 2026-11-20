@@ -13,6 +13,7 @@ import {
     DEFAULT_TURN_START_MIN_WORDS,
     ExternalPBXFieldMapping,
     resolveWorkflowConfigurations,
+    SELF_DETECTING_TRANSCRIBERS_NOTE,
     TURN_START_STRATEGY_OPTIONS,
     TurnStartStrategy,
     TurnStopStrategy,
@@ -273,6 +274,9 @@ export const ConfigurationsDialog = ({
                             <p className="text-xs text-muted-foreground">
                                 {selectedTurnStartStrategy?.description}
                             </p>
+                            <p className="text-xs text-muted-foreground">
+                                {SELF_DETECTING_TRANSCRIBERS_NOTE}
+                            </p>
                         </div>
 
                         {turnStartStrategy === 'min_words' && (
@@ -299,7 +303,6 @@ export const ConfigurationsDialog = ({
                                 </p>
                             </div>
                         )}
-
                     </div>
 
                     {/* Context Management Section */}
