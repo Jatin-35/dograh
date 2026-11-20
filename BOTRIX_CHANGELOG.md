@@ -19,7 +19,7 @@ it **Live** after the deploy.
 ---
 
 ## 2026-11-20: Merged Dograh v1.47 (Checkpoint C, part 1), not deployed
-- Merged upstream **v1.47** (pipecat 1.7 → ~1.10) on branch `upgrade/dograh-v1.48`.
+- `768471ff` Merged upstream **v1.47** (pipecat 1.7 → ~1.10) on branch `upgrade/dograh-v1.48`.
 - **New from upstream:**
   - **Transfer a call to another agent** (new "saved agent" transfer tool).
   - **Answer supervision** before the agent speaks (voicemail / screening).
