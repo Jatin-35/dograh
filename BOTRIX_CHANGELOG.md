@@ -18,6 +18,12 @@ it **Live** after the deploy.
 
 ---
 
+## 2026-11-24: Upstream PR dograh-hq/dograh#1006 review fix, not deployed
+- The AI reviewer on our upstream PR #1006 found that a non-finite usage value
+  (`inf`) would crash the export or write invalid JSON, dropping a whole batch of
+  trace steps. Usage enrichment now ignores such values and can never break the
+  export. Edge case only; no effect on normal calls. API-only, no migrations.
+
 ## 2026-11-24: Voice and transcriber costs in Langfuse (`ad90fce6`), Live
 - **Langfuse can now price TTS and STT.** Voice steps send their character count
   and transcriber steps their audio seconds as Langfuse usage (`characters`,
