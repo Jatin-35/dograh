@@ -18,6 +18,20 @@ it **Live** after the deploy.
 
 ---
 
+## 2026-11-24: Voice and transcriber costs in Langfuse, not deployed
+- **Langfuse can now price TTS and STT.** Voice steps send their character count
+  and transcriber steps their audio seconds as Langfuse usage (`characters`,
+  `seconds`), added when traces are exported (`langfuse_usage.py`). Costs appear
+  once a Langfuse model definition with a `characters` or `seconds` price
+  matches the model name. Realtime providers (Gemini Live, Inworld Realtime) are
+  not covered.
+- **Murf and Vartaloop showed `model: unknown`** in traces, so no price could
+  match. Murf now reports its model (`falcon-2`), Vartaloop `vartaloop-tts`.
+- **60db reported its transcriber seconds only when a call ended**, too late to
+  land on any transcriber step. It now reports them with each final transcript,
+  as the built-in transcribers do.
+- API-only deploy, no migrations. ⚠️ Not yet checked in a real Langfuse trace.
+
 ## 2026-11-21: Campaign Stop button fix, not deployed
 - **Stop campaign returned "Internal Server Error".** The campaign *was* stopped
   (state set to cancelled first); only the reply failed. Upstream v1.48 made

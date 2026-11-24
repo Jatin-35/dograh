@@ -46,6 +46,9 @@ except ModuleNotFoundError as e:
 
 VARTALAAP_STREAM_URL = "wss://api.vartaloop.ai/v1/tts/stream"
 VARTALAAP_SAMPLE_RATE = 24000  # the only rate Vartalaap produces
+# Vartaloop has a single model and takes no model name. This one labels trace
+# spans, where Langfuse needs a model name to match a price against.
+VARTALAAP_MODEL_NAME = "vartaloop-tts"
 
 # A 503 means every worker is busy; nothing is billed, so one retry after the
 # server's retry_after is worth it. Longer waits would stall the call.
@@ -90,7 +93,9 @@ class VartalaapTTSService(ProviderRejectionAwareWebsocket, InterruptibleTTSServi
             pause_frame_processing=True,
             push_stop_frames=True,
             push_start_frame=True,
-            settings=TTSSettings(model=None, voice=voice, language=None),
+            settings=TTSSettings(
+                model=VARTALAAP_MODEL_NAME, voice=voice, language=None
+            ),
             **kwargs,
         )
         self._api_key = api_key

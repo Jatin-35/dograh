@@ -399,6 +399,9 @@ class SixtyDBSTTService(ProviderRejectionAwareWebsocket, WebsocketSTTService):
         if event.get("endpoint_reason") == "client_finalize":
             # The transcript of the turn our VAD ended: nothing more is coming.
             self.confirm_finalize()
+        # Audio seconds since the last final, reported before the transcript so
+        # tracing attaches them to the STT span this frame closes.
+        await self.emit_stt_usage_metrics()
         await self.push_frame(
             TranscriptionFrame(
                 text=text,
