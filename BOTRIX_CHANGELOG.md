@@ -9,7 +9,7 @@ conflict-free.
 - **Live**: deployed to the prod server. **Not deployed**: committed, not yet on prod.
 - ⚠️ marks what has not been checked on a real call or against the real provider.
 
-**Where prod is now:** everything up to `019b6c9e` (20 Nov 2026) is live, on
+**Where prod is now:** everything up to `ad90fce6` (24 Nov 2026) is live, on
 Dograh v1.48.0 with pipecat 1.12. The Vectus lookup service (`vectus-api`) is a separate container
 with its own deploys.
 
@@ -18,7 +18,7 @@ it **Live** after the deploy.
 
 ---
 
-## 2026-11-24: Voice and transcriber costs in Langfuse, not deployed
+## 2026-11-24: Voice and transcriber costs in Langfuse (`ad90fce6`), Live
 - **Langfuse can now price TTS and STT.** Voice steps send their character count
   and transcriber steps their audio seconds as Langfuse usage (`characters`,
   `seconds`), added when traces are exported (`langfuse_usage.py`). Costs appear
@@ -30,7 +30,11 @@ it **Live** after the deploy.
 - **60db reported its transcriber seconds only when a call ended**, too late to
   land on any transcriber step. It now reports them with each final transcript,
   as the built-in transcribers do.
-- API-only deploy, no migrations. ⚠️ Not yet checked in a real Langfuse trace.
+- API-only deploy, no migrations. **Deployed 2026-11-24.** Verified on a real call:
+  the Murf greeting's `tts` step showed `characters: 107` and cost $0.00107 with a
+  Langfuse model `(?i)^falcon-2(\.1)?$` at $10 per 1M characters. A Langfuse price
+  only applies to traces that arrive after it is created. ⚠️ STT `seconds` cost not
+  yet checked on a trace.
 
 ## 2026-11-21: Campaign Stop button fix, not deployed
 - **Stop campaign returned "Internal Server Error".** The campaign *was* stopped
